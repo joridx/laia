@@ -8,6 +8,7 @@ import { getCopilotToken } from './auth.js';
 import { startBrain, stopBrain } from './brain/client.js';
 import { setReadlineInterface } from './permissions.js';
 import { renderMarkdown } from './render.js';
+import { createRouter, routeLabel, MODEL_IDS } from './router.js';
 
 const COPILOT_HEADERS = {
   'Editor-Version': 'JetBrains-IC/2025.3',
@@ -59,6 +60,7 @@ export async function runRepl({ config, logger }) {
   await registerBuiltinTools(config);
   const context = createContext();
   const fileCommands = loadFileCommands(config.commandDirs);
+  const router = createRouter();
 
   // Build full command list for tab completion
   const allCommands = [...BUILTIN_COMMANDS, ...[...fileCommands.keys()].map(k => `/${k}`)];
@@ -135,9 +137,18 @@ export async function runRepl({ config, logger }) {
     try {
       context.addUser(input);
       if (context.needsCompaction()) context.compact();
+
+      // Auto-routing: pick best model per turn when config.model === 'auto'
+      const effectiveConfig = { ...config };
+      if (config.model === 'auto') {
+        const decision = router.route(input);
+        effectiveConfig.model = decision.model;
+        stderr.write(`\x1b[2m[auto → ${decision.model} · ${routeLabel(decision)}]\x1b[0m\n`);
+      }
+
       const result = await runTurn({
         input,
-        config,
+        config: effectiveConfig,
         logger,
         history: context.getHistory(), // full turn transcripts (tool calls + results)
         onStep: printStep,
@@ -151,6 +162,14 @@ export async function runRepl({ config, logger }) {
       // Store full tool transcript for next turn; also store text for display/compaction
       context.addTurnMessages(result.turnMessages);
       context.addAssistant(text);
+
+      // Update router stickiness based on tools actually used
+      if (config.model === 'auto' && result.turnMessages) {
+        const toolNames = result.turnMessages
+          .filter(m => m.tool_calls)
+          .flatMap(m => m.tool_calls.map(tc => tc.function?.name ?? ''));
+        router.recordToolsUsed(toolNames);
+      }
 
       // Show follow-up suggestions
       suggestions = suggestFollowUps(text);
@@ -251,15 +270,21 @@ async function handleModelCommand(args, config) {
     return;
   }
 
-  config.model = args.trim();
-  console.log(`Model switched to: ${config.model}`);
+  const target = args.trim();
+  config.model = target;
+  if (target === 'auto') {
+    console.log(`Model: auto-routing enabled (codex · claude-opus-4.6 · gpt-5-mini per turn)`);
+  } else {
+    console.log(`Model switched to: ${config.model}`);
+  }
 }
 
 function printBanner(config) {
+  const modelLabel = config.model === 'auto' ? 'auto (routing)      ' : config.model.padEnd(18);
   console.log(`
 \x1b[1m\x1b[36m  ┌─────────────────────────────┐\x1b[0m
 \x1b[1m\x1b[36m  │  claudia\x1b[0m v0.1.0            \x1b[1m\x1b[36m│\x1b[0m
-\x1b[1m\x1b[36m  │\x1b[0m  model: ${config.model.padEnd(18)}\x1b[1m\x1b[36m│\x1b[0m
+\x1b[1m\x1b[36m  │\x1b[0m  model: ${modelLabel}\x1b[1m\x1b[36m│\x1b[0m
 \x1b[1m\x1b[36m  │\x1b[0m  /help for commands          \x1b[1m\x1b[36m│\x1b[0m
 \x1b[1m\x1b[36m  └─────────────────────────────┘\x1b[0m
 `);
