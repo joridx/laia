@@ -139,7 +139,7 @@ export async function runRepl({ config, logger }) {
         input,
         config,
         logger,
-        history: context.getMessages().slice(0, -1), // all except current (already in userInput)
+        history: context.getHistory(), // full turn transcripts (tool calls + results)
         onStep: printStep,
       });
       const text = result.text || '';
@@ -148,6 +148,8 @@ export async function runRepl({ config, logger }) {
       } else {
         stderr.write(`\x1b[2m(no response)\x1b[0m\n`);
       }
+      // Store full tool transcript for next turn; also store text for display/compaction
+      context.addTurnMessages(result.turnMessages);
       context.addAssistant(text);
 
       // Show follow-up suggestions
@@ -207,11 +209,12 @@ async function handleSlashCommand(input, config, logger, context, fileCommands) 
         stderr.write(`\x1b[2m[/${name}] Expanding command...\x1b[0m\n`);
         try {
           context.addUser(expanded);
-          const result = await runTurn({ input: expanded, config, logger, history: context.getMessages().slice(0, -1), onStep: printStep });
+          const result = await runTurn({ input: expanded, config, logger, history: context.getHistory(), onStep: printStep });
           if (result.text) {
             console.log(`\n${renderMarkdown(result.text)}\n`);
-            context.addAssistant(result.text);
           }
+          context.addTurnMessages(result.turnMessages);
+          context.addAssistant(result.text || '');
         } catch (err) {
           stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
         }

@@ -78,6 +78,8 @@ export async function runAgentTurn({ client, systemPrompt, userInput, history = 
 async function runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, onStep, maxIterations }) {
   const transcript = buildResponsesInput(systemPrompt, userInput, history);
   const toolsDef = tools.length ? tools : undefined;
+  // Canonical chat-format turn messages collected for context storage
+  const turnChat = [{ role: 'user', content: userInput }];
 
   let response = await client.apiCall('/responses', {
     model, input: transcript, tools: toolsDef,
@@ -90,15 +92,22 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
 
     if (parsed.text) {
       onStep?.({ type: 'final', text: parsed.text });
-      return { text: parsed.text, usage: response.usage };
+      turnChat.push({ role: 'assistant', content: parsed.text });
+      return { text: parsed.text, usage: response.usage, turnMessages: turnChat };
     }
     if (!parsed.toolCalls.length) {
       onStep?.({ type: 'final', text: '' });
-      return { text: '', usage: response.usage };
+      return { text: '', usage: response.usage, turnMessages: turnChat };
     }
     if (i === maxIterations) throw makeError(`Max tool iterations (${maxIterations}) reached`);
 
-    // Append function_calls and results to transcript
+    // Append function_calls to transcript and collect in canonical chat format
+    const assistantToolCalls = parsed.toolCalls.map(tc => ({
+      id: tc.callId, type: 'function',
+      function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+    }));
+    turnChat.push({ role: 'assistant', content: null, tool_calls: assistantToolCalls });
+
     for (const tc of parsed.toolCalls) {
       transcript.push({ type: 'function_call', call_id: tc.callId, name: tc.name, arguments: JSON.stringify(tc.args) });
     }
@@ -108,7 +117,9 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
       try { result = await executeTool(tc.name, tc.args, tc.callId); }
       catch (err) { result = { error: true, message: err?.message ?? String(err) }; }
       onStep?.({ type: 'tool_result', name: tc.name, callId: tc.callId, result });
-      transcript.push({ type: 'function_call_output', call_id: tc.callId, output: serialize(result) });
+      const output = serialize(result);
+      transcript.push({ type: 'function_call_output', call_id: tc.callId, output });
+      turnChat.push({ role: 'tool', tool_call_id: tc.callId, content: output });
     }
 
     response = await client.apiCall('/responses', {
@@ -138,6 +149,8 @@ const DONE_TOOL = {
 
 async function runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, onStep, maxIterations }) {
   const messages = buildChatMessages(systemPrompt, userInput, history);
+  // Track where the current turn starts (after system + history, at the user message)
+  const turnStartIdx = messages.length - 1;
   const isClaude = /claude/i.test(model);
 
   let chatTools;
@@ -158,6 +171,19 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
     }, { onStep });
   }
 
+  // Build turnMessages: everything from turnStartIdx, ending with a clean assistant text message
+  function buildTurnMessages(finalText) {
+    const turn = messages.slice(turnStartIdx);
+    // Remove any nudge system messages we injected (not useful for history)
+    const cleaned = turn.filter(m => !(m.role === 'system' && m.content?.includes('Summarize your findings')));
+    // Ensure last message is a clean assistant reply
+    const last = cleaned[cleaned.length - 1];
+    if (!last || last.role !== 'assistant' || last.tool_calls) {
+      cleaned.push({ role: 'assistant', content: finalText });
+    }
+    return cleaned;
+  }
+
   let response = await chatCall();
 
   for (let i = 0; i <= maxIterations; i++) {
@@ -168,16 +194,18 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
     if (doneTc) {
       const finalText = doneTc.args?.answer || parsed.text || '';
       onStep?.({ type: 'final', text: finalText });
-      return { text: finalText, usage: response.usage };
+      return { text: finalText, usage: response.usage, turnMessages: buildTurnMessages(finalText) };
     }
 
     if (parsed.text && !parsed.toolCalls.length) {
       onStep?.({ type: 'final', text: parsed.text });
-      return { text: parsed.text, usage: response.usage };
+      // Append the final assistant message so it's captured in turnMessages
+      messages.push({ role: 'assistant', content: parsed.text });
+      return { text: parsed.text, usage: response.usage, turnMessages: buildTurnMessages(parsed.text) };
     }
     if (!parsed.toolCalls.length) {
       onStep?.({ type: 'final', text: parsed.text || '' });
-      return { text: parsed.text || '', usage: response.usage };
+      return { text: parsed.text || '', usage: response.usage, turnMessages: buildTurnMessages(parsed.text || '') };
     }
     if (i === maxIterations) throw makeError(`Max tool iterations (${maxIterations}) reached`);
 
@@ -205,11 +233,9 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
     // Claude: nudge towards done when approaching the limit, force done on last iteration
     if (isClaude && chatTools) {
       if (i >= maxIterations - 2) {
-        // Inject a hint to wrap up
         messages.push({ role: 'system', content: 'You have used many tool calls. Summarize your findings and call done() with your final answer now.' });
       }
       if (i === maxIterations - 1) {
-        // Last chance: force the "done" tool specifically
         response = await chatCall({ type: 'function', function: { name: 'done' } });
         continue;
       }
@@ -221,14 +247,33 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
 
 // --- /responses parsers ---
 
+// Convert canonical chat-format history to /responses input items
+function chatMessagesToResponsesItems(history) {
+  const items = [];
+  for (const msg of history) {
+    if (msg.role === 'user') {
+      items.push({ role: 'user', content: [{ type: 'input_text', text: msg.content ?? '' }] });
+    } else if (msg.role === 'assistant') {
+      if (msg.tool_calls?.length) {
+        // Each tool call becomes a function_call item
+        for (const tc of msg.tool_calls) {
+          items.push({ type: 'function_call', call_id: tc.id, name: tc.function.name, arguments: tc.function.arguments });
+        }
+      } else if (msg.content) {
+        items.push({ role: 'assistant', content: [{ type: 'output_text', text: msg.content }] });
+      }
+    } else if (msg.role === 'tool') {
+      items.push({ type: 'function_call_output', call_id: msg.tool_call_id, output: msg.content ?? '' });
+    }
+  }
+  return items;
+}
+
 function buildResponsesInput(systemPrompt, userInput, history = []) {
   const input = [];
   if (systemPrompt) input.push({ role: 'system', content: [{ type: 'input_text', text: systemPrompt }] });
-  // Append prior conversation turns
-  for (const msg of history) {
-    if (msg.role === 'user') input.push({ role: 'user', content: [{ type: 'input_text', text: msg.content }] });
-    else if (msg.role === 'assistant') input.push({ role: 'assistant', content: [{ type: 'output_text', text: msg.content }] });
-  }
+  // Convert full canonical turn history to responses format
+  input.push(...chatMessagesToResponsesItems(history));
   input.push({ role: 'user', content: [{ type: 'input_text', text: userInput }] });
   return input;
 }
@@ -257,11 +302,10 @@ function parseResponsesOutput(resp) {
 function buildChatMessages(systemPrompt, userInput, history = []) {
   const messages = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
-  // Append prior conversation turns (user/assistant pairs from previous turns)
+  // Append full turn history (user, assistant with tool_calls, tool results, assistant reply)
   for (const msg of history) {
-    if (msg.role === 'user' || msg.role === 'assistant') {
-      messages.push({ role: msg.role, content: msg.content });
-    }
+    const { ts, ...m } = msg; // strip internal timestamp field
+    messages.push(m);
   }
   messages.push({ role: 'user', content: userInput });
   return messages;

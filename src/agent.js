@@ -41,6 +41,7 @@ export async function runTurn({ input, config, logger, onStep, history = [] }) {
     },
   });
 
+  // result includes { text, usage, turnMessages } — turnMessages is the full tool transcript
   return result;
 }
 
