@@ -9,6 +9,8 @@ import { startBrain, stopBrain } from './brain/client.js';
 import { setReadlineInterface } from './permissions.js';
 import { renderMarkdown } from './render.js';
 import { createRouter, routeLabel, MODEL_IDS } from './router.js';
+import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteAutoSave } from './session.js';
+import { createAttachManager } from './attach.js';
 
 const COPILOT_HEADERS = {
   'Editor-Version': 'JetBrains-IC/2025.3',
@@ -17,7 +19,7 @@ const COPILOT_HEADERS = {
 };
 
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/exit', '/quit'];
 
 // --- Heuristic follow-up suggestions based on assistant response ---
 function suggestFollowUps(text) {
@@ -61,6 +63,7 @@ export async function runRepl({ config, logger }) {
   const context = createContext();
   const fileCommands = loadFileCommands(config.commandDirs);
   const router = createRouter();
+  const attachManager = createAttachManager(config.workspaceRoot);
 
   // Build full command list for tab completion
   const allCommands = [...BUILTIN_COMMANDS, ...[...fileCommands.keys()].map(k => `/${k}`)];
@@ -106,10 +109,42 @@ export async function runRepl({ config, logger }) {
     selectedSuggestion = -1;
   }
 
+  // Try to restore autosave on startup
+  const autosaveData = loadAutoSave();
+  if (autosaveData && !autosaveData.error && autosaveData.turns?.length > 0) {
+    stderr.write(`\x1b[2m[session] Found autosave (${autosaveData.turns.length} turns from ${autosaveData.savedAt ?? '?'})\x1b[0m\n`);
+    stderr.write(`\x1b[33mRestore previous session? [Y/n] \x1b[0m`);
+    const restore = await askYesNo(rl);
+    if (restore) {
+      const ok = context.deserialize(autosaveData);
+      if (ok) {
+        stderr.write(`\x1b[32m✓ Restored ${autosaveData.turns.length} turns\x1b[0m\n`);
+      } else {
+        stderr.write(`\x1b[33m⚠ Failed to restore session\x1b[0m\n`);
+      }
+    } else {
+      deleteAutoSave();
+    }
+  }
+
+  // Session metadata for saves
+  const sessionMeta = {
+    sessionId: logger.sessionId,
+    model: config.model,
+    workspaceRoot: config.workspaceRoot,
+  };
+
   printBanner(config);
   rl.prompt();
 
   rl.on('close', async () => {
+    // Auto-save on exit if there are turns
+    if (context.turnCount() > 0) {
+      try {
+        autoSave(context.serialize(), sessionMeta);
+        stderr.write('\x1b[2m[session] Auto-saved\x1b[0m\n');
+      } catch {}
+    }
     await stopBrain();
     process.exit(0);
   });
@@ -129,15 +164,12 @@ export async function runRepl({ config, logger }) {
 
     // Slash commands
     if (input.startsWith('/')) {
-      const handled = await handleSlashCommand(input, config, logger, context, fileCommands);
+      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager);
       if (handled) { rl.prompt(); continue; }
     }
 
     // Normal prompt
     try {
-      context.addUser(input);
-      if (context.needsCompaction()) context.compact();
-
       // Auto-routing: pick best model per turn when config.model === 'auto'
       const effectiveConfig = { ...config };
       if (config.model === 'auto') {
@@ -147,8 +179,26 @@ export async function runRepl({ config, logger }) {
       }
 
       let streamed = false;
+      // Prepend attached files to input for LLM context
+      const ctx = attachManager.buildContext();
+      let llmInput;
+      if (!ctx) {
+        llmInput = input;
+      } else if (!ctx.images.length) {
+        llmInput = ctx.text + 'User request: ' + input;
+      } else {
+        llmInput = {
+          text: (ctx.text ? ctx.text + 'User request: ' : '') + input,
+          images: ctx.images,
+        };
+      }
+
+      // Store what the model actually sees (text only, no base64) for trace/debug alignment
+      context.addUser(typeof llmInput === 'string' ? llmInput : llmInput.text);
+      if (context.needsCompaction()) context.compact();
+
       const result = await runTurn({
-        input,
+        input: llmInput,
         config: effectiveConfig,
         logger,
         history: context.getHistory(), // full turn transcripts (tool calls + results)
@@ -195,14 +245,16 @@ export async function runRepl({ config, logger }) {
   }
 }
 
-async function handleSlashCommand(input, config, logger, context, fileCommands) {
+async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager) {
   const spaceIdx = input.indexOf(' ');
   const name = (spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx)).toLowerCase();
   const args = spaceIdx === -1 ? '' : input.slice(spaceIdx + 1).trim();
 
   switch (name) {
     case 'help':
-      console.log('Built-in commands: /help /model /clear /compact /exit');
+      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /exit');
+      console.log('Session: /save [name], /load [name|number], /sessions');
+      console.log('Attach: /attach <path|glob>, /detach <path|name|number|all>, /attached');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
       console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
       return true;
@@ -223,9 +275,130 @@ async function handleSlashCommand(input, config, logger, context, fileCommands) 
 
     case 'exit':
     case 'quit':
+      // Auto-save on exit
+      if (context.turnCount() > 0) {
+        try {
+          autoSave(context.serialize(), { sessionId: '', model: config.model, workspaceRoot: config.workspaceRoot });
+          stderr.write('\x1b[2m[session] Auto-saved\x1b[0m\n');
+        } catch {}
+      }
       await stopBrain();
       console.log('Bye!');
       process.exit(0);
+
+    case 'save': {
+      if (context.turnCount() === 0) {
+        stderr.write('\x1b[33mNothing to save (no turns yet)\x1b[0m\n');
+        return true;
+      }
+      const meta = { sessionId: '', model: config.model, workspaceRoot: config.workspaceRoot, name: args || '' };
+      try {
+        const filepath = saveSession(context.serialize(), meta);
+        stderr.write(`\x1b[32m✓ Session saved: ${filepath}\x1b[0m\n`);
+      } catch (err) {
+        stderr.write(`\x1b[31mFailed to save: ${err.message}\x1b[0m\n`);
+      }
+      return true;
+    }
+
+    case 'load': {
+      const target = args || null;
+      let data;
+      if (!target) {
+        // No arg: load autosave
+        data = loadAutoSave();
+        if (!data) { stderr.write('\x1b[33mNo autosave found\x1b[0m\n'); return true; }
+      } else {
+        data = loadSession(target);
+      }
+      if (!data) {
+        stderr.write(`\x1b[33mSession not found: ${target}\x1b[0m\n`);
+        return true;
+      }
+      if (data.error === 'ambiguous') {
+        stderr.write(`\x1b[33mAmbiguous match. Candidates:\x1b[0m\n`);
+        data.candidates.forEach(c => stderr.write(`  ${c}\n`));
+        return true;
+      }
+      if (data.error) {
+        stderr.write(`\x1b[31mCannot load: ${data.error} — ${data.message ?? ''}\x1b[0m\n`);
+        return true;
+      }
+      const ok = context.deserialize(data);
+      if (ok) {
+        stderr.write(`\x1b[32m✓ Loaded ${data.turns?.length ?? 0} turns (from ${data.createdAt ?? '?'})\x1b[0m\n`);
+      } else {
+        stderr.write(`\x1b[31mFailed to deserialize session\x1b[0m\n`);
+      }
+      return true;
+    }
+
+    case 'sessions': {
+      const sessions = listSessions(15);
+      if (!sessions.length) {
+        stderr.write('\x1b[2mNo saved sessions\x1b[0m\n');
+        return true;
+      }
+      stderr.write('\x1b[1mSaved sessions:\x1b[0m\n');
+      for (const s of sessions) {
+        const date = s.createdAt !== '?' ? s.createdAt.replace('T', ' ').slice(0, 19) : '?';
+        stderr.write(`  \x1b[36m${String(s.index).padStart(2)}\x1b[0m  ${date}  ${String(s.turns).padStart(3)} turns  ${s.model}  \x1b[2m${s.file}\x1b[0m\n`);
+      }
+      stderr.write('\x1b[2mUse /load <number> or /load <name> to restore\x1b[0m\n');
+      return true;
+    }
+
+    case 'attach': {
+      if (!args) {
+        stderr.write('\x1b[33mUsage: /attach <path|glob>\x1b[0m\n');
+        return true;
+      }
+      const results = attachManager.attach(args);
+      for (const r of results) {
+        if (r.ok) {
+          const label = r.image ? '🖼' : '✓';
+          stderr.write(`\x1b[32m${label} ${r.name} (${(r.size / 1024).toFixed(1)}KB)\x1b[0m\n`);
+        } else {
+          stderr.write(`\x1b[31m✗ ${r.path}: ${r.error}\x1b[0m\n`);
+        }
+      }
+      if (attachManager.count() > 0) {
+        stderr.write(`\x1b[2m[${attachManager.count()} files attached, ~${attachManager.estimateTokens()} tokens]\x1b[0m\n`);
+      }
+      return true;
+    }
+
+    case 'detach': {
+      if (!args) {
+        stderr.write('\x1b[33mUsage: /detach <path|name|number|all>\x1b[0m\n');
+        return true;
+      }
+      const result = attachManager.detach(args);
+      if (result === 'ambiguous') {
+        stderr.write('\x1b[33mAmbiguous name — use /attached to see indices, then /detach <number>\x1b[0m\n');
+      } else if (result) {
+        stderr.write(`\x1b[32m✓ Detached. ${attachManager.count()} files remaining.\x1b[0m\n`);
+      } else {
+        stderr.write('\x1b[33mNot found. Use /attached to see current attachments.\x1b[0m\n');
+      }
+      return true;
+    }
+
+    case 'attached': {
+      const files = attachManager.list();
+      if (!files.length) {
+        stderr.write('\x1b[2mNo files attached. Use /attach <path|glob>\x1b[0m\n');
+        return true;
+      }
+      stderr.write('\x1b[1mAttached files:\x1b[0m\n');
+      for (const f of files) {
+        stderr.write(`  \x1b[36m${String(f.index).padStart(2)}\x1b[0m  ${f.name}  ${(f.size / 1024).toFixed(1)}KB  ~${f.tokens} tok  \x1b[2m${f.path}\x1b[0m\n`);
+      }
+      const total = attachManager.totalSize();
+      const totalTok = attachManager.estimateTokens();
+      stderr.write(`\x1b[2m  Total: ${(total / 1024).toFixed(1)}KB, ~${totalTok} tokens\x1b[0m\n`);
+      return true;
+    }
 
     default: {
       const cmd = fileCommands.get(name);
@@ -292,6 +465,27 @@ async function handleModelCommand(args, config) {
   } else {
     console.log(`Model switched to: ${config.model}`);
   }
+}
+
+// Simple Y/n prompt using raw mode (default Y)
+async function askYesNo(rl) {
+  return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      process.stderr.write('Y (non-interactive)\n');
+      return resolve(true);
+    }
+    const wasRaw = process.stdin.isRaw;
+    if (rl) rl.pause();
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.once('data', (data) => {
+      const ch = data.toString()[0]?.toLowerCase() ?? 'y';
+      process.stderr.write(ch === 'n' ? 'n\n' : 'Y\n');
+      process.stdin.setRawMode(wasRaw ?? false);
+      if (rl) rl.resume();
+      resolve(ch !== 'n');
+    });
+  });
 }
 
 function printBanner(config) {
