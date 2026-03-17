@@ -4,6 +4,7 @@ import { getCopilotToken } from './auth.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getToolSchemas, executeTool as dispatchTool } from './tools/index.js';
 import { checkPermission, setAutoApprove } from './permissions.js';
+import { colorDiff } from './diff.js';
 
 let client = null;
 
@@ -85,9 +86,14 @@ export function printStep(step) {
     case 'tool_call':
       process.stderr.write(`\x1b[36m→ ${step.name}(${JSON.stringify(step.args).substring(0, 80)})\x1b[0m\n`);
       break;
-    case 'tool_result':
+    case 'tool_result': {
       process.stderr.write(`\x1b[32m✓ ${step.name}\x1b[0m\n`);
+      // Show diff preview for edit and write tools
+      if ((step.name === 'edit' || step.name === 'write') && step.result?.diff) {
+        process.stderr.write(colorDiff(step.result.diff) + '\n');
+      }
       break;
+    }
     case 'token':
       process.stdout.write(step.text);
       break;

@@ -1,6 +1,7 @@
-import { writeFileSync, mkdirSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { writeFileSync, readFileSync, mkdirSync } from 'fs';
+import { resolve, dirname, relative } from 'path';
 import { registerTool } from './index.js';
+import { unifiedDiff } from '../diff.js';
 
 export function registerWriteTool(config) {
   registerTool('write', {
@@ -16,9 +17,13 @@ export function registerWriteTool(config) {
     },
     execute({ path: filePath, content }) {
       const abs = resolve(config.workspaceRoot, filePath);
+      let original = '';
+      try { original = readFileSync(abs, 'utf8'); } catch { /* new file */ }
       mkdirSync(dirname(abs), { recursive: true });
       writeFileSync(abs, content, 'utf8');
-      return { path: abs, bytes: Buffer.byteLength(content, 'utf8') };
+      const relPath = relative(config.workspaceRoot, abs);
+      const diff = unifiedDiff(original, content, { path: relPath });
+      return { path: abs, bytes: Buffer.byteLength(content, 'utf8'), diff };
     },
   });
 }

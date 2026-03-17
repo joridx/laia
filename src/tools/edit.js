@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, relative } from 'path';
 import { registerTool } from './index.js';
+import { unifiedDiff } from '../diff.js';
 
 export function applyEdit(content, oldText, newText) {
   if (!oldText || typeof newText !== 'string') return null;
@@ -57,7 +58,8 @@ export function registerEditTool(config) {
     },
     execute({ path: filePath, edits }) {
       const abs = resolve(config.workspaceRoot, filePath);
-      let content = readFileSync(abs, 'utf8');
+      const original = readFileSync(abs, 'utf8');
+      let content = original;
       const results = [];
 
       for (const { oldText, newText } of edits) {
@@ -71,7 +73,9 @@ export function registerEditTool(config) {
       }
 
       writeFileSync(abs, content, 'utf8');
-      return { path: abs, edits: results };
+      const relPath = relative(config.workspaceRoot, abs);
+      const diff = unifiedDiff(original, content, { path: relPath });
+      return { path: abs, edits: results, diff };
     },
   });
 }
