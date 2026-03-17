@@ -1,0 +1,19 @@
+{
+  "name": "claudia",
+  "version": "0.1.0",
+  "description": "CLI coding agent powered by GitHub Copilot Business API",
+  "type": "module",
+  "bin": {
+    "claudia": "./bin/claudia.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node bin/claudia.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "fast-glob": "^3.3.3"
+  }
+}
