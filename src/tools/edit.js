@@ -2,9 +2,39 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { registerTool } from './index.js';
 
+export function applyEdit(content, oldText, newText) {
+  if (!oldText || typeof newText !== 'string') return null;
+
+  const normalize = s => s.trimEnd().replace(/\t/g, '  ');
+  const contentLines = content.split('\n');
+  const oldLines = oldText.split('\n');
+  const nOld = oldLines.length;
+
+  // Line-level match first (handles exact and fuzzy trailing-whitespace/tab cases)
+  for (let i = 0; i <= contentLines.length - nOld; i++) {
+    if (oldLines.every((ol, j) => normalize(contentLines[i + j]) === normalize(ol))) {
+      const wasExact = oldLines.every((ol, j) => contentLines[i + j] === ol);
+      const start = i === 0 ? 0 : contentLines.slice(0, i).join('\n').length + 1;
+      const matchedBlock = contentLines.slice(i, i + nOld).join('\n');
+      return {
+        result: content.slice(0, start) + newText + content.slice(start + matchedBlock.length),
+        fuzzy: !wasExact,
+      };
+    }
+  }
+
+  // Fallback: substring exact match (for mid-line patterns like 'console.log')
+  const idx = content.indexOf(oldText);
+  if (idx !== -1) {
+    return { result: content.slice(0, idx) + newText + content.slice(idx + oldText.length), fuzzy: false };
+  }
+
+  return null;
+}
+
 export function registerEditTool(config) {
   registerTool('edit', {
-    description: 'Apply search/replace edits to a file. Each edit replaces an exact text match.',
+    description: 'Apply search/replace edits to a file. Trailing whitespace and tab/space differences are normalized automatically (status: fuzzy_applied). Exact match returns applied. No match returns not_found.',
     parameters: {
       type: 'object',
       properties: {
@@ -14,8 +44,8 @@ export function registerEditTool(config) {
           items: {
             type: 'object',
             properties: {
-              oldText: { type: 'string', description: 'Exact text to find' },
-              newText: { type: 'string', description: 'Replacement text' },
+              oldText: { type: 'string', description: 'Text to find. Trailing whitespace and tab/space normalization applied automatically if exact match fails.' },
+              newText: { type: 'string', description: 'Replacement text. Used verbatim — not normalized.' },
             },
             required: ['oldText', 'newText'],
           },
@@ -31,13 +61,13 @@ export function registerEditTool(config) {
       const results = [];
 
       for (const { oldText, newText } of edits) {
-        const idx = content.indexOf(oldText);
-        if (idx === -1) {
-          results.push({ oldText: oldText.substring(0, 60), status: 'not_found' });
+        const r = applyEdit(content, oldText, newText);
+        if (!r) {
+          results.push({ oldText: oldText?.substring(0, 60) ?? '', status: 'not_found' });
           continue;
         }
-        content = content.substring(0, idx) + newText + content.substring(idx + oldText.length);
-        results.push({ oldText: oldText.substring(0, 60), status: 'applied' });
+        content = r.result;
+        results.push({ oldText: oldText.substring(0, 60), status: r.fuzzy ? 'fuzzy_applied' : 'applied' });
       }
 
       writeFileSync(abs, content, 'utf8');
