@@ -214,7 +214,7 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
   const transcript = buildResponsesInput(systemPrompt, userInput, history);
   const toolsDef = tools.length ? tools : undefined;
   // Canonical chat-format turn messages collected for context storage
-  const turnChat = [{ role: 'user', content: userInput }];
+  const turnChat = [{ role: 'user', content: userInputText(userInput) }];
 
   let response = await client.streamingApiCall('/responses', {
     model, input: transcript, tools: toolsDef,
@@ -394,6 +394,37 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
   }
 }
 
+// --- Multimodal content helpers ---
+
+function toUserContentChat(userInput) {
+  if (typeof userInput === 'string') return userInput;
+  const text = userInput?.text ?? '';
+  const images = Array.isArray(userInput?.images) ? userInput.images : [];
+  if (!images.length) return text;
+  const parts = [];
+  for (const img of images) {
+    parts.push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.base64}` } });
+  }
+  parts.push({ type: 'text', text });
+  return parts;
+}
+
+function toUserContentResponses(userInput) {
+  if (typeof userInput === 'string') return [{ type: 'input_text', text: userInput }];
+  const text = userInput?.text ?? '';
+  const images = Array.isArray(userInput?.images) ? userInput.images : [];
+  const parts = [];
+  for (const img of images) {
+    parts.push({ type: 'input_image', image_url: `data:${img.mimeType};base64,${img.base64}` });
+  }
+  parts.push({ type: 'input_text', text });
+  return parts;
+}
+
+function userInputText(userInput) {
+  return typeof userInput === 'string' ? userInput : (userInput?.text ?? '');
+}
+
 // --- /responses parsers ---
 
 // Convert canonical chat-format history to /responses input items
@@ -423,7 +454,7 @@ function buildResponsesInput(systemPrompt, userInput, history = []) {
   if (systemPrompt) input.push({ role: 'system', content: [{ type: 'input_text', text: systemPrompt }] });
   // Convert full canonical turn history to responses format
   input.push(...chatMessagesToResponsesItems(history));
-  input.push({ role: 'user', content: [{ type: 'input_text', text: userInput }] });
+  input.push({ role: 'user', content: toUserContentResponses(userInput) });
   return input;
 }
 
@@ -456,7 +487,7 @@ function buildChatMessages(systemPrompt, userInput, history = []) {
     const { ts, ...m } = msg; // strip internal timestamp field
     messages.push(m);
   }
-  messages.push({ role: 'user', content: userInput });
+  messages.push({ role: 'user', content: toUserContentChat(userInput) });
   return messages;
 }
 
