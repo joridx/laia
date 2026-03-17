@@ -17,6 +17,39 @@ function isResponsesModel(model) {
   return /codex/i.test(model);
 }
 
+// --- SSE stream parser ---
+
+export async function* parseSSEStream(body) {
+  if (!body || typeof body.getReader !== 'function') {
+    throw makeError('Stream body is null or not a ReadableStream', { retriable: false });
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        for (const line of block.split('\n')) {
+          if (line.startsWith(':') || !line.startsWith('data:')) continue;
+          const raw = line.slice(5).trim();
+          if (raw === '[DONE]') return;
+          try { yield JSON.parse(raw); } catch { /* skip malformed */ }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 // --- HTTP layer ---
 
 export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 120_000, maxRetries = 3 } = {}) {
