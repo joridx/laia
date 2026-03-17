@@ -123,5 +123,13 @@ export function createContext({ maxTokens = 300_000, threshold = 0.8 } = {}) {
     return turns.length;
   }
 
-  return { addUser, addAssistant, addTurnMessages, getHistory, estimateTokens, needsCompaction, getMessages, clear, compact, serialize, deserialize, turnCount };
+  function usagePercent() {
+    return Math.round((estimateTokens() / maxTokens) * 100);
+  }
+
+  function getMaxTokens() {
+    return maxTokens;
+  }
+
+  return { addUser, addAssistant, addTurnMessages, getHistory, estimateTokens, needsCompaction, getMessages, clear, compact, serialize, deserialize, turnCount, usagePercent, getMaxTokens };
 }

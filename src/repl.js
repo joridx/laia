@@ -8,6 +8,7 @@ import { getCopilotToken } from './auth.js';
 import { startBrain, stopBrain } from './brain/client.js';
 import { setReadlineInterface } from './permissions.js';
 import { renderMarkdown } from './render.js';
+import { loadMemoryFiles } from './memory-files.js';
 import { createRouter, routeLabel, MODEL_IDS } from './router.js';
 import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteAutoSave } from './session.js';
 import { createAttachManager } from './attach.js';
@@ -234,7 +235,9 @@ export async function runRepl({ config, logger }) {
       if (result.usage) {
         const inTok = result.usage.input_tokens ?? result.usage.prompt_tokens ?? '?';
         const outTok = result.usage.output_tokens ?? result.usage.completion_tokens ?? '?';
-        stderr.write(`\x1b[2m[${inTok} in / ${outTok} out]\x1b[0m\n`);
+        const pct = context.usagePercent();
+        const ctxColor = pct > 80 ? 31 : pct > 60 ? 33 : 32; // red / yellow / green
+        stderr.write(`\x1b[2m[${inTok} in / ${outTok} out · \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m]\x1b[0m\n`);
       }
     } catch (err) {
       stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
@@ -497,4 +500,11 @@ function printBanner(config) {
 \x1b[1m\x1b[36m  │\x1b[0m  /help for commands          \x1b[1m\x1b[36m│\x1b[0m
 \x1b[1m\x1b[36m  └─────────────────────────────┘\x1b[0m
 `);
+  // Show loaded CLAUDE.md files
+  const memFiles = loadMemoryFiles({ workspaceRoot: config.workspaceRoot });
+  if (memFiles.length) {
+    for (const f of memFiles) {
+      process.stderr.write(`\x1b[2m  📋 ${f.level}: ${f.path}\x1b[0m\n`);
+    }
+  }
 }

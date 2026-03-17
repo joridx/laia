@@ -1,6 +1,10 @@
+import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
+
 export function buildSystemPrompt({ workspaceRoot, model, brainPath }) {
   const now = new Date().toISOString();
-  return `You are Claudia, a concise and effective coding assistant running in a CLI agent.
+  const memFiles = loadMemoryFiles({ workspaceRoot });
+  const memoryPrefix = buildMemoryContext(memFiles);
+  return `${memoryPrefix}You are Claudia, a concise and effective coding assistant running in a CLI agent.
 
 Current date/time: ${now}
 Workspace root: ${workspaceRoot}
