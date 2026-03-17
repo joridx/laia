@@ -100,5 +100,28 @@ export function createContext({ maxTokens = 300_000, threshold = 0.8 } = {}) {
     }
   }
 
-  return { addUser, addAssistant, addTurnMessages, getHistory, estimateTokens, needsCompaction, getMessages, clear, compact };
+  // Serialize context state for session persistence
+  function serialize() {
+    return {
+      turns: structuredClone(turns),
+      messages: structuredClone(messages),
+    };
+  }
+
+  // Restore context state from saved session data
+  function deserialize(data) {
+    if (!data || typeof data !== 'object') return false;
+    if (!Array.isArray(data.turns) || !Array.isArray(data.messages)) return false;
+    turns.length = 0;
+    messages.length = 0;
+    turns.push(...data.turns);
+    messages.push(...data.messages);
+    return true;
+  }
+
+  function turnCount() {
+    return turns.length;
+  }
+
+  return { addUser, addAssistant, addTurnMessages, getHistory, estimateTokens, needsCompaction, getMessages, clear, compact, serialize, deserialize, turnCount };
 }
