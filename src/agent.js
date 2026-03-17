@@ -56,18 +56,22 @@ export async function runOneShot({ prompt, config, logger, json }) {
   await registerBuiltinTools(config);
 
   try {
+    let streamed = false;
     const result = await runTurn({
       input: prompt,
       config,
       logger,
-      onStep: json ? undefined : (step) => printStep(step),
+      onStep: json ? undefined : (step) => {
+        if (step.type === 'token') streamed = true;
+        printStep(step);
+      },
     });
-
     if (json) {
       console.log(JSON.stringify(result, null, 2));
-    } else {
+    } else if (!streamed) {
       console.log(result.text);
     }
+    // if streamed: tokens already written to stdout via printStep's 'token' case
   } finally {
     await stopBrain();
   }
@@ -83,6 +87,9 @@ export function printStep(step) {
       break;
     case 'tool_result':
       process.stderr.write(`\x1b[32m✓ ${step.name}\x1b[0m\n`);
+      break;
+    case 'token':
+      process.stdout.write(step.text);
       break;
     case 'error':
       process.stderr.write(`\x1b[31m✗ ${step.error}\x1b[0m\n`);
