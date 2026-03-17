@@ -146,18 +146,24 @@ export async function runRepl({ config, logger }) {
         stderr.write(`\x1b[2m[auto → ${decision.model} · ${routeLabel(decision)}]\x1b[0m\n`);
       }
 
+      let streamed = false;
       const result = await runTurn({
         input,
         config: effectiveConfig,
         logger,
         history: context.getHistory(), // full turn transcripts (tool calls + results)
-        onStep: printStep,
+        onStep: (step) => {
+          if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
+          else printStep(step);
+        },
       });
       const text = result.text || '';
-      if (text) {
+      if (streamed) {
+        process.stdout.write('\n\n');
+      } else if (text) {
         console.log(`\n${renderMarkdown(text)}\n`);
       } else {
-        stderr.write(`\x1b[33m⚠ (empty response — model returned no text)\x1b[0m\n`);
+        stderr.write('\x1b[33m⚠ (empty response — model returned no text)\x1b[0m\n');
       }
       // Store full tool transcript for next turn; also store text for display/compaction
       context.addTurnMessages(result.turnMessages);
@@ -228,8 +234,17 @@ async function handleSlashCommand(input, config, logger, context, fileCommands) 
         stderr.write(`\x1b[2m[/${name}] Expanding command...\x1b[0m\n`);
         try {
           context.addUser(expanded);
-          const result = await runTurn({ input: expanded, config, logger, history: context.getHistory(), onStep: printStep });
-          if (result.text) {
+          let streamed = false;
+          const result = await runTurn({
+            input: expanded, config, logger, history: context.getHistory(),
+            onStep: (step) => {
+              if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
+              else printStep(step);
+            },
+          });
+          if (streamed) {
+            process.stdout.write('\n\n');
+          } else if (result.text) {
             console.log(`\n${renderMarkdown(result.text)}\n`);
           }
           context.addTurnMessages(result.turnMessages);
