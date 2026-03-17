@@ -21,7 +21,13 @@ Memory (local brain):
 - brain_search(query) — search local memory/knowledge base
 - brain_remember(type, title, description, tags) — store a learning
 - brain_get_context(project?) — get user prefs and relevant context
+- brain_log_session(summary) — log what happened this session
 - When brain tools return file references (e.g. "knowledge/people/name.md"), the full path is: ${brainPath}/<relative_path>
+
+Brain usage rules:
+- SESSION START: call brain_get_context to recover what was decided/implemented in previous sessions. This replaces raw transcript history.
+- DURING SESSION: call brain_search before interacting with any external service (Jira, Confluence, Teams, etc.) to recover known patterns and warnings.
+- SESSION END (on /exit or /quit): call brain_log_session with a summary of what was done, then brain_remember for any new patterns or warnings discovered.
 
 Commands/Skills:
 - run_command(action, name?, args?, query?) — discover and execute local commands
