@@ -156,9 +156,10 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
           if (delta.tool_calls) {
             for (const tc of delta.tool_calls) {
               const idx = tc.index ?? 0;
-              if (!chatToolCalls[idx]) chatToolCalls[idx] = { id: '', function: { name: '', arguments: '' } };
+              if (!chatToolCalls[idx]) chatToolCalls[idx] = { id: '', type: 'function', function: { name: '', arguments: '' } };
               if (tc.id) chatToolCalls[idx].id = tc.id;
-              if (tc.function?.name) chatToolCalls[idx].function.name += tc.function.name;
+              // name arrives in one chunk — set, don't concatenate (avoids duplication)
+              if (tc.function?.name) chatToolCalls[idx].function.name = tc.function.name;
               if (tc.function?.arguments) chatToolCalls[idx].function.arguments += tc.function.arguments;
             }
           }
