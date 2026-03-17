@@ -66,7 +66,8 @@ export function createRouter() {
     const codeMatches = CODING_KEYWORDS.filter(k => words.includes(k) || text.includes(k));
     const corpScore = corpMatches.length;
     const codeScore = codeMatches.length;
-    const isQuick = input.length < QUICK_CHAR_LIMIT && corpScore === 0 && codeScore === 0;
+    const isSticky = (lastToolDomain === 'corporate' || lastDomain === 'corporate' || lastDomain === 'coding') && turnsSinceDomainSwitch <= STICKY_TURNS;
+    const isQuick = input.length < QUICK_CHAR_LIMIT && corpScore === 0 && codeScore === 0 && !isSticky;
 
     let model, domain, reason, confidence;
 
