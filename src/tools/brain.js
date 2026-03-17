@@ -18,8 +18,12 @@ export function registerBrainTools(config) {
       additionalProperties: false,
     },
     async execute({ query, scope, limit }) {
-      const result = await brainSearch(query, { scope, limit });
-      return { query, result };
+      try {
+        const result = await brainSearch(query, { scope, limit });
+        return { query, result };
+      } catch (err) {
+        return { query, error: true, message: `Brain search unavailable: ${err.message?.split('\n')[0] ?? 'unknown error'}. Try using grep or read instead.` };
+      }
     },
   });
 
@@ -37,10 +41,14 @@ export function registerBrainTools(config) {
       additionalProperties: false,
     },
     async execute({ type, title, description, tags }) {
-      const result = await brainRemember({
-        learnings: [{ type, title, description, tags }],
-      });
-      return { stored: true, result };
+      try {
+        const result = await brainRemember({
+          learnings: [{ type, title, description, tags }],
+        });
+        return { stored: true, result };
+      } catch (err) {
+        return { error: true, message: `Brain remember failed: ${err.message?.split('\n')[0] ?? 'unknown error'}` };
+      }
     },
   });
 
@@ -54,8 +62,12 @@ export function registerBrainTools(config) {
       additionalProperties: false,
     },
     async execute({ project }) {
-      const result = await brainGetContext({ project, cwd: process.cwd() });
-      return { result };
+      try {
+        const result = await brainGetContext({ project, cwd: process.cwd() });
+        return { result };
+      } catch (err) {
+        return { error: true, message: `Brain context unavailable: ${err.message?.split('\n')[0] ?? 'unknown error'}` };
+      }
     },
   });
 }

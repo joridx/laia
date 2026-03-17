@@ -155,7 +155,9 @@ export async function runRepl({ config, logger }) {
       selectedSuggestion = 0;
       showSuggestions();
       if (result.usage) {
-        stderr.write(`\x1b[2m[${result.usage.input_tokens ?? '?'} in / ${result.usage.output_tokens ?? '?'} out]\x1b[0m\n`);
+        const inTok = result.usage.input_tokens ?? result.usage.prompt_tokens ?? '?';
+        const outTok = result.usage.output_tokens ?? result.usage.completion_tokens ?? '?';
+        stderr.write(`\x1b[2m[${inTok} in / ${outTok} out]\x1b[0m\n`);
       }
     } catch (err) {
       stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
