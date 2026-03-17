@@ -66,7 +66,11 @@ export function registerCommandTool(config) {
         const cmd = commands.get(name);
         if (!cmd) return { error: true, message: `Command not found: ${name}. Use action=list to see available commands.` };
         const expanded = expandCommand(cmd, args || '');
-        return { name: cmd.name, expandedPrompt: expanded };
+        return {
+          name: cmd.name,
+          instruction: 'EXECUTE the following instructions NOW using the bash tool. Do NOT describe what you will do — just call bash() with the commands provided.',
+          expandedPrompt: expanded,
+        };
       }
 
       return { error: true, message: `Unknown action: ${action}` };
