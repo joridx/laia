@@ -91,7 +91,108 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
     }, { maxRetries, onStep });
   }
 
-  return { apiCall, model };
+  async function streamingApiCall(endpoint, body, { onChunk } = {}) {
+    const token = await getToken({ attempt: 0 });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Declare accumulators BEFORE try so the catch block can reference them.
+    // CRITICAL: do NOT call res.text() on the success path — that consumes
+    // res.body before parseSSEStream can read it.
+    let assembled = null;
+    let partialText = '';
+    let chatContent = '';
+    let chatRole = 'assistant';
+    let chatToolCalls = [];
+    let chatUsage = undefined;
+    let chatFinishReason = undefined;
+
+    try {
+      const res = await fetch(`${BASE_URL}${endpoint}`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...COPILOT_HEADERS,
+        },
+        body: JSON.stringify({
+          ...body,
+          stream: true,
+          ...(endpoint === '/chat/completions' ? { stream_options: { include_usage: true } } : {}),
+        }),
+      });
+
+      // Pre-stream HTTP error handling — only read body on the error path
+      if (!res.ok) {
+        const errText = await res.text();
+        let errJson;
+        try { errJson = errText ? JSON.parse(errText) : {}; } catch { errJson = {}; }
+        throw classifyHttpError(res.status, errJson);
+      }
+
+      for await (const event of parseSSEStream(res.body)) {
+        if (endpoint === '/responses') {
+          if (event.type === 'response.output_text.delta') {
+            partialText += event.delta ?? '';
+            onChunk?.({ type: 'text_delta', delta: event.delta ?? '' });
+          } else if (event.type === 'response.completed') {
+            assembled = event.response;
+          } else if (event.type === 'response.failed' || event.type === 'response.incomplete') {
+            throw makeError(event.response?.error?.message ?? 'Response failed', { retriable: false });
+          }
+        } else if (endpoint === '/chat/completions') {
+          const delta = event?.choices?.[0]?.delta;
+          if (!delta) {
+            if (event?.usage) chatUsage = event.usage;
+            if (event?.choices?.[0]?.finish_reason) chatFinishReason = event.choices[0].finish_reason;
+            continue;
+          }
+          if (!chatRole && delta.role) chatRole = delta.role;
+          if (delta.content) {
+            chatContent += delta.content;
+            onChunk?.({ type: 'text_delta', delta: delta.content });
+          }
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!chatToolCalls[idx]) chatToolCalls[idx] = { id: '', function: { name: '', arguments: '' } };
+              if (tc.id) chatToolCalls[idx].id = tc.id;
+              if (tc.function?.name) chatToolCalls[idx].function.name += tc.function.name;
+              if (tc.function?.arguments) chatToolCalls[idx].function.arguments += tc.function.arguments;
+            }
+          }
+          if (event?.choices?.[0]?.finish_reason) chatFinishReason = event.choices[0].finish_reason;
+        }
+      }
+
+      if (endpoint === '/responses') {
+        if (!assembled) throw makeError('Stream ended without response.completed', { retriable: false });
+        return assembled;
+      }
+
+      if (endpoint === '/chat/completions') {
+        return {
+          choices: [{
+            message: {
+              role: chatRole,
+              content: chatContent || null,
+              tool_calls: chatToolCalls.length ? chatToolCalls : undefined,
+            },
+            finish_reason: chatFinishReason,
+          }],
+          usage: chatUsage,
+        };
+      }
+    } catch (err) {
+      if (!err.partialText) err.partialText = partialText;
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return { apiCall, streamingApiCall, model };
 }
 
 // --- Unified agent turn (routes to correct endpoint) ---
