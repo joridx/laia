@@ -21,6 +21,11 @@ File operations:
 - glob(pattern) — find files by glob pattern
 - grep(query, path?) — search text in files
 
+Git operations (read-only, auto-allowed):
+- git_diff(staged?, path?, ref?, stat?) — show changes (unstaged, staged, or between refs)
+- git_status() — branch, staged/unstaged/untracked files, ahead/behind counts
+- git_log(count?, path?, oneline?) — recent commit history
+
 Memory (local brain):
 - brain_search(query) — search local memory/knowledge base
 - brain_remember(type, title, description, tags) — store a learning

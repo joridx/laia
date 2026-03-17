@@ -49,4 +49,8 @@ export async function registerBuiltinTools(config) {
   // Command registry tool (lets LLM discover and run slash commands)
   const { registerCommandTool } = await import('./command.js');
   registerCommandTool(config);
+
+  // Git tools (read-only: diff, status, log)
+  const { registerGitTools } = await import('./git.js');
+  registerGitTools(config);
 }

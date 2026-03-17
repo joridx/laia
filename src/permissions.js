@@ -3,7 +3,7 @@
 // Tier 2 (session): write, edit, brain_remember — ask once per session, then remember
 // Tier 3 (confirm): bash — ask every time (or press 'a' to approve all for session)
 
-const AUTO_ALLOW = new Set(['read', 'glob', 'grep', 'brain_search', 'brain_get_context', 'run_command']);
+const AUTO_ALLOW = new Set(['read', 'glob', 'grep', 'brain_search', 'brain_get_context', 'run_command', 'git_diff', 'git_status', 'git_log']);
 const SESSION_ALLOW = new Set(['write', 'edit', 'brain_remember']);
 const sessionApproved = new Set();
 let autoApproveAll = false;
