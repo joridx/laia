@@ -140,7 +140,7 @@ const DONE_TOOL = {
     description: 'Present your FINAL answer ONLY after you have COMPLETED the task. NEVER call done() to say "I will do X" — actually DO X first using the appropriate tools (bash, read, write, etc), THEN call done() with the results. Call done() when: (1) you executed the task and have results to show, (2) the task needs no tool calls (pure question/answer), or (3) after 2-3 failed attempts — report what you tried.',
     parameters: {
       type: 'object',
-      properties: { answer: { type: 'string', description: 'Your complete final response with results (supports markdown)' } },
+      properties: { answer: { type: 'string', minLength: 1, description: 'Your complete final response with results (supports markdown). MUST be non-empty.' } },
       required: ['answer'],
       additionalProperties: false,
     },
@@ -192,7 +192,17 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
     // Check for "done" tool call — Claude's way to signal completion
     const doneTc = parsed.toolCalls.find(tc => tc.name === 'done');
     if (doneTc) {
-      const finalText = doneTc.args?.answer || parsed.text || '';
+      const finalText = (doneTc.args?.answer || '').trim() || parsed.text || '';
+      if (!finalText) {
+        // Claude called done() with empty answer — nudge and continue
+        messages.push({
+          role: 'assistant', content: null,
+          tool_calls: [{ id: doneTc.callId, type: 'function', function: { name: 'done', arguments: JSON.stringify(doneTc.args) } }],
+        });
+        messages.push({ role: 'tool', tool_call_id: doneTc.callId, content: '{"error":"answer must not be empty. Call done() again with your full response."}' });
+        response = await chatCall();
+        continue;
+      }
       onStep?.({ type: 'final', text: finalText });
       return { text: finalText, usage: response.usage, turnMessages: buildTurnMessages(finalText) };
     }

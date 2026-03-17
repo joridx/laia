@@ -157,7 +157,7 @@ export async function runRepl({ config, logger }) {
       if (text) {
         console.log(`\n${renderMarkdown(text)}\n`);
       } else {
-        stderr.write(`\x1b[2m(no response)\x1b[0m\n`);
+        stderr.write(`\x1b[33m⚠ (empty response — model returned no text)\x1b[0m\n`);
       }
       // Store full tool transcript for next turn; also store text for display/compaction
       context.addTurnMessages(result.turnMessages);
