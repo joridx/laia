@@ -215,10 +215,10 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
   // Canonical chat-format turn messages collected for context storage
   const turnChat = [{ role: 'user', content: userInput }];
 
-  let response = await client.apiCall('/responses', {
+  let response = await client.streamingApiCall('/responses', {
     model, input: transcript, tools: toolsDef,
     ...(tools.length ? { tool_choice: 'auto' } : {}),
-  }, { onStep });
+  }, { onChunk: (chunk) => onStep?.({ type: 'token', text: chunk.delta }) });
 
   for (let i = 0; i <= maxIterations; i++) {
     const parsed = parseResponsesOutput(response);
@@ -256,10 +256,10 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
       turnChat.push({ role: 'tool', tool_call_id: tc.callId, content: output });
     }
 
-    response = await client.apiCall('/responses', {
+    response = await client.streamingApiCall('/responses', {
       model, input: transcript, tools: toolsDef,
       ...(tools.length ? { tool_choice: 'auto' } : {}),
-    }, { onStep });
+    }, { onChunk: (chunk) => onStep?.({ type: 'token', text: chunk.delta }) });
   }
 }
 
@@ -286,6 +286,8 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
   // Track where the current turn starts (after system + history, at the user message)
   const turnStartIdx = messages.length - 1;
   const isClaude = /claude/i.test(model);
+  const onChunk = isClaude ? null : (chunk) => onStep?.({ type: 'token', text: chunk.delta });
+  if (isClaude) onStep?.({ type: 'debug', streaming: false, reason: 'provider_unsupported' });
 
   let chatTools;
   if (tools.length) {
@@ -297,12 +299,14 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
   // Claude: always "required" (proxy breaks "auto"). Others: "auto".
   const defaultToolChoice = isClaude && chatTools ? 'required' : 'auto';
 
-  async function chatCall(overrideToolChoice) {
+  async function chatCall(overrideToolChoice, chunkCb = onChunk) {
     const tc = overrideToolChoice ?? defaultToolChoice;
-    return client.apiCall('/chat/completions', {
-      model, messages, tools: chatTools,
-      ...(chatTools ? { tool_choice: tc } : {}),
-    }, { onStep });
+    const body = { model, messages, tools: chatTools, ...(chatTools ? { tool_choice: tc } : {}) };
+    if (chunkCb) {
+      return client.streamingApiCall('/chat/completions', body, { onChunk: chunkCb });
+    } else {
+      return client.apiCall('/chat/completions', body, { onStep });
+    }
   }
 
   // Build turnMessages: everything from turnStartIdx, ending with a clean assistant text message
