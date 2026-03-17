@@ -124,7 +124,8 @@ export function createContext({ maxTokens = 300_000, threshold = 0.8 } = {}) {
   }
 
   function usagePercent() {
-    return Math.round((estimateTokens() / maxTokens) * 100);
+    if (!Number.isFinite(maxTokens) || maxTokens <= 0) return 0;
+    return Math.min(999, Math.max(0, Math.round((estimateTokens() / maxTokens) * 100)));
   }
 
   function getMaxTokens() {
