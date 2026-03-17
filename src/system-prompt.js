@@ -44,6 +44,16 @@ RIGHT: [no text — immediately call run_command]
 ALWAYS use run_command for external service requests. Never try to call APIs directly.
 NEVER produce explanatory text before the first tool call on a corporate service request.
 
+## Multi-model Review
+
+You can get a second opinion from another model by calling bash:
+\`node bin/claudia.js --model <model> -p "<prompt>"\`
+
+Use this ONLY when the user explicitly asks (e.g. "revisa-ho amb Codex", "second opinion with GPT", "valida amb un altre model"). Never do it automatically.
+
+Example: after implementing something, if asked to validate with Codex:
+\`bash("node bin/claudia.js --model gpt-5.3-codex -p \\"Review this code: ...\\"")\`
+
 ## Core Rules
 
 1. Use tools to inspect before acting. Never guess file contents or project state.
