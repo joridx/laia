@@ -2,6 +2,24 @@
 // Priority: explicit override > corporate keyword > coding keyword > tie > quick > sticky > default
 // Based on gpt-5.3-codex design recommendation.
 
+// Returns true if strings differ by at most 1 edit (insert/delete/substitute)
+function withinEditDistance1(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a === b) return true;
+  if (a.length === b.length) {
+    let diffs = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { if (++diffs > 1) return false; }
+    return diffs === 1;
+  }
+  const [shorter, longer] = a.length < b.length ? [a, b] : [b, a];
+  let i = 0, j = 0, diff = 0;
+  while (i < shorter.length && j < longer.length) {
+    if (shorter[i] !== longer[j]) { if (++diff > 1) return false; j++; }
+    else { i++; j++; }
+  }
+  return true;
+}
+
 const CORPORATE_KEYWORDS = [
   'confluence', 'jira', 'teams', 'sharepoint', 'jenkins', 'github',
   'outlook', 'sonarqube', 'servicenow', 'dynatrace', 'powerbi', 'power bi',
@@ -37,7 +55,14 @@ export function createRouter() {
     const text = input.toLowerCase().replace(/[^\w\s]/g, ' ');
     const words = text.split(/\s+/);
 
-    const corpMatches = CORPORATE_KEYWORDS.filter(k => text.includes(k));
+    // Fuzzy match single-word corporate keywords (handles typos like "conflucence")
+    const corpMatches = CORPORATE_KEYWORDS.filter(k => {
+      if (text.includes(k)) return true;
+      if (!k.includes(' ') && k.length >= 5) {
+        return words.some(w => w.length >= 4 && withinEditDistance1(w, k));
+      }
+      return false;
+    });
     const codeMatches = CODING_KEYWORDS.filter(k => words.includes(k) || text.includes(k));
     const corpScore = corpMatches.length;
     const codeScore = codeMatches.length;
