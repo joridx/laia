@@ -52,7 +52,7 @@
 
 | Mètrica | Valor |
 |---------|-------|
-| Tests | 154/154 ✅ |
+| Tests | 155/155 ✅ |
 | Fitxers src/ | 30 (19 core + 11 tools) |
 | Tools LLM | 13 (read, write, edit, bash, glob, grep, brain×4, command, git×3, agent) |
 | LOC (src/) | ~3850 |
@@ -68,4 +68,4 @@
 | 2026-03-15 | MVP | Agent loop, streaming, tools, permissions, sessions |
 | 2026-03-16 | +5 | Vision/images, router, attachments, brain MCP |
 | 2026-03-17 | +4 | Token budget, CLAUDE.md hierarchy, git tools, diff preview |
-| 2026-03-18 | +16 | Codex review fixes, swarm (agent tool + semaphore + batch dispatch), MCP server mode (stdio + stdout guard), permissions refactor |
+| 2026-03-18 | +20 | Codex review fixes, swarm (agent tool + semaphore + batch dispatch), MCP server mode (stdio + stdout guard), permissions refactor, spec compliance fixes (singleton client, indentation, per-worker permCtx) |
