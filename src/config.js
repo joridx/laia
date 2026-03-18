@@ -3,7 +3,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 const DEFAULTS = {
-  model: 'gpt-5.3-codex',
+  model: 'claude-opus-4.6',
   maxTurns: 8,
   contextThreshold: 0.8,
   workspaceRoot: process.cwd(),

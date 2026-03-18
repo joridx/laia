@@ -504,13 +504,17 @@ async function askYesNo(rl) {
 }
 
 function printBanner(config) {
-  const modelLabel = config.model === 'auto' ? 'auto (routing)      ' : config.model.padEnd(18);
+  const W = 29; // inner width of box
+  const C = '\x1b[1m\x1b[36m', R = '\x1b[0m';
+  const visLen = (s) => s.replace(/\x1b\[[0-9;]*m/g, '').length;
+  const pad = (s) => s + ' '.repeat(Math.max(0, W - visLen(s)));
+  const modelLabel = config.model === 'auto' ? 'auto (routing)' : config.model;
   console.log(`
-\x1b[1m\x1b[36m  ┌─────────────────────────────┐\x1b[0m
-\x1b[1m\x1b[36m  │  claudia\x1b[0m v0.1.0            \x1b[1m\x1b[36m│\x1b[0m
-\x1b[1m\x1b[36m  │\x1b[0m  model: ${modelLabel}\x1b[1m\x1b[36m│\x1b[0m
-\x1b[1m\x1b[36m  │\x1b[0m  /help for commands          \x1b[1m\x1b[36m│\x1b[0m
-\x1b[1m\x1b[36m  └─────────────────────────────┘\x1b[0m
+${C}  ┌${'─'.repeat(W)}┐${R}
+${C}  │${R}${pad(`  ${C}claudia${R} v0.1.0`)}${C}│${R}
+${C}  │${R}${pad(`  model: ${modelLabel}`)}${C}│${R}
+${C}  │${R}${pad('  /help for commands')}${C}│${R}
+${C}  └${'─'.repeat(W)}┘${R}
 `);
   // Show loaded CLAUDE.md files
   const memFiles = loadMemoryFiles({ workspaceRoot: config.workspaceRoot });

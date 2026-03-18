@@ -32,7 +32,7 @@ Usage:
 
 Options:
   -p, --prompt <text>   One-shot prompt
-  -m, --model <id>      Override model (default: gpt-5.3-codex)
+  -m, --model <id>      Override model (default: claude-opus-4.6)
   --json                JSON output (one-shot mode)
   --swarm                 Enable swarm mode (agent tool)
   --verbose             Verbose logging
