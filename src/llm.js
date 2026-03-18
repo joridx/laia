@@ -55,18 +55,21 @@ export async function* parseSSEStream(body) {
 export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 120_000, maxRetries = 3 } = {}) {
   if (typeof getToken !== 'function') throw new Error('getToken is required');
 
-  async function apiCall(endpoint, body, { onStep } = {}) {
+  async function apiCall(endpoint, body, { onStep, signal: externalSignal } = {}) {
     return withRetries(async (attempt) => {
       const token = await getToken({ attempt });
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const signal = externalSignal
+        ? AbortSignal.any([controller.signal, externalSignal])
+        : controller.signal;
 
       try {
         onStep?.({ type: 'request', phase: 'api_call' });
 
         const res = await fetch(`${BASE_URL}${endpoint}`, {
           method: 'POST',
-          signal: controller.signal,
+          signal,
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
@@ -91,10 +94,13 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
     }, { maxRetries, onStep });
   }
 
-  async function streamingApiCall(endpoint, body, { onChunk } = {}) {
+  async function streamingApiCall(endpoint, body, { onChunk, signal: externalSignal } = {}) {
     const token = await getToken({ attempt: 0 });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const signal = externalSignal
+      ? AbortSignal.any([controller.signal, externalSignal])
+      : controller.signal;
 
     // Declare accumulators BEFORE try so the catch block can reference them.
     // CRITICAL: do NOT call res.text() on the success path — that consumes
@@ -110,7 +116,7 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
     try {
       const res = await fetch(`${BASE_URL}${endpoint}`, {
         method: 'POST',
-        signal: controller.signal,
+        signal,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -198,19 +204,46 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
 
 // --- Unified agent turn (routes to correct endpoint) ---
 
-export async function runAgentTurn({ client, systemPrompt, userInput, history = [], tools = [], executeTool, onStep, maxIterations = MAX_TOOL_ITERATIONS } = {}) {
+export async function runAgentTurn({ client, systemPrompt, userInput, history = [], tools = [], executeTool, executeToolBatch, onStep, maxIterations = MAX_TOOL_ITERATIONS, signal } = {}) {
   const model = client.model ?? DEFAULT_MODEL;
 
   if (isResponsesModel(model)) {
-    return runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, onStep, maxIterations });
+    return runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal });
   } else {
-    return runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, onStep, maxIterations });
+    return runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal });
   }
+}
+
+// --- Tool execution helpers ---
+
+// Sequential tool execution (default)
+async function runToolsSequential(toolCalls, executeTool, onStep) {
+  const results = [];
+  for (const tc of toolCalls) {
+    onStep?.({ type: 'tool_call', name: tc.name, callId: tc.callId, args: tc.args });
+    let result;
+    try { result = await executeTool(tc.name, tc.args, tc.callId); }
+    catch (err) { result = { error: true, message: err?.message ?? String(err) }; }
+    onStep?.({ type: 'tool_result', name: tc.name, callId: tc.callId, result });
+    results.push({ tc, result });
+  }
+  return results;
+}
+
+// Batch tool execution (swarm mode — parallel agent calls)
+async function runToolsBatch(toolCalls, executeToolBatch, onStep) {
+  for (const tc of toolCalls) onStep?.({ type: 'tool_call', name: tc.name, callId: tc.callId, args: tc.args });
+  const batchResults = await executeToolBatch(toolCalls);
+  return toolCalls.map((tc, i) => {
+    const result = batchResults[i]?.result ?? { error: true, message: 'no result from batch' };
+    onStep?.({ type: 'tool_result', name: tc.name, callId: tc.callId, result });
+    return { tc, result };
+  });
 }
 
 // --- /responses endpoint (codex models) ---
 
-async function runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, onStep, maxIterations }) {
+async function runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal }) {
   const transcript = buildResponsesInput(systemPrompt, userInput, history);
   const toolsDef = tools.length ? tools : undefined;
   // Canonical chat-format turn messages collected for context storage
@@ -219,7 +252,7 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
   let response = await client.streamingApiCall('/responses', {
     model, input: transcript, tools: toolsDef,
     ...(tools.length ? { tool_choice: 'auto' } : {}),
-  }, { onChunk: (chunk) => onStep?.({ type: 'token', text: chunk.delta }) });
+  }, { onChunk: (chunk) => onStep?.({ type: 'token', text: chunk.delta }), signal });
 
   for (let i = 0; i <= maxIterations; i++) {
     const parsed = parseResponsesOutput(response);
@@ -246,12 +279,12 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
     for (const tc of parsed.toolCalls) {
       transcript.push({ type: 'function_call', call_id: tc.callId, name: tc.name, arguments: JSON.stringify(tc.args) });
     }
-    for (const tc of parsed.toolCalls) {
-      onStep?.({ type: 'tool_call', name: tc.name, callId: tc.callId, args: tc.args });
-      let result;
-      try { result = await executeTool(tc.name, tc.args, tc.callId); }
-      catch (err) { result = { error: true, message: err?.message ?? String(err) }; }
-      onStep?.({ type: 'tool_result', name: tc.name, callId: tc.callId, result });
+
+    const toolResults = executeToolBatch
+      ? await runToolsBatch(parsed.toolCalls, executeToolBatch, onStep)
+      : await runToolsSequential(parsed.toolCalls, executeTool, onStep);
+
+    for (const { tc, result } of toolResults) {
       const output = serialize(result);
       transcript.push({ type: 'function_call_output', call_id: tc.callId, output });
       turnChat.push({ role: 'tool', tool_call_id: tc.callId, content: output });
@@ -260,7 +293,7 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
     response = await client.streamingApiCall('/responses', {
       model, input: transcript, tools: toolsDef,
       ...(tools.length ? { tool_choice: 'auto' } : {}),
-    }, { onChunk: (chunk) => onStep?.({ type: 'token', text: chunk.delta }) });
+    }, { onChunk: (chunk) => onStep?.({ type: 'token', text: chunk.delta }), signal });
   }
 }
 
@@ -282,7 +315,7 @@ const DONE_TOOL = {
   },
 };
 
-async function runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, onStep, maxIterations }) {
+async function runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal }) {
   const messages = buildChatMessages(systemPrompt, userInput, history);
   // Track where the current turn starts (after system + history, at the user message)
   const turnStartIdx = messages.length - 1;
@@ -304,9 +337,9 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
     const tc = overrideToolChoice ?? defaultToolChoice;
     const body = { model, messages, tools: chatTools, ...(chatTools ? { tool_choice: tc } : {}) };
     if (chunkCb) {
-      return client.streamingApiCall('/chat/completions', body, { onChunk: chunkCb });
+      return client.streamingApiCall('/chat/completions', body, { onChunk: chunkCb, signal });
     } else {
-      return client.apiCall('/chat/completions', body, { onStep });
+      return client.apiCall('/chat/completions', body, { onStep, signal });
     }
   }
 
@@ -370,12 +403,11 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
     });
 
     // Execute real tools (skip "done" — handled above)
-    for (const tc of parsed.toolCalls) {
-      onStep?.({ type: 'tool_call', name: tc.name, callId: tc.callId, args: tc.args });
-      let result;
-      try { result = await executeTool(tc.name, tc.args, tc.callId); }
-      catch (err) { result = { error: true, message: err?.message ?? String(err) }; }
-      onStep?.({ type: 'tool_result', name: tc.name, callId: tc.callId, result });
+    const toolResults = executeToolBatch
+      ? await runToolsBatch(parsed.toolCalls, executeToolBatch, onStep)
+      : await runToolsSequential(parsed.toolCalls, executeTool, onStep);
+
+    for (const { tc, result } of toolResults) {
       messages.push({ role: 'tool', tool_call_id: tc.callId, content: serialize(result) });
     }
 
