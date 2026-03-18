@@ -5,39 +5,6 @@
 
 const AUTO_ALLOW = new Set(['read', 'glob', 'grep', 'brain_search', 'brain_get_context', 'run_command', 'git_diff', 'git_status', 'git_log']);
 const SESSION_ALLOW = new Set(['write', 'edit', 'brain_remember']);
-const sessionApproved = new Set();
-let autoApproveAll = false;
-let rlInstance = null;
-
-export function setAutoApprove(enabled) {
-  autoApproveAll = enabled;
-}
-
-// Register readline so we can pause it during permission prompts (prevents yy ghost)
-export function setReadlineInterface(rl) {
-  rlInstance = rl;
-}
-
-export async function checkPermission(toolName, args) {
-  if (autoApproveAll) return true;
-  if (AUTO_ALLOW.has(toolName)) return true;
-  if (sessionApproved.has(toolName)) return true;
-
-  if (SESSION_ALLOW.has(toolName)) {
-    const result = await askUser(`Allow tool "${toolName}" for this session?`);
-    if (result) sessionApproved.add(toolName);
-    return !!result;
-  }
-
-  // Tier 3: always confirm (press 'a' to approve all for session)
-  const desc = formatToolCall(toolName, args);
-  const result = await askUser(`Execute ${desc}?`);
-  if (result === 'all') {
-    sessionApproved.add(toolName);
-    return true;
-  }
-  return result === true;
-}
 
 function formatToolCall(name, args) {
   if (name === 'bash') return `bash: ${args?.command ?? '(unknown)'}`;
@@ -45,7 +12,7 @@ function formatToolCall(name, args) {
 }
 
 // Read a single keypress (y/a/n) without leaking extra chars to the REPL
-async function askUser(question) {
+function askUser(question, rlInstance) {
   process.stderr.write(`\x1b[33m${question} [y/a/N] \x1b[0m`);
 
   return new Promise((resolve) => {
@@ -80,3 +47,41 @@ async function askUser(question) {
     });
   });
 }
+
+// --- Factory: creates isolated permission context ---
+export function createPermissionContext({ autoApprove = false } = {}) {
+  const sessionApproved = new Set();
+  let autoApproveAll = autoApprove;
+  let rlInstance = null;
+
+  return {
+    setAutoApprove(enabled) { autoApproveAll = enabled; },
+    setReadlineInterface(rl) { rlInstance = rl; },
+    async checkPermission(toolName, args) {
+      if (autoApproveAll) return true;
+      if (AUTO_ALLOW.has(toolName)) return true;
+      if (sessionApproved.has(toolName)) return true;
+
+      if (SESSION_ALLOW.has(toolName)) {
+        const result = await askUser(`Allow tool "${toolName}" for this session?`, rlInstance);
+        if (result) sessionApproved.add(toolName);
+        return !!result;
+      }
+
+      // Tier 3: always confirm (press 'a' to approve all for session)
+      const desc = formatToolCall(toolName, args);
+      const result = await askUser(`Execute ${desc}?`, rlInstance);
+      if (result === 'all') {
+        sessionApproved.add(toolName);
+        return true;
+      }
+      return result === true;
+    },
+  };
+}
+
+// --- Default singleton — backwards-compat ---
+const defaultContext = createPermissionContext();
+export function setAutoApprove(enabled) { defaultContext.setAutoApprove(enabled); }
+export function setReadlineInterface(rl) { defaultContext.setReadlineInterface(rl); }
+export async function checkPermission(toolName, args) { return defaultContext.checkPermission(toolName, args); }
