@@ -1,6 +1,6 @@
 import readline from 'readline/promises';
 import { stdin, stdout, stderr } from 'process';
-import { registerBuiltinTools } from './tools/index.js';
+import { registerBuiltinTools, defaultRegistry } from './tools/index.js';
 import { runTurn, printStep, getClient } from './agent.js';
 import { createContext } from './context.js';
 import { loadFileCommands, expandCommand } from './commands/loader.js';
@@ -20,7 +20,7 @@ const COPILOT_HEADERS = {
 };
 
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/exit', '/quit'];
 
 // --- Heuristic follow-up suggestions based on assistant response ---
 function suggestFollowUps(text) {
@@ -255,7 +255,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
 
   switch (name) {
     case 'help':
-      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /exit');
+      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /exit');
       console.log('Session: /save [name], /load [name|number], /sessions');
       console.log('Attach: /attach <path|glob>, /detach <path|name|number|all>, /attached');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
@@ -384,6 +384,18 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       } else {
         stderr.write('\x1b[33mNot found. Use /attached to see current attachments.\x1b[0m\n');
       }
+      return true;
+    }
+
+    case 'swarm': {
+      config.swarm = !config.swarm;
+      if (config.swarm) {
+        const { registerAgentTool } = await import('./tools/agent.js');
+        registerAgentTool(config, defaultRegistry);
+      } else {
+        defaultRegistry.delete('agent');
+      }
+      stderr.write(`🐝 Swarm ${config.swarm ? 'ON' : 'OFF'}\n`);
       return true;
     }
 

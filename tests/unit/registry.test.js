@@ -115,6 +115,16 @@ describe('registerBuiltinTools with custom registry', () => {
     assert.ok(!custom.has('agent'));
   });
 
+  test('config.swarm=true registers agent tool', async () => {
+    const custom = createToolRegistry();
+    const { registerBuiltinTools } = await import('../../src/tools/index.js');
+    await registerBuiltinTools({ workspaceRoot: process.cwd(), commandDirs: [], swarm: true }, custom);
+    assert.ok(custom.has('agent'));
+    const schema = custom.getSchemas().find(s => s.name === 'agent');
+    assert.equal(schema.type, 'function');
+    assert.ok(schema.parameters.properties.prompt);
+  });
+
   test('tools in custom registry actually execute', async () => {
     const custom = createToolRegistry();
     const { registerBuiltinTools } = await import('../../src/tools/index.js');

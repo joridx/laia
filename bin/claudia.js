@@ -5,7 +5,7 @@ import { runOneShot } from '../src/agent.js';
 import { createLogger } from '../src/logger.js';
 
 function parseArgv(argv) {
-  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false };
+  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-p' || a === '--prompt') args.prompt = argv[++i];
@@ -13,6 +13,7 @@ function parseArgv(argv) {
     else if (a === '--json') args.json = true;
     else if (a === '--verbose') args.verbose = true;
     else if (a === '-h' || a === '--help') args.help = true;
+    else if (a === '--swarm') args.swarm = true;
     else if (a === '-v' || a === '--version') args.version = true;
     else if (!a.startsWith('-') && !args.prompt) args.prompt = a;
   }
@@ -33,6 +34,7 @@ Options:
   -p, --prompt <text>   One-shot prompt
   -m, --model <id>      Override model (default: gpt-5.3-codex)
   --json                JSON output (one-shot mode)
+  --swarm                 Enable swarm mode (agent tool)
   --verbose             Verbose logging
   -h, --help            Show help
   -v, --version         Show version`);
@@ -45,7 +47,7 @@ if (args.version) {
   process.exit(0);
 }
 
-const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose });
+const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm });
 const logger = createLogger(config);
 
 if (args.prompt) {

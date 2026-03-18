@@ -15,7 +15,7 @@ const DEFAULTS = {
   verbose: false,
 };
 
-export async function loadConfig({ modelOverride, verbose } = {}) {
+export async function loadConfig({ modelOverride, verbose, swarm } = {}) {
   let fileConfig = {};
   const configPath = join(homedir(), '.claudia', 'config.json');
   try {
@@ -30,5 +30,6 @@ export async function loadConfig({ modelOverride, verbose } = {}) {
     ...(envModel ? { model: envModel } : {}),
     ...(modelOverride ? { model: modelOverride } : {}),
     ...(verbose !== undefined ? { verbose } : {}),
+    ...(swarm !== undefined ? { swarm } : {}),
   };
 }
