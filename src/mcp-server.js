@@ -8,11 +8,34 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import util from 'node:util';
 import { createAgentTool } from './tools/agent.js';
 import { registerBuiltinTools } from './tools/index.js';
 import { startBrain, stopBrain } from './brain/client.js';
 
+let consoleRedirected = false;
+function redirectConsoleToStderr() {
+  if (consoleRedirected) return;
+  consoleRedirected = true;
+
+  const methods = ['log', 'info', 'debug', 'warn', 'error'];
+  for (const m of methods) {
+    // Redirect output to stderr to avoid breaking MCP stdout framing.
+    // Use util.format to mimic Node console formatting and avoid JSON.stringify pitfalls.
+    console[m] = (...args) => {
+      try {
+        const line = util.format(...args);
+        process.stderr.write(`[console.${m}] ${line}\n`);
+      } catch {
+        process.stderr.write(`[console.${m}] (format error)\n`);
+      }
+    };
+  }
+}
+
 export async function startMcpServer({ config, logger }) {
+  redirectConsoleToStderr();
+
   // Workers in MCP mode never recurse back through MCP (disable swarm in worker config)
   const workerConfig = { ...config, swarm: false };
 
@@ -26,8 +49,10 @@ export async function startMcpServer({ config, logger }) {
 
   const agentTool = createAgentTool({ config: workerConfig });
 
+  const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
+
   const server = new Server(
-    { name: 'claudia', version: '0.1.0' },
+    { name: 'claudia', version: pkg.version ?? '0.0.0' },
     { capabilities: { tools: {} } }
   );
 
@@ -62,9 +87,25 @@ export async function startMcpServer({ config, logger }) {
   await server.connect(transport);
   process.stderr.write('[claudia MCP server] running on stdio\n');
 
+  let shuttingDown = false;
   const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    const watchdog = setTimeout(() => {
+      process.stderr.write('[mcp] shutdown watchdog fired; forcing exit\n');
+      process.exitCode = 1;
+      // Forced exit as last resort to avoid hanging stdio MCP clients
+      process.exit(1);
+    }, 10_000);
+    watchdog.unref?.();
+
+    try { await server.close?.(); } catch {}
+    try { await transport.close?.(); } catch {}
     try { await stopBrain(); } catch {}
-    process.exit(0);
+
+    clearTimeout(watchdog);
+    process.exitCode = 0;
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
