@@ -52,7 +52,7 @@
 
 | Mètrica | Valor |
 |---------|-------|
-| Tests | 155/155 ✅ |
+| Tests | 154/154 ✅ |
 | Fitxers src/ | 30 (19 core + 11 tools) |
 | Tools LLM | 13 (read, write, edit, bash, glob, grep, brain×4, command, git×3, agent) |
 | LOC (src/) | ~3850 |
@@ -69,3 +69,4 @@
 | 2026-03-16 | +5 | Vision/images, router, attachments, brain MCP |
 | 2026-03-17 | +4 | Token budget, CLAUDE.md hierarchy, git tools, diff preview |
 | 2026-03-18 | +20 | Codex review fixes, swarm (agent tool + semaphore + batch dispatch), MCP server mode (stdio + stdout guard), permissions refactor, spec compliance fixes (singleton client, indentation, per-worker permCtx) |
+| 2026-03-18 | +1 | Automated multi-agent code review (5 parallel claudia agents): fix 13 issues — tool timeout via Promise.race, null-safe batch results, SSE debug log, proper Error throwing, MCP full stack propagation, headless auto-deny warning, unexpected key feedback, brain-disabled user warning, structured turn error log; fix test glob quoting for Windows |
