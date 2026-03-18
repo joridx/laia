@@ -27,6 +27,8 @@
 | **CLAUDE.md hierarchy** | ✅ | ✅ | 5-level: user → project → managed (50KB/file, 100KB total) |
 | **Git tools** | ✅ | ✅ | `git_diff`, `git_status`, `git_log` — tier 1, read-only |
 | **Diff preview** | ✅ | ✅ | Unified diff colorit al terminal per edit/write |
+| **Swarm — `agent` tool** | ✅ | ❌ | `tools/agent.js` + `swarm.js` — workers in-process amb context net, paral·lels via semaphore |
+| **MCP server mode** | ✅ | ❌ | `--mcp` flag: exposa tool `agent` via MCP stdio. Stdout guard (strict/redirect). |
 
 ---
 
@@ -34,8 +36,6 @@
 
 | Feature | Prioritat | Esforç | Notes |
 |---------|-----------|--------|-------|
-| **claudia swarm — `agent` tool (in-process)** | 🔴 HIGH | 6h | Nou tool `agent({prompt, files?, model?})`: workers in-process amb context net, `Promise.all` per paral·lelisme real. Refactors: `permissions.js` instanciable, client no singleton, `buildWorkerSystemPrompt()`. Objectiu: superar limitació de context window delegant a workers especialitzats. |
-| **claudia MCP server mode** | 🔴 HIGH | 4h | `--mcp` flag: exposa tool `agent` via MCP stdio. Claude Code es connecta i delega tasques a workers Copilot (estalvi tokens Anthropic). `src/mcp-server.js` amb `@modelcontextprotocol/sdk` (ja disponible). |
 | Git auto-commit | 🟡 MED | 2h | Commit automàtic després d'edits (opt-in) |
 | MCP server connections | 🟡 MED | 4h | Connect to external MCP servers dynamically |
 | `/init` command | 🟢 LOW | 1h | Genera CLAUDE.md a partir del projecte |
@@ -52,11 +52,11 @@
 
 | Mètrica | Valor |
 |---------|-------|
-| Tests | 117/117 ✅ |
-| Fitxers src/ | 17 |
-| Tools LLM | 12 (read, write, edit, bash, glob, grep, brain×4, command, git×3) |
-| LOC (src/) | ~3200 |
-| Dependències extra | 1 (`fast-glob`) |
+| Tests | 154/154 ✅ |
+| Fitxers src/ | 30 (19 core + 11 tools) |
+| Tools LLM | 13 (read, write, edit, bash, glob, grep, brain×4, command, git×3, agent) |
+| LOC (src/) | ~3850 |
+| Dependències extra | 2 (`fast-glob`, `@modelcontextprotocol/sdk`) |
 | Node.js | 24+ (ESM) |
 
 ---
@@ -68,4 +68,4 @@
 | 2026-03-15 | MVP | Agent loop, streaming, tools, permissions, sessions |
 | 2026-03-16 | +5 | Vision/images, router, attachments, brain MCP |
 | 2026-03-17 | +4 | Token budget, CLAUDE.md hierarchy, git tools, diff preview |
-| 2026-03-18 | +1 | Codex review fixes: security (execFileSync), perf (Uint32Array), UX (truncation) |
+| 2026-03-18 | +16 | Codex review fixes, swarm (agent tool + semaphore + batch dispatch), MCP server mode (stdio + stdout guard), permissions refactor |
