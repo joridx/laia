@@ -4,6 +4,7 @@ import { getCopilotToken } from './auth.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getToolSchemas, executeTool as dispatchTool } from './tools/index.js';
 import { checkPermission, setAutoApprove } from './permissions.js';
+import { createDispatchToolBatch } from './swarm.js';
 import { colorDiff } from './diff.js';
 
 let client = null;
@@ -22,8 +23,16 @@ export async function runTurn({ input, config, logger, onStep, history = [] }) {
     model: config.model,
     brainPath: config.brainPath,
   });
-
   const tools = getToolSchemas();
+
+  // Swarm mode: parallel batch dispatcher for concurrent agent() calls
+  const executeToolBatch = config.swarm
+    ? createDispatchToolBatch(async (name, args, callId) => {
+        const allowed = await checkPermission(name, args);
+        if (!allowed) return { error: true, message: 'User denied permission' };
+        return dispatchTool(name, args, callId);
+      })
+    : undefined;
 
   const result = await runAgentTurn({
     client: llmClient,
@@ -36,6 +45,7 @@ export async function runTurn({ input, config, logger, onStep, history = [] }) {
       if (!allowed) return { error: true, message: 'User denied permission' };
       return dispatchTool(name, args, callId);
     },
+    executeToolBatch,
     onStep: (step) => {
       logger.info('agent_step', step);
       onStep?.(step);
