@@ -33,11 +33,49 @@ function redirectConsoleToStderr() {
   }
 }
 
-export async function startMcpServer({ config, logger }) {
+export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }) {
   redirectConsoleToStderr();
 
   // Workers in MCP mode never recurse back through MCP (disable swarm in worker config)
   const workerConfig = { ...config, swarm: false };
+
+  // Strict MCP safeguard: only the MCP transport is allowed to emit to stdout.
+  // Any other stdout output corrupts JSON-RPC framing.
+  // The SDK's StdioServerTransport accepts a custom stdout Writable in its constructor,
+  // so we pass realStdoutWrite directly — no AsyncLocalStorage needed.
+  const realStdoutWrite = process.stdout.write.bind(process.stdout);
+
+  // Guard: intercept any OTHER stdout writes (not from the transport)
+  process.stdout.write = (chunk, encoding, cb) => {
+    const preview = typeof chunk === 'string'
+      ? chunk.slice(0, 200)
+      : Buffer.isBuffer(chunk)
+        ? chunk.toString('utf8', 0, Math.min(chunk.length, 200))
+        : String(chunk).slice(0, 200);
+
+    if (stdoutPolicy === 'redirect') {
+      process.stderr.write(`[mcp] redirected non-protocol stdout: ${preview}\n`);
+      if (typeof cb === 'function') cb();
+      return true;
+    }
+
+    process.stderr.write(`[mcp] ERROR: non-protocol stdout detected (policy=strict): ${preview}\n`);
+    process.exitCode = 1;
+    process.exit(1);
+  };
+
+  // Create a Writable wrapper that uses the original stdout.write (bypasses the guard above)
+  const { Writable } = await import('node:stream');
+  const mcpStdout = new Writable({
+    write(chunk, encoding, callback) {
+      try {
+        realStdoutWrite(chunk, encoding);
+        callback();
+      } catch (err) {
+        callback(err);
+      }
+    },
+  });
 
   // Brain: start once, owned by server — workers never call startBrain/stopBrain
   try { await startBrain({ brainPath: config.brainPath }); } catch (e) {
@@ -83,7 +121,7 @@ export async function startMcpServer({ config, logger }) {
     }
   });
 
-  const transport = new StdioServerTransport();
+  const transport = new StdioServerTransport(process.stdin, mcpStdout);
   await server.connect(transport);
   process.stderr.write('[claudia MCP server] running on stdio\n');
 
