@@ -1,7 +1,7 @@
 # claudia swarm — Design Spec
 
 **Data:** 2026-03-18
-**Estat:** Approved (v2 post-review)
+**Estat:** Approved (v3 — optional swarm mode)
 **Autor:** brainstorming session (Claude Code + claudia/Copilot validation + spec review)
 
 ---
@@ -317,7 +317,51 @@ NOU:     tests/agent-tool.test.js    — 12 nous tests (veure secció 7)
 
 ---
 
-## 10. Fora d'abast (ara)
+## 10. Mode swarm opcional (opt-in)
+
+El swarm és **desactivat per defecte**. L'`agent` tool simplement no es registra si `config.swarm` és false. Comportament idèntic a l'actual sense cap canvi visible.
+
+### Activació
+
+```bash
+claudia --swarm                          # flag CLI per sessió
+claudia --swarm -p "prompt"              # one-shot amb swarm actiu
+```
+
+O permanent a `~/.claudia/config.json`:
+```json
+{ "swarm": true }
+```
+
+O en calent des del REPL:
+```
+/swarm on       # registra agent tool al registry actiu
+/swarm off      # desregistra agent tool
+/swarm          # mostra estat actual
+```
+
+### Implementació
+
+```javascript
+// src/tools/index.js — registerBuiltinTools
+export function registerBuiltinTools(config, registry = defaultRegistry) {
+  registerReadTool(registry);
+  registerWriteTool(config, registry);
+  // ... resta de tools ...
+
+  if (config.swarm) {
+    registerAgentTool(config, registry);   // única línia nova
+  }
+}
+```
+
+### Benefici per al desplegament
+
+Els refactors prerequisits (permissions, registry, llm.js signal) s'implementen i es proven amb `swarm: false` — comportament idèntic a avui, tots els tests existents verds. El tool `agent` s'activa quan estigui provat de forma independent. El risc d'introducció és mínim.
+
+---
+
+## 12. Fora d'abast (ara)
 
 - Workers amb subsets d'eines específiques per domini (tool registry filtering)
 - Streaming de resultats de workers cap a l'orquestrador en temps real
