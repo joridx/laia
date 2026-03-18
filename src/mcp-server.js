@@ -42,9 +42,11 @@ export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }
 
   // Strict MCP safeguard: only the MCP transport is allowed to emit to stdout.
   // Any other stdout output corrupts JSON-RPC framing.
-  // The SDK's StdioServerTransport accepts a custom stdout Writable in its constructor,
-  // so we pass realStdoutWrite directly — no AsyncLocalStorage needed.
-  const realStdoutWrite = process.stdout.write.bind(process.stdout);
+  //
+  // On Windows with Git Bash, process.stdout.write uses the Windows HANDLE which may
+  // differ from POSIX fd 1 in pipeline contexts. We use fs.writeSync(1, chunk) to write
+  // directly to POSIX fd 1, which is always the correct MCP output channel.
+  const { writeSync } = await import('node:fs');
 
   // Guard: intercept any OTHER stdout writes (not from the transport)
   process.stdout.write = (chunk, encoding, cb) => {
@@ -65,12 +67,14 @@ export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }
     process.exit(1);
   };
 
-  // Create a Writable wrapper that uses the original stdout.write (bypasses the guard above)
+  // Create a Writable wrapper using fs.writeSync(1, ...) to bypass stream/handle ambiguity.
+  // This works correctly on both Linux and Windows (POSIX fd 1 is always the MCP stdout pipe).
   const { Writable } = await import('node:stream');
   const mcpStdout = new Writable({
     write(chunk, encoding, callback) {
       try {
-        realStdoutWrite(chunk, encoding);
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding || 'utf8');
+        writeSync(1, buf);
         callback();
       } catch (err) {
         callback(err);
