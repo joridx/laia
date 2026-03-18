@@ -19,7 +19,7 @@ let workerCounter = 0;
 export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIMEOUT_MS, maxDepth = DEFAULT_MAX_DEPTH } = {}) {
   const runAgentTurnFn = _runAgentTurn ?? _runAgentTurnDefault;
 
-  async function execute({ prompt, files = [], model, timeout, _depth = 0 }) {
+  async function execute({ prompt, files = [], model, timeout, _depth = 0, _signal } = {}) {
     // Recursion guard
     if (_depth >= maxDepth) {
       return { success: false, error: `max recursion depth (${maxDepth}) exceeded`, workerId: 'blocked' };
@@ -54,9 +54,10 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
       return executeTool(name, args, callId);
     };
 
-    // AbortController for timeout — signal threads to fetch via llm.js
+    // AbortController for timeout + optional external cancellation (e.g. MCP client cancel)
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), effectiveTimeout);
+    if (_signal) _signal.addEventListener('abort', () => controller.abort());
     const abortPromise = new Promise((_, reject) => {
       controller.signal.addEventListener('abort', () =>
         reject(new Error(`timeout after ${effectiveTimeout}ms`))

@@ -12,6 +12,7 @@ import util from 'node:util';
 import { createAgentTool } from './tools/agent.js';
 import { registerBuiltinTools } from './tools/index.js';
 import { startBrain, stopBrain } from './brain/client.js';
+import { createSemaphore } from './swarm.js';
 
 let consoleRedirected = false;
 function redirectConsoleToStderr() {
@@ -86,6 +87,7 @@ export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }
   await registerBuiltinTools(workerConfig);
 
   const agentTool = createAgentTool({ config: workerConfig });
+  const semaphore = createSemaphore(8); // max 8 concurrent workers in MCP mode
 
   const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
 
@@ -102,15 +104,19 @@ export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }
     }],
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name, arguments: args } = request.params;
 
     if (name !== 'agent') {
       return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     }
 
+    const release = await semaphore.acquire();
     try {
-      const result = await agentTool.execute(args ?? {});
+      const result = await agentTool.execute({
+        ...(args ?? {}),
+        _signal: extra?.signal,  // forward MCP cancellation into worker AbortController
+      });
       return {
         content: [{ type: 'text', text: result.success ? result.text : `Error: ${result.error}` }],
         isError: !result.success,
@@ -118,6 +124,8 @@ export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }
     } catch (err) {
       process.stderr.write(`[mcp] uncaught error: ${err.message}\n`);
       return { content: [{ type: 'text', text: `Fatal: ${err.message}` }], isError: true };
+    } finally {
+      release();
     }
   });
 
