@@ -1,7 +1,7 @@
 import readline from 'readline/promises';
 import { stdin, stdout, stderr } from 'process';
 import { registerBuiltinTools, defaultRegistry } from './tools/index.js';
-import { runTurn, printStep, getClient } from './agent.js';
+import { runTurn, printStep } from './agent.js';
 import { createContext } from './context.js';
 import { loadFileCommands, expandCommand } from './commands/loader.js';
 import { getCopilotToken } from './auth.js';

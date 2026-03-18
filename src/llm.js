@@ -4,7 +4,7 @@
 
 const BASE_URL = 'https://api.business.githubcopilot.com';
 const DEFAULT_MODEL = 'gpt-5.3-codex';
-const MAX_TOOL_ITERATIONS = 15;
+const MAX_TOOL_ITERATIONS = 25;
 
 const COPILOT_HEADERS = {
   'Editor-Version': 'JetBrains-IC/2025.3',

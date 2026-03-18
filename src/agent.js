@@ -7,17 +7,12 @@ import { checkPermission, setAutoApprove } from './permissions.js';
 import { createDispatchToolBatch } from './swarm.js';
 import { colorDiff } from './diff.js';
 
-let client = null;
-
-export function getClient(config) {
-  if (!client || client.model !== config.model) {
-    client = createLLMClient({ getToken: getCopilotToken, model: config.model });
-  }
-  return client;
+export function createClient(config) {
+  return createLLMClient({ getToken: getCopilotToken, model: config.model });
 }
 
 export async function runTurn({ input, config, logger, onStep, history = [] }) {
-  const llmClient = getClient(config);
+  const llmClient = createClient(config);
   const systemPrompt = buildSystemPrompt({
     workspaceRoot: config.workspaceRoot,
     model: config.model,
