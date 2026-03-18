@@ -8,6 +8,7 @@ import { createLLMClient, runAgentTurn as _runAgentTurnDefault } from '../llm.js
 import { getCopilotToken } from '../auth.js';
 import { buildWorkerSystemPrompt } from '../system-prompt.js';
 import { executeTool, getToolSchemas, registerTool } from './index.js';
+import { createPermissionContext } from '../permissions.js';
 
 const MAX_FILE_BYTES = 100_000;
 const MAX_TOTAL_BYTES = 500_000;
@@ -44,13 +45,17 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
       model: model ?? config.model,
     });
 
-    // Worker executeTool: use global (stateless) registry, block agent calls, auto-approve all
+    // Per-worker permission context: explicit auto-approve (spec §4.2 step 4)
+    // Workers never prompt interactively — autoApprove is by design, not by omission.
+    const permCtx = createPermissionContext({ autoApprove: true });
+
     const workerExecuteTool = async (name, args, callId) => {
+      const allowed = await permCtx.checkPermission(name, args);
+      if (!allowed) return { error: true, message: 'Worker permission denied' };
       if (name === 'agent') {
         // Pass depth through to nested agent calls (depth guard enforced there)
         return executeTool(name, { ...args, _depth: _depth + 1 }, callId);
       }
-      // All other tools: auto-approve (workers never prompt interactively)
       return executeTool(name, args, callId);
     };
 
