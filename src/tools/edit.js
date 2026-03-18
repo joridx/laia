@@ -73,7 +73,7 @@ export function registerEditTool(config) {
       }
 
       writeFileSync(abs, content, 'utf8');
-      const relPath = relative(config.workspaceRoot, abs);
+      const relPath = relative(config.workspaceRoot, abs).split('\\').join('/');
       const diff = unifiedDiff(original, content, { path: relPath });
       return { path: abs, edits: results, diff };
     },

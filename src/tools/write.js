@@ -21,7 +21,7 @@ export function registerWriteTool(config) {
       try { original = readFileSync(abs, 'utf8'); } catch { /* new file */ }
       mkdirSync(dirname(abs), { recursive: true });
       writeFileSync(abs, content, 'utf8');
-      const relPath = relative(config.workspaceRoot, abs);
+      const relPath = relative(config.workspaceRoot, abs).split('\\').join('/');
       const diff = unifiedDiff(original, content, { path: relPath });
       return { path: abs, bytes: Buffer.byteLength(content, 'utf8'), diff };
     },

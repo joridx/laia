@@ -1,7 +1,7 @@
 # Claudia — Roadmap
 
 > Comparativa amb Claude Code + pla d'implementació
-> Última actualització: 2026-03-17
+> Última actualització: 2026-03-18
 
 ---
 
@@ -23,109 +23,48 @@
 | Brain/memory (MCP) | ✅ | ✅* | Brain MCP server vs CLAUDE.md (*diferent mètode) |
 | Image auto-routing | ✅ | ❌ | `hasImages → gpt-5.3-codex` automàtic |
 | Attachment manager | ✅ | ✅ | `/attach` amb glob, dedup, images, binary detection |
+| **Token budget display** | ✅ | ❌ | `[in / out · 45% ctx]` amb color 🟢🟡🔴 |
+| **CLAUDE.md hierarchy** | ✅ | ✅ | 5-level: user → project → managed (50KB/file, 100KB total) |
+| **Git tools** | ✅ | ✅ | `git_diff`, `git_status`, `git_log` — tier 1, read-only |
+| **Diff preview** | ✅ | ✅ | Unified diff colorit al terminal per edit/write |
 
 ---
 
-## 🔨 Pendent d'implementar (dissenyat)
+## 📋 Backlog futur
 
-### 1. Token Budget Display
-- **Prioritat:** 🟢 ALTA (UX immediata)
-- **Esforç:** 30 min
-- **Estat:** ⬜ Dissenyat
-
-Mostrar % de context window usat després de cada turn:
-```
-[1234 in / 567 out · 45% ctx]
-```
-Color: 🟢 <60%, 🟡 60-80%, 🔴 >80%
-
-**Fitxers:** `context.js` (+`usagePercent()`), `repl.js` (L234-237)
-
----
-
-### 2. CLAUDE.md Memory Hierarchy
-- **Prioritat:** 🔴 CRÍTICA (killer feature)
-- **Esforç:** 1h
-- **Estat:** ⬜ Dissenyat
-
-Jerarquia de fitxers CLAUDE.md (menor → major prioritat):
-```
-~/.claude/CLAUDE.md              ← user (ja existeix!)
-~/.claudia/CLAUDE.md             ← user (alt)
-<workspace>/CLAUDE.md            ← project
-<workspace>/.claude/CLAUDE.md    ← project (alt)
-~/.claudia/CLAUDE-managed.md     ← corporate (immutable)
-```
-
-Prepend al system prompt. Sobreviu compaction (re-read cada turn).
-
-**Fitxers:** `memory-files.js` (NOU), `system-prompt.js`, `repl.js` (banner), `tests/unit/memory-files.test.js` (NOU)
-
----
-
-### 3. Git Tools (read-only)
-- **Prioritat:** 🟡 ALTA
-- **Esforç:** 1h 20min
-- **Estat:** ⬜ Dissenyat
-
-3 tools natius read-only, tier 1 (auto-allowed):
-
-| Tool | Descripció |
-|------|-----------|
-| `git_diff(staged?, path?, ref?, stat?)` | Canvis unstaged/staged/entre refs |
-| `git_status()` | Branch + staged/unstaged/untracked |
-| `git_log(count?, path?)` | Historial de commits |
-
-Avantatge vs `bash("git diff")`: discoverable, structured output, auto-allowed, read-only safe.
-
-**Fitxers:** `tools/git.js` (NOU), `tools/index.js`, `permissions.js`, `system-prompt.js`, `tests/unit/git.test.js` (NOU)
-
----
-
-### 4. Diff Preview per edit/write
-- **Prioritat:** 🟡 ALTA
-- **Esforç:** 1h 50min
-- **Estat:** ⬜ Dissenyat
-
-Mostrar unified diff colorit al terminal després de cada edit/write:
-```
-✓ edit
-  --- a/src/foo.js
-  +++ b/src/foo.js
-  @@ -3,3 +3,3 @@
-   import { bar } from './bar.js';
-  -const x = 1;
-  +const x = 42;
-   export default x;
-```
-
-Post-aplicació (informatiu). Preview interactiu (pre-aplicació amb [y/n]) és futur.
-
-**Fitxers:** `diff.js` (NOU), `tools/edit.js`, `tools/write.js`, `agent.js` (printStep), `tests/unit/diff.test.js` (NOU)
-
----
-
-## 📋 Backlog (futur)
-
-| Feature | Esforç | Notes |
-|---------|--------|-------|
-| `/init` command | 1h | Genera CLAUDE.md a partir del projecte |
-| Git auto-commit | 2h | Commit automàtic després d'edits (opt-in) |
-| Background tasks / multi-agent | 8h | `/background` per tasques paral·leles |
-| MCP server connections | 4h | Connect to external MCP servers |
-| Web search tool | 2h | `WebSearch` natiu |
-| Notebook/REPL tool | 3h | Executar Python/JS inline amb output |
-| Vim/Emacs keybindings | 1h | readline config |
-| `.claude/rules/*.md` | 2h | Conditional rules amb `paths:` frontmatter |
-| Hooks (pre/post tool) | 3h | Deterministic actions around tool calls |
-| Interactive diff preview | 4h | Confirm [y/n] before applying edits |
+| Feature | Prioritat | Esforç | Notes |
+|---------|-----------|--------|-------|
+| Git auto-commit | 🟡 MED | 2h | Commit automàtic després d'edits (opt-in) |
+| Background tasks (multi-agent) | 🟡 MED | 8h | `/background` per tasques paral·leles |
+| MCP server connections | 🟡 MED | 4h | Connect to external MCP servers dynamically |
+| `/init` command | 🟢 LOW | 1h | Genera CLAUDE.md a partir del projecte |
+| Web search tool | 🟢 LOW | 2h | WebSearch equivalent |
+| Notebook/REPL tool | 🟢 LOW | 3h | Executar Python/JS inline amb output |
+| Vim/Emacs keybindings | 🟢 LOW | 1h | readline config |
+| Interactive diff approval | 🟢 LOW | 4h | Confirmar diffs abans d'escriure (y/n) |
+| `/undo` command | 🟢 LOW | 2h | Revertir últim edit/write |
+| Cost tracking | 🟢 LOW | 1h | Comptador de tokens acumulats per sessió |
 
 ---
 
 ## 📊 Estat del codebase
 
-- **Tests:** 69/69 ✅
-- **Fitxers src/:** 15 (agent, attach, auth, brain/client, commands/loader, context, llm, permissions, render, repl, router, session, system-prompt, tools/*)
-- **Tools:** 9 (read, write, edit, bash, glob, grep, brain_search, brain_remember, run_command)
-- **Lines of code:** ~2800
-- **Last push:** `114aceb` → `main`
+| Mètrica | Valor |
+|---------|-------|
+| Tests | 117/117 ✅ |
+| Fitxers src/ | 17 |
+| Tools LLM | 12 (read, write, edit, bash, glob, grep, brain×4, command, git×3) |
+| LOC (src/) | ~3200 |
+| Dependències extra | 1 (`fast-glob`) |
+| Node.js | 24+ (ESM) |
+
+---
+
+## Historial de versions
+
+| Data | Commits | Features |
+|------|---------|----------|
+| 2026-03-15 | MVP | Agent loop, streaming, tools, permissions, sessions |
+| 2026-03-16 | +5 | Vision/images, router, attachments, brain MCP |
+| 2026-03-17 | +4 | Token budget, CLAUDE.md hierarchy, git tools, diff preview |
+| 2026-03-18 | +1 | Codex review fixes: security (execFileSync), perf (Uint32Array), UX (truncation) |

@@ -8,6 +8,9 @@
 export function unifiedDiff(oldText, newText, { path = '', context: ctx = 3 } = {}) {
   if (oldText === newText) return '';
 
+  // Normalize path to POSIX for diff headers
+  const posixPath = path.split('\\').join('/');
+
   const oldLines = oldText.split('\n');
   const newLines = newText.split('\n');
 
@@ -19,7 +22,7 @@ export function unifiedDiff(oldText, newText, { path = '', context: ctx = 3 } = 
   const hunks = buildHunks(changes, oldLines, newLines, ctx);
   if (!hunks.length) return '';
 
-  const header = `--- a/${path}\n+++ b/${path}`;
+  const header = `--- a/${posixPath}\n+++ b/${posixPath}`;
   return header + '\n' + hunks.join('\n') + '\n';
 }
 
@@ -54,8 +57,8 @@ function diffLines(oldLines, newLines) {
   }
 
   // Build LCS table (memory-efficient: only need 2 rows)
-  const prev = new Uint16Array(m + 1);
-  const curr = new Uint16Array(m + 1);
+  const prev = new Uint32Array(m + 1);
+  const curr = new Uint32Array(m + 1);
   const directions = [];
 
   for (let i = 0; i <= n; i++) {
@@ -79,21 +82,22 @@ function diffLines(oldLines, newLines) {
     curr.fill(0);
   }
 
-  // Backtrack to find the diff
+  // Backtrack to find the diff (push + reverse for O(n) instead of unshift O(n²))
   const ops = [];
   let i = n, j = m;
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && directions[i][j] === 1) {
-      ops.unshift({ type: 'equal', line: i - 1 });
+      ops.push({ type: 'equal', line: i - 1 });
       i--; j--;
     } else if (i > 0 && (j === 0 || directions[i][j] === 2)) {
-      ops.unshift({ type: 'delete', oldLine: i - 1 });
+      ops.push({ type: 'delete', oldLine: i - 1 });
       i--;
     } else {
-      ops.unshift({ type: 'insert', newLine: j - 1 });
+      ops.push({ type: 'insert', newLine: j - 1 });
       j--;
     }
   }
+  ops.reverse();
 
   return ops;
 }

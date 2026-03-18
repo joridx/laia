@@ -1,16 +1,24 @@
 // Git tools — diff, status, log for the LLM
 // Read-only operations only. No auto-commit, no push, no destructive ops.
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { registerTool } from './index.js';
 
 const MAX_DIFF = 15_000;   // truncate large diffs
 const MAX_STAT = 3_000;
 const MAX_LOG = 5_000;
 
+// Sanitize ref/path args: reject shell metacharacters
+const SAFE_ARG = /^[\w.\-\/~@{}^:]+$/;
+function sanitize(arg) {
+  if (typeof arg !== 'string') return arg;
+  if (!SAFE_ARG.test(arg)) throw new Error(`Unsafe git argument: ${arg}`);
+  return arg;
+}
+
 function git(args, cwd) {
   try {
-    return execSync(`git ${args.join(' ')}`, {
+    return execFileSync('git', args, {
       cwd,
       encoding: 'utf8',
       timeout: 10_000,
@@ -18,6 +26,10 @@ function git(args, cwd) {
       windowsHide: true,
     });
   } catch (err) {
+    // Non-zero exit with stdout is still an error — don't silently swallow
+    if (err.status !== 0 && err.stderr?.trim()) {
+      throw new Error(err.stderr.trim());
+    }
     if (err.stdout) return err.stdout;
     throw new Error(err.stderr || err.message || 'git command failed');
   }
@@ -44,9 +56,9 @@ export function registerGitTools(config) {
       try {
         const args = ['diff', '--no-color'];
         if (staged) args.push('--cached');
-        if (ref) args.push(ref);
+        if (ref) args.push(sanitize(ref));
         if (stat) args.push('--stat');
-        if (diffPath) args.push('--', diffPath);
+        if (diffPath) args.push('--', sanitize(diffPath));
 
         const diff = git(args, cwd);
         if (!diff.trim()) return { empty: true, message: 'No changes' };
@@ -56,8 +68,8 @@ export function registerGitTools(config) {
         if (!stat) {
           const statArgs = ['diff', '--no-color', '--stat'];
           if (staged) statArgs.push('--cached');
-          if (ref) statArgs.push(ref);
-          if (diffPath) statArgs.push('--', diffPath);
+          if (ref) statArgs.push(sanitize(ref));
+          if (diffPath) statArgs.push('--', sanitize(diffPath));
           statSummary = git(statArgs, cwd).substring(0, MAX_STAT);
         }
 
@@ -123,7 +135,7 @@ export function registerGitTools(config) {
     parameters: {
       type: 'object',
       properties: {
-        count: { type: 'number', description: 'Number of commits to show. Default: 10' },
+        count: { type: 'integer', description: 'Number of commits to show. Default: 10' },
         path: { type: 'string', description: 'Filter commits affecting a specific file or directory' },
         oneline: { type: 'boolean', description: 'Use one-line format. Default: true' },
       },
@@ -136,7 +148,7 @@ export function registerGitTools(config) {
         const args = ['log', `-${n}`];
         if (oneline) args.push('--oneline');
         else args.push('--format=%h %ai %an: %s');
-        if (logPath) args.push('--', logPath);
+        if (logPath) args.push('--', sanitize(logPath));
 
         const log = git(args, cwd);
         if (!log.trim()) return { empty: true, message: 'No commits' };

@@ -88,9 +88,14 @@ export function printStep(step) {
       break;
     case 'tool_result': {
       process.stderr.write(`\x1b[32m✓ ${step.name}\x1b[0m\n`);
-      // Show diff preview for edit and write tools
+      // Show diff preview for edit and write tools (truncate large diffs)
       if ((step.name === 'edit' || step.name === 'write') && step.result?.diff) {
-        process.stderr.write(colorDiff(step.result.diff) + '\n');
+        const MAX_DIFF_LINES = 50;
+        const diffLines = step.result.diff.split('\n');
+        const truncated = diffLines.length > MAX_DIFF_LINES;
+        const display = truncated ? diffLines.slice(0, MAX_DIFF_LINES).join('\n') : step.result.diff;
+        process.stderr.write(colorDiff(display) + '\n');
+        if (truncated) process.stderr.write(`\x1b[2m  ... (${diffLines.length - MAX_DIFF_LINES} more lines truncated)\x1b[0m\n`);
       }
       break;
     }
