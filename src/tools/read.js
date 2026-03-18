@@ -1,9 +1,9 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 
-export function registerReadTool(config) {
-  registerTool('read', {
+export function registerReadTool(config, registry = defaultRegistry) {
+  registry.set('read', {
     description: 'Read the contents of a file. Returns the text content with line numbers.',
     parameters: {
       type: 'object',

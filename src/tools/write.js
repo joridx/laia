@@ -1,10 +1,10 @@
 import { writeFileSync, readFileSync, mkdirSync } from 'fs';
 import { resolve, dirname, relative } from 'path';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 import { unifiedDiff } from '../diff.js';
 
-export function registerWriteTool(config) {
-  registerTool('write', {
+export function registerWriteTool(config, registry = defaultRegistry) {
+  registry.set('write', {
     description: 'Write content to a file. Creates directories if needed. Overwrites existing files.',
     parameters: {
       type: 'object',

@@ -2,7 +2,7 @@
 // Commands are .md files from ~/.claude/commands/ and ~/.claudia/commands/
 
 import { loadFileCommands, expandCommand } from '../commands/loader.js';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 
 let commandsCache = null;
 
@@ -11,8 +11,8 @@ function getCommands(config) {
   return commandsCache;
 }
 
-export function registerCommandTool(config) {
-  registerTool('run_command', {
+export function registerCommandTool(config, registry = defaultRegistry) {
+  registry.set('run_command', {
     description: `Discover and execute local commands/skills (Jira, Confluence, GitHub, Teams, Jenkins, etc). Actions: "list" to see all commands, "search" to find by keyword, "run" to execute a command with arguments. ALWAYS search or list first if unsure which command to use.`,
     parameters: {
       type: 'object',

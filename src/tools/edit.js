@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve, relative } from 'path';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 import { unifiedDiff } from '../diff.js';
 
 export function applyEdit(content, oldText, newText) {
@@ -33,8 +33,8 @@ export function applyEdit(content, oldText, newText) {
   return null;
 }
 
-export function registerEditTool(config) {
-  registerTool('edit', {
+export function registerEditTool(config, registry = defaultRegistry) {
+  registry.set('edit', {
     description: 'Apply search/replace edits to a file. Trailing whitespace and tab/space differences are normalized automatically (status: fuzzy_applied). Exact match returns applied. No match returns not_found.',
     parameters: {
       type: 'object',

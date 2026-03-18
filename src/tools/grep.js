@@ -1,9 +1,9 @@
 import { readFileSync } from 'fs';
 import fg from 'fast-glob';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 
-export function registerGrepTool(config) {
-  registerTool('grep', {
+export function registerGrepTool(config, registry = defaultRegistry) {
+  registry.set('grep', {
     description: 'Search for text in files. Returns matching lines with file paths and line numbers.',
     parameters: {
       type: 'object',

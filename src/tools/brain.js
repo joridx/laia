@@ -2,10 +2,10 @@
 // These tools let the LLM search and store memories
 
 import { brainSearch, brainRemember, brainGetContext } from '../brain/client.js';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 
-export function registerBrainTools(config) {
-  registerTool('brain_search', {
+export function registerBrainTools(config, registry = defaultRegistry) {
+  registry.set('brain_search', {
     description: 'Search the local brain memory for learnings, patterns, sessions, and knowledge. Use to find prior context before acting.',
     parameters: {
       type: 'object',
@@ -27,7 +27,7 @@ export function registerBrainTools(config) {
     },
   });
 
-  registerTool('brain_remember', {
+  registry.set('brain_remember', {
     description: 'Store a learning, pattern, or warning in the local brain memory. Use for durable, useful insights (not transient noise).',
     parameters: {
       type: 'object',
@@ -52,7 +52,7 @@ export function registerBrainTools(config) {
     },
   });
 
-  registerTool('brain_get_context', {
+  registry.set('brain_get_context', {
     description: 'Get brain context: user prefs, recent sessions, relevant learnings for the current project.',
     parameters: {
       type: 'object',

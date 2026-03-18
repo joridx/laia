@@ -2,7 +2,7 @@
 // Read-only operations only. No auto-commit, no push, no destructive ops.
 
 import { execFileSync } from 'child_process';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 
 const MAX_DIFF = 15_000;   // truncate large diffs
 const MAX_STAT = 3_000;
@@ -35,11 +35,11 @@ function git(args, cwd) {
   }
 }
 
-export function registerGitTools(config) {
+export function registerGitTools(config, registry = defaultRegistry) {
   const cwd = config.workspaceRoot;
 
   // --- git_diff ---
-  registerTool('git_diff', {
+  registry.set('git_diff', {
     description: 'Show git diff (unstaged changes, staged changes, or diff between refs). Returns structured output with file-level stats and patch content.',
     parameters: {
       type: 'object',
@@ -85,7 +85,7 @@ export function registerGitTools(config) {
   });
 
   // --- git_status ---
-  registerTool('git_status', {
+  registry.set('git_status', {
     description: 'Show git working tree status: branch, staged, unstaged, untracked files, ahead/behind counts.',
     parameters: {
       type: 'object',
@@ -130,7 +130,7 @@ export function registerGitTools(config) {
   });
 
   // --- git_log ---
-  registerTool('git_log', {
+  registry.set('git_log', {
     description: 'Show recent git commit history.',
     parameters: {
       type: 'object',

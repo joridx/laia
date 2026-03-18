@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 
 // Find Git Bash on Windows
 function findBashShell() {
@@ -17,8 +17,8 @@ function findBashShell() {
 
 const BASH_SHELL = findBashShell();
 
-export function registerBashTool(config) {
-  registerTool('bash', {
+export function registerBashTool(config, registry = defaultRegistry) {
+  registry.set('bash', {
     description: `Execute a shell command via Git Bash and return stdout/stderr. Use for builds, tests, git, etc. Commands run in a Unix-like shell (bash), not cmd.exe.`,
     parameters: {
       type: 'object',

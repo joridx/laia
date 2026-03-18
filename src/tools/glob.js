@@ -1,8 +1,8 @@
 import fg from 'fast-glob';
-import { registerTool } from './index.js';
+import { defaultRegistry } from './index.js';
 
-export function registerGlobTool(config) {
-  registerTool('glob', {
+export function registerGlobTool(config, registry = defaultRegistry) {
+  registry.set('glob', {
     description: 'Find files matching a glob pattern. Returns list of matching paths.',
     parameters: {
       type: 'object',
