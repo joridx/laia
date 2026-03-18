@@ -17,7 +17,8 @@ function askUser(question, rlInstance) {
 
   return new Promise((resolve) => {
     if (!process.stdin.isTTY) {
-      process.stderr.write('n (non-interactive)\n');
+      process.stderr.write('n (non-interactive: auto-deny permission in headless mode)\n');
+      console.warn('[permissions] Permission denied automatically: non-interactive (headless) session');
       return resolve(false);
     }
 
@@ -33,8 +34,10 @@ function askUser(question, rlInstance) {
 
       if (ch === 'a') {
         process.stderr.write('a (approve all for session)\n');
-      } else {
+      } else if (ch === 'y' || ch === 'n') {
         process.stderr.write(ch === 'y' ? 'y\n' : 'n\n');
+      } else {
+        process.stderr.write(`(unexpected input: '${ch}' — denied)\n`);
       }
 
       process.stdin.setRawMode(wasRaw ?? false);

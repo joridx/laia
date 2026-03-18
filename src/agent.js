@@ -24,7 +24,7 @@ export async function runTurn({ input, config, logger, onStep, history = [] }) {
   const executeToolBatch = config.swarm
     ? createDispatchToolBatch(async (name, args, callId) => {
         const allowed = await checkPermission(name, args);
-        if (!allowed) return { error: true, message: 'User denied permission' };
+        if (!allowed) throw new Error('User denied permission');
         return dispatchTool(name, args, callId);
       })
     : undefined;
@@ -37,7 +37,7 @@ export async function runTurn({ input, config, logger, onStep, history = [] }) {
     tools,
     executeTool: async (name, args, callId) => {
       const allowed = await checkPermission(name, args);
-      if (!allowed) return { error: true, message: 'User denied permission' };
+      if (!allowed) throw new Error('User denied permission');
       return dispatchTool(name, args, callId);
     },
     executeToolBatch,
@@ -56,7 +56,7 @@ export async function runOneShot({ prompt, config, logger, json }) {
   setAutoApprove(true);
 
   const { startBrain, stopBrain } = await import('./brain/client.js');
-  try { await startBrain({ brainPath: config.brainPath }); } catch {}
+  try { await startBrain({ brainPath: config.brainPath }); } catch (err) { console.error('startBrain error:', err); }
 
   const { registerBuiltinTools } = await import('./tools/index.js');
   await registerBuiltinTools(config);

@@ -41,7 +41,7 @@ export async function* parseSSEStream(body) {
           if (line.startsWith(':') || !line.startsWith('data:')) continue;
           const raw = line.slice(5).trim();
           if (raw === '[DONE]') return;
-          try { yield JSON.parse(raw); } catch { /* skip malformed */ }
+          try { yield JSON.parse(raw); } catch (e) { console.debug('[parseSSEStream] Malformed SSE data:', raw, e); }
         }
       }
     }
@@ -238,7 +238,9 @@ async function runToolsBatch(toolCalls, executeToolBatch, onStep) {
   for (const tc of toolCalls) onStep?.({ type: 'tool_call', name: tc.name, callId: tc.callId, args: tc.args });
   const batchResults = await executeToolBatch(toolCalls);
   return toolCalls.map((tc, i) => {
-    const result = batchResults[i]?.result ?? { error: true, message: 'no result from batch' };
+    const result = (batchResults && batchResults[i] && batchResults[i].result !== undefined)
+      ? batchResults[i].result
+      : { error: true, message: 'no result from batch' };
     onStep?.({ type: 'tool_result', name: tc.name, callId: tc.callId, result });
     return { tc, result };
   });
@@ -283,9 +285,16 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
       transcript.push({ type: 'function_call', call_id: tc.callId, name: tc.name, arguments: JSON.stringify(tc.args) });
     }
 
-    const toolResults = executeToolBatch
-      ? await runToolsBatch(parsed.toolCalls, executeToolBatch, onStep)
-      : await runToolsSequential(parsed.toolCalls, executeTool, onStep);
+    const TOOL_TIMEOUT_MS = 20000;
+async function withTimeout(promise, ms, name, callId) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool call timed out (${name}, callId ${callId}) after ${ms}ms`)), ms))
+  ]);
+}
+const toolResults = executeToolBatch
+      ? await runToolsBatch(parsed.toolCalls, async (toolCalls) => Promise.all(toolCalls.map(tc => withTimeout(executeToolBatch([tc]), TOOL_TIMEOUT_MS, tc.name, tc.callId))), onStep)
+      : await runToolsSequential(parsed.toolCalls, (name, args, callId) => withTimeout(executeTool(name, args, callId), TOOL_TIMEOUT_MS, name, callId), onStep);
 
     for (const { tc, result } of toolResults) {
       const output = serialize(result);

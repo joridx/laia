@@ -58,6 +58,7 @@ export async function runRepl({ config, logger }) {
     stderr.write('\x1b[2m[brain] Connected\x1b[0m\n');
   } catch (err) {
     stderr.write(`\x1b[33m[brain] Failed to start: ${err.message} (brain tools disabled)\x1b[0m\n`);
+console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this session. Some AI features may be limited.');
   }
 
   await registerBuiltinTools(config);
@@ -240,8 +241,11 @@ export async function runRepl({ config, logger }) {
         stderr.write(`\x1b[2m[${inTok} in / ${outTok} out · \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m]\x1b[0m\n`);
       }
     } catch (err) {
+      // Structured error reporting
+      logger.error('turn_error', { error: err.message, full: err.stack, input });
+      // Surface error to user as visible message
       stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
-      logger.error('turn_error', { error: err.message });
+      stderr.write(`\x1b[33m(Turn aborted due to error. Check logs for details.)\x1b[0m\n`);
     }
 
     rl.prompt();

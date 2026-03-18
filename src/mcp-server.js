@@ -126,8 +126,9 @@ export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }
         isError: !result.success,
       };
     } catch (err) {
-      process.stderr.write(`[mcp] uncaught error: ${err.message}\n`);
-      return { content: [{ type: 'text', text: `Fatal: ${err.message}` }], isError: true };
+      process.stderr.write(`[mcp] uncaught error: ${err.stack || err.message || err}\n`);
+      // Propagate full error detail to the MCP client
+      return { content: [{ type: 'text', text: `Fatal: ${err && err.stack ? err.stack : err.message || String(err)}` }], isError: true };
     } finally {
       release();
     }
