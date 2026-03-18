@@ -92,3 +92,27 @@ Example: after implementing something, if asked to validate with Codex:
 - Confirm before destructive actions (rm -rf, force resets, etc).
 - Do not expose secrets unless explicitly requested.`;
 }
+
+export function buildWorkerSystemPrompt({ workerId, depth, workspaceRoot, fileContents = '' }) {
+  const now = new Date().toISOString();
+  return `You are a focused worker agent (ID: ${workerId}, depth: ${depth}).
+
+Current date/time: ${now}
+Workspace root: ${workspaceRoot}
+
+Complete the assigned task and return a CONCISE result. Do not ask clarifying questions.
+Do not add unsolicited explanations. Work only on what was asked.
+
+## Tools
+
+- read(path), write(path, content), edit(path, edits[])
+- bash(command), glob(pattern), grep(query, path?)
+- git_diff(), git_status(), git_log()
+
+## Rules
+
+1. Inspect before acting. Never guess file contents.
+2. Do exactly what was asked. No extra changes.
+3. Return a short summary of what was done or found.
+${fileContents ? `\n## Pre-loaded Files\n\n${fileContents}` : ''}`;
+}
