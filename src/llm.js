@@ -81,7 +81,8 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
         const text = await res.text();
         let json;
         try { json = text ? JSON.parse(text) : {}; } catch {
-          throw makeError(`Invalid JSON (status ${res.status})`, { status: res.status, retriable: res.status >= 500 });
+          if (!res.ok) throw classifyHttpError(res.status, {});
+          throw makeError(`Invalid JSON (status ${res.status})`, { status: res.status, retriable: false });
         }
 
         if (!res.ok) throw classifyHttpError(res.status, json);
@@ -95,7 +96,8 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
   }
 
   async function streamingApiCall(endpoint, body, { onChunk, signal: externalSignal } = {}) {
-    const token = await getToken({ attempt: 0 });
+    return withRetries(async (attempt) => {
+    const token = await getToken({ attempt });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const signal = externalSignal
@@ -197,6 +199,7 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
     } finally {
       clearTimeout(timer);
     }
+    }, { maxRetries });
   }
 
   return { apiCall, streamingApiCall, model };
