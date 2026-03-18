@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { writeFileSync, mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createSemaphore, createDispatchToolBatch } from '../../src/swarm.js';
+import { createAgentTool } from '../../src/tools/agent.js';
 
 describe('createSemaphore', () => {
   it('limits concurrency to max', async () => {
@@ -28,6 +32,93 @@ describe('createSemaphore', () => {
     const release2 = await sem.acquire();
     assert.ok(release2);
     release2();
+  });
+});
+
+// ---- agent tool ----
+describe('createAgentTool', () => {
+  function makeConfig(overrides = {}) {
+    return { workspaceRoot: process.cwd(), model: 'gpt-5.3-codex', swarm: true, ...overrides };
+  }
+
+  it('returns success with text from worker', async () => {
+    const tool = createAgentTool({
+      config: makeConfig(),
+      _runAgentTurn: async () => ({ text: 'worker result', usage: { input_tokens: 10, output_tokens: 5 }, turnMessages: [] }),
+    });
+    const result = await tool.execute({ prompt: 'do something' });
+    assert.equal(result.success, true);
+    assert.equal(result.text, 'worker result');
+    assert.ok(result.workerId.startsWith('worker-'));
+    assert.equal(result.tokensUsed, 15);
+  });
+
+  it('returns error on timeout', async () => {
+    const tool = createAgentTool({
+      config: makeConfig(),
+      _runAgentTurn: () => new Promise(() => {}), // never resolves
+      timeoutMs: 30,
+    });
+    const result = await tool.execute({ prompt: 'slow' });
+    assert.equal(result.success, false);
+    assert.match(result.error, /timeout/i);
+  });
+
+  it('blocks recursion at maxDepth', async () => {
+    const tool = createAgentTool({
+      config: makeConfig(),
+      _runAgentTurn: async () => ({ text: 'ok', usage: {}, turnMessages: [] }),
+      maxDepth: 2,
+    });
+    const result = await tool.execute({ prompt: 'task', _depth: 2 });
+    assert.equal(result.success, false);
+    assert.match(result.error, /depth/i);
+  });
+
+  it('injects files into system prompt', async () => {
+    let capturedSystemPrompt = '';
+    const tool = createAgentTool({
+      config: makeConfig(),
+      _runAgentTurn: async ({ systemPrompt }) => {
+        capturedSystemPrompt = systemPrompt;
+        return { text: 'ok', usage: {}, turnMessages: [] };
+      },
+    });
+    const dir = mkdtempSync(join(tmpdir(), 'agent-test-'));
+    const fp = join(dir, 'hello.js');
+    writeFileSync(fp, 'console.log("hello")');
+    await tool.execute({ prompt: 'read it', files: [fp] });
+    assert.ok(capturedSystemPrompt.includes('console.log'), 'file content should be in system prompt');
+  });
+
+  it('handles missing files gracefully', async () => {
+    let capturedSystemPrompt = '';
+    const tool = createAgentTool({
+      config: makeConfig(),
+      _runAgentTurn: async ({ systemPrompt }) => {
+        capturedSystemPrompt = systemPrompt;
+        return { text: 'ok', usage: {}, turnMessages: [] };
+      },
+    });
+    const result = await tool.execute({ prompt: 'task', files: ['/nonexistent/file.js'] });
+    assert.equal(result.success, true);
+    assert.ok(capturedSystemPrompt.includes('not found'));
+  });
+
+  it('filters agent tool from worker schemas at max depth', async () => {
+    let capturedTools = [];
+    const tool = createAgentTool({
+      config: makeConfig(),
+      _runAgentTurn: async ({ tools }) => {
+        capturedTools = tools;
+        return { text: 'ok', usage: {}, turnMessages: [] };
+      },
+      maxDepth: 3,
+    });
+    // At depth 2, next depth is 3 which equals maxDepth, so agent should be filtered
+    await tool.execute({ prompt: 'task', _depth: 2 });
+    const hasAgent = capturedTools.some(t => t.name === 'agent');
+    assert.equal(hasAgent, false, 'agent tool should be filtered at depth reaching maxDepth');
   });
 });
 

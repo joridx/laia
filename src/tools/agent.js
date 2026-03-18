@@ -1,29 +1,173 @@
-// Agent tool — delegates subtasks to worker LLM instances
-// Registered only when config.swarm is true or /swarm toggle is ON
+// Agent tool — in-process worker with fresh context
+// Self-contained: no changes needed to existing files.
+// Registered only when config.swarm=true (see tools/index.js registerBuiltinTools)
 
-import { defaultRegistry } from './index.js';
+import { readFileSync, existsSync } from 'fs';
+import { resolve, extname, basename } from 'path';
+import { createLLMClient, runAgentTurn as _runAgentTurnDefault } from '../llm.js';
+import { getCopilotToken } from '../auth.js';
+import { buildWorkerSystemPrompt } from '../system-prompt.js';
+import { executeTool, getToolSchemas, registerTool } from './index.js';
 
-export function registerAgentTool(config, registry = defaultRegistry) {
-  // Placeholder — tool schema only, execute is a stub for now
-  registry.set('agent', {
-    description: 'Delegate a subtask to a worker agent. The worker has access to all tools (read, write, edit, bash, glob, grep, git) but cannot spawn sub-agents. Use for independent, well-scoped tasks that can run in isolation.',
+const MAX_FILE_BYTES = 100_000;
+const MAX_TOTAL_BYTES = 500_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_MAX_DEPTH = 3;
+
+let workerCounter = 0;
+
+export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIMEOUT_MS, maxDepth = DEFAULT_MAX_DEPTH } = {}) {
+  const runAgentTurnFn = _runAgentTurn ?? _runAgentTurnDefault;
+
+  async function execute({ prompt, files = [], model, timeout, _depth = 0 }) {
+    // Recursion guard
+    if (_depth >= maxDepth) {
+      return { success: false, error: `max recursion depth (${maxDepth}) exceeded`, workerId: 'blocked' };
+    }
+
+    const workerId = `worker-${++workerCounter}`;
+    const effectiveTimeout = timeout ?? timeoutMs;
+
+    // Build injected file contents
+    const fileContents = buildFileContents(files, config.workspaceRoot ?? process.cwd());
+
+    // Worker system prompt (focused, no REPL/brain/session instructions)
+    const systemPrompt = buildWorkerSystemPrompt({
+      workerId, depth: _depth + 1,
+      workspaceRoot: config.workspaceRoot ?? process.cwd(),
+      fileContents,
+    });
+
+    // Per-worker LLM client
+    const client = createLLMClient({
+      getToken: getCopilotToken,
+      model: model ?? config.model,
+    });
+
+    // Worker executeTool: use global (stateless) registry, block agent calls, auto-approve all
+    const workerExecuteTool = async (name, args, callId) => {
+      if (name === 'agent') {
+        // Pass depth through to nested agent calls (depth guard enforced there)
+        return executeTool(name, { ...args, _depth: _depth + 1 }, callId);
+      }
+      // All other tools: auto-approve (workers never prompt interactively)
+      return executeTool(name, args, callId);
+    };
+
+    // AbortController for timeout — signal threads to fetch via llm.js
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), effectiveTimeout);
+    const abortPromise = new Promise((_, reject) => {
+      controller.signal.addEventListener('abort', () =>
+        reject(new Error(`timeout after ${effectiveTimeout}ms`))
+      );
+    });
+
+    try {
+      const result = await Promise.race([
+        runAgentTurnFn({
+          client,
+          systemPrompt,
+          userInput: prompt,
+          history: [],
+          tools: getToolSchemas().filter(t => t.name !== 'agent' || _depth + 1 < maxDepth),
+          executeTool: workerExecuteTool,
+          signal: controller.signal,
+          onStep: (step) => {
+            // Workers MUST NOT write to stdout (corrupts MCP JSON-RPC protocol)
+            if (step.type === 'tool_call') {
+              process.stderr.write(`  \x1b[2m[${workerId}] → ${step.name}\x1b[0m\n`);
+            }
+          },
+        }),
+        abortPromise,
+      ]);
+
+      const usage = result.usage ?? {};
+      const tokensUsed = (usage.input_tokens ?? usage.prompt_tokens ?? 0)
+                       + (usage.output_tokens ?? usage.completion_tokens ?? 0);
+
+      return { success: true, text: result.text, tokensUsed, workerId };
+
+    } catch (err) {
+      if (controller.signal.aborted) {
+        return { success: false, error: `timeout after ${effectiveTimeout}ms`, workerId };
+      }
+      return { success: false, error: err.message ?? String(err), workerId };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  const schema = {
+    type: 'function',
+    name: 'agent',
+    description: 'Spawn a focused worker agent to complete a specific subtask with a clean context window. Workers run in parallel when multiple agent() calls are made in the same turn. Returns a concise result summary.',
     parameters: {
       type: 'object',
       properties: {
-        prompt: { type: 'string', description: 'Clear, self-contained task description for the worker' },
+        prompt: { type: 'string', description: 'Task description and instructions for the worker' },
         files: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Optional file paths to include as context for the worker',
+          description: 'File paths to inject directly into the worker context (optional, max 100KB/file, 500KB total)',
         },
-        model: { type: 'string', description: 'Override model for this worker (default: same as orchestrator)' },
-        timeout: { type: 'number', description: 'Timeout in ms (default: 60000)' },
+        model: { type: 'string', description: 'Model override for this worker (optional, default: config model)' },
+        timeout: { type: 'number', description: 'Timeout in milliseconds (optional, default: 60000)' },
       },
       required: ['prompt'],
       additionalProperties: false,
     },
-    async execute({ prompt, files, model, timeout }) {
-      return { error: true, message: 'Agent tool not yet implemented. Schema registered for testing.' };
-    },
-  });
+  };
+
+  return { schema, execute };
+}
+
+function buildFileContents(files, workspaceRoot) {
+  if (!files?.length) return '';
+  let totalBytes = 0;
+  const parts = [];
+
+  for (const fp of files) {
+    const abs = resolve(workspaceRoot, fp);
+    if (!existsSync(abs)) {
+      parts.push(`<!-- not found: ${basename(fp)} -->`);
+      continue;
+    }
+    try {
+      const content = readFileSync(abs, 'utf8');
+      if (content.length > MAX_FILE_BYTES) {
+        parts.push(`<!-- skipped (too large, ${content.length} bytes): ${basename(abs)} -->`);
+        continue;
+      }
+      if (totalBytes + content.length > MAX_TOTAL_BYTES) {
+        parts.push(`<!-- skipped (total limit reached): ${basename(abs)} -->`);
+        continue;
+      }
+      totalBytes += content.length;
+      const lang = extname(abs).slice(1) || 'text';
+      parts.push(`<file path="${abs}" lang="${lang}">\n${content}\n</file>`);
+    } catch {
+      parts.push(`<!-- unreadable: ${basename(abs)} -->`);
+    }
+  }
+
+  return parts.length ? `<files>\n${parts.join('\n')}\n</files>` : '';
+}
+
+// Called by registerBuiltinTools when config.swarm=true
+// Accepts optional registry param for custom registries (tests, MCP).
+// Default: writes to global defaultRegistry via registerTool.
+export function registerAgentTool(config, registry) {
+  const tool = createAgentTool({ config });
+  const def = {
+    description: tool.schema.description,
+    parameters: tool.schema.parameters,
+    execute: tool.execute,
+  };
+  if (registry) {
+    registry.set('agent', def);
+  } else {
+    registerTool('agent', def);
+  }
 }
