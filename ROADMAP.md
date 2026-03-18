@@ -34,8 +34,9 @@
 
 | Feature | Prioritat | Esforç | Notes |
 |---------|-----------|--------|-------|
+| **claudia swarm — `agent` tool (in-process)** | 🔴 HIGH | 6h | Nou tool `agent({prompt, files?, model?})`: workers in-process amb context net, `Promise.all` per paral·lelisme real. Refactors: `permissions.js` instanciable, client no singleton, `buildWorkerSystemPrompt()`. Objectiu: superar limitació de context window delegant a workers especialitzats. |
+| **claudia MCP server mode** | 🔴 HIGH | 4h | `--mcp` flag: exposa tool `agent` via MCP stdio. Claude Code es connecta i delega tasques a workers Copilot (estalvi tokens Anthropic). `src/mcp-server.js` amb `@modelcontextprotocol/sdk` (ja disponible). |
 | Git auto-commit | 🟡 MED | 2h | Commit automàtic després d'edits (opt-in) |
-| Background tasks (multi-agent) | 🟡 MED | 8h | `/background` per tasques paral·leles |
 | MCP server connections | 🟡 MED | 4h | Connect to external MCP servers dynamically |
 | `/init` command | 🟢 LOW | 1h | Genera CLAUDE.md a partir del projecte |
 | Web search tool | 🟢 LOW | 2h | WebSearch equivalent |
