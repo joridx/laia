@@ -1,8 +1,8 @@
 # API-Key Agnostic Multi-Provider Design
 
 **Date**: 2026-03-18
-**Status**: Draft
-**Branch**: `feature/api-agnostic` (claudia + claude_local_brain)
+**Status**: Implemented (2026-03-19)
+**Branch**: `feature/api-agnostic-v2` (claudia + claude_local_brain)
 **Scope**: Claudia (`src/`) + Brain (`mcp-server/`)
 
 ## Problem
