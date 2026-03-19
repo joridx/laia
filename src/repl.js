@@ -4,7 +4,8 @@ import { registerBuiltinTools, defaultRegistry } from './tools/index.js';
 import { runTurn, printStep } from './agent.js';
 import { createContext } from './context.js';
 import { loadFileCommands, expandCommand } from './commands/loader.js';
-import { getCopilotToken } from './auth.js';
+import { getCopilotToken, getProviderToken } from './auth.js';
+import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@claude/providers';
 import { startBrain, stopBrain } from './brain/client.js';
 import { setReadlineInterface } from './permissions.js';
 import { renderMarkdown } from './render.js';
@@ -13,12 +14,6 @@ import { createRouter, routeLabel, MODEL_IDS } from './router.js';
 import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteAutoSave } from './session.js';
 import { createAttachManager } from './attach.js';
 import { createAutoCommitter } from './git-commit.js';
-
-const COPILOT_HEADERS = {
-  'Editor-Version': 'JetBrains-IC/2025.3',
-  'Editor-Plugin-Version': 'copilot-intellij/1.5.66',
-  'Copilot-Integration-Id': 'vscode-chat',
-};
 
 // --- Slash command list for autocomplete ---
 const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/exit', '/quit'];
@@ -497,14 +492,27 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
 async function handleModelCommand(args, config) {
   if (!args) {
     try {
-      const token = await getCopilotToken();
-      const res = await fetch('https://api.business.githubcopilot.com/models', {
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', ...COPILOT_HEADERS },
+      // Use provider-aware model listing
+      const { providerId } = detectProvider(config.model);
+      const provider = getProvider(providerId);
+
+      if (!provider.supports?.listModels) {
+        stderr.write(`\x1b[33mProvider '${providerId}' does not support model listing\x1b[0m\n`);
+        console.log(`Current model: ${config.model} (via ${providerId})`);
+        return;
+      }
+
+      const token = await getProviderToken(providerId);
+      const url = resolveUrl(provider, 'models');
+      const authHeaders = buildAuthHeaders(provider, token);
+
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...authHeaders, ...provider.extraHeaders },
       });
       const data = await res.json();
       const models = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
 
-      console.log('\nAvailable models:\n');
+      console.log(`\nAvailable models (${providerId}):\n`);
       for (const m of models) {
         if (m.policy?.state !== 'enabled') continue;
         const current = config.model === m.id ? ' \x1b[32m← current\x1b[0m' : '';

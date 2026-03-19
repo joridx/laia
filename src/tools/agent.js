@@ -5,7 +5,8 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve, extname, basename } from 'path';
 import { createLLMClient, runAgentTurn as _runAgentTurnDefault } from '../llm.js';
-import { getCopilotToken } from '../auth.js';
+import { getCopilotToken, getProviderToken } from '../auth.js';
+import { detectProvider } from '@claude/providers';
 import { buildWorkerSystemPrompt } from '../system-prompt.js';
 import { executeTool, getToolSchemas, registerTool } from './index.js';
 import { createPermissionContext } from '../permissions.js';
@@ -39,10 +40,13 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
       fileContents,
     });
 
-    // Per-worker LLM client
+    // Per-worker LLM client — provider-aware
+    const effectiveModel = model ?? config.model;
+    const { providerId } = detectProvider(effectiveModel);
     const client = createLLMClient({
-      getToken: getCopilotToken,
-      model: model ?? config.model,
+      getToken: () => getProviderToken(providerId),
+      model: effectiveModel,
+      providerId,
     });
 
     // Per-worker permission context: explicit auto-approve (spec §4.2 step 4)
