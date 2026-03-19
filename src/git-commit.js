@@ -4,7 +4,7 @@
 import { execFileSync } from 'child_process';
 
 const COMMIT_PREFIX = 'claudia: ';
-const MAX_MSG_LEN = 120;
+const MAX_BODY_LEN = 120;
 
 function git(args, cwd) {
   return execFileSync('git', args, {
@@ -26,19 +26,21 @@ function isGitRepo(cwd) {
 function makeCommitMessage(agentText, changedFiles) {
   // Try to use first meaningful line from agent response
   if (agentText) {
-    const lines = agentText.split('\n').map(l => l.replace(/^[#*\->\s]+/, '').trim()).filter(Boolean);
+    const lines = agentText.split('\n')
+      .map(l => l.replace(/^[#*\->\s]+/, '').replace(/[\x00-\x1f\x7f]/g, '').trim())
+      .filter(l => l.length >= 5);
     const first = lines[0];
-    if (first && first.length >= 5 && first.length <= MAX_MSG_LEN) {
+    if (first && first.length >= 5 && first.length <= MAX_BODY_LEN) {
       return COMMIT_PREFIX + first;
     }
-    if (first && first.length > MAX_MSG_LEN) {
-      return COMMIT_PREFIX + first.substring(0, MAX_MSG_LEN - 3) + '...';
+    if (first && first.length > MAX_BODY_LEN) {
+      return COMMIT_PREFIX + first.substring(0, MAX_BODY_LEN - 3) + '...';
     }
   }
   // Fallback: list changed files
   if (!changedFiles || !changedFiles.length) return COMMIT_PREFIX + 'update files';
   const fileList = changedFiles.map(f => f.split('/').pop()).join(', ');
-  return COMMIT_PREFIX + `update ${fileList}`.substring(0, MAX_MSG_LEN);
+  return COMMIT_PREFIX + `update ${fileList}`.substring(0, MAX_BODY_LEN);
 }
 
 export function createAutoCommitter({ cwd }) {
