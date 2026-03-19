@@ -1,0 +1,11 @@
+{
+  "name": "@claude/providers",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Multi-provider registry for LLM API routing (Copilot, OpenAI, Anthropic, Azure, Ollama)",
+  "main": "./src/providers.js",
+  "exports": {
+    ".": "./src/providers.js"
+  },
+  "license": "UNLICENSED"
+}
