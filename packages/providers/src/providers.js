@@ -2,9 +2,21 @@
 // Shared between Claudia (CLI agent) and Brain (MCP server)
 // Transport-agnostic: resolves WHAT to call, not HOW (fetch vs curl)
 
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir, platform, tmpdir } from 'os';
+
+// ─── Copilot Header Constants ─────────────────────────────────────────────────
+// VS Code-style headers matching real extension behavior (reverse-engineered from
+// github.copilot-chat-0.37.9/dist/extension.js, VS Code 1.109.5).
+// Override via env vars for version bumps without code changes.
+
+const COPILOT_EDITOR_VERSION =
+  process.env.COPILOT_EDITOR_VERSION || 'vscode/1.109.5';
+const COPILOT_PLUGIN_VERSION =
+  process.env.COPILOT_PLUGIN_VERSION || 'copilot-chat/0.37.9';
+export const COPILOT_GITHUB_API_VERSION = '2025-04-01'; // for token exchange
+const VSCODE_APP_ID = 'Iv23ctfURkiMfJ4xr5mv';          // VS Code Copilot Chat app
 
 // ─── Provider Registry ───────────────────────────────────────────────────────
 
@@ -14,10 +26,13 @@ export const PROVIDERS = {
     baseUrl: 'https://api.business.githubcopilot.com',
     auth: 'copilot',           // special token exchange flow (apps.json)
     supports: { chat: true, responses: true, listModels: true },
-    extraHeaders: {
-      'Editor-Version': 'JetBrains-IC/2025.3',
-      'Editor-Plugin-Version': 'copilot-intellij/1.5.66',
-      'Copilot-Integration-Id': 'vscode-chat',
+    // VS Code-style headers (same for token exchange and API calls, per VS Code behavior)
+    get extraHeaders() {
+      return {
+        'Editor-Version': COPILOT_EDITOR_VERSION,
+        'Editor-Plugin-Version': COPILOT_PLUGIN_VERSION,
+        'Copilot-Integration-Id': 'vscode-chat',
+      };
     },
     // Copilot proxy quirks: drops tool_calls with tool_choice:"auto" for Claude models
     quirks: { forceToolChoiceRequired: true, disableStreamingForClaude: true },
@@ -249,4 +264,38 @@ export function findCopilotAppsJson() {
  */
 export function getTempDir() {
   return process.env.TEMP || process.env.TMPDIR || tmpdir();
+}
+
+/**
+ * Find and return the best OAuth token from apps.json for Copilot token exchange.
+ * Priority: (1) VS Code app ID (Iv23ctfURkiMfJ4xr5mv), (2) ghu_ prefix token,
+ * (3) first key (deterministic sorted fallback).
+ * Returns null if apps.json not found or has no valid entries.
+ * @returns {string|null}
+ */
+export function findCopilotOAuthToken() {
+  const appsPath = findCopilotAppsJson();
+  if (!appsPath) return null;
+
+  let apps;
+  try {
+    apps = JSON.parse(readFileSync(appsPath, 'utf-8'));
+  } catch {
+    return null;
+  }
+
+  const entries = Object.entries(apps);
+  if (entries.length === 0) return null;
+
+  // Priority 1: known VS Code Copilot Chat app ID
+  const vsEntry = entries.find(([, v]) => v.githubAppId === VSCODE_APP_ID);
+  if (vsEntry?.[1]?.oauth_token) return vsEntry[1].oauth_token;
+
+  // Priority 2: ghu_ prefix (device code OAuth — VS Code flow)
+  const ghuEntry = entries.find(([, v]) => v.oauth_token?.startsWith('ghu_'));
+  if (ghuEntry?.[1]?.oauth_token) return ghuEntry[1].oauth_token;
+
+  // Priority 3: deterministic fallback (first key sorted)
+  const sorted = entries.sort(([a], [b]) => a.localeCompare(b));
+  return sorted[0]?.[1]?.oauth_token || null;
 }

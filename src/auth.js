@@ -7,16 +7,24 @@ import { join } from 'path';
 import {
   PROVIDERS, getProvider, detectProvider,
   resolveToken as providerResolveToken,
-  buildAuthHeaders, findCopilotAppsJson, getTempDir,
+  buildAuthHeaders, findCopilotAppsJson, findCopilotOAuthToken,
+  getTempDir, COPILOT_GITHUB_API_VERSION,
 } from '@claude/providers';
 
 const CACHE_FILE = join(getTempDir(), 'copilot_token_cache.json');
 const CACHE_TTL_SEC = 25 * 60; // refresh at 25 min (token lasts 30)
 
-const COMMON_HEADERS = {
-  'Editor-Version': 'JetBrains-IC/2025.3',
-  'Editor-Plugin-Version': 'copilot-intellij/1.5.66',
-};
+// VS Code-style headers for token exchange (same as API call headers per VS Code behavior).
+// Evaluated lazily so env var overrides (COPILOT_EDITOR_VERSION etc.) take effect.
+function getTokenExchangeHeaders() {
+  return {
+    ...PROVIDERS.copilot.extraHeaders,
+    'X-GitHub-Api-Version': COPILOT_GITHUB_API_VERSION,
+  };
+}
+
+// Keep COMMON_HEADERS export for backward compatibility (used in legacy callers).
+export const COMMON_HEADERS = getTokenExchangeHeaders();
 
 /**
  * Get a Copilot token via the token exchange flow (apps.json → GitHub API → JWT).
@@ -27,14 +35,11 @@ export async function getCopilotToken() {
     return JSON.parse(readFileSync(CACHE_FILE, 'utf8')).token;
   }
 
-  const appsJsonPath = findCopilotAppsJson();
-  if (!appsJsonPath) throw new Error('Copilot apps.json not found. Is GitHub Copilot installed?');
-
-  const apps = JSON.parse(readFileSync(appsJsonPath, 'utf8'));
-  const oauthToken = apps[Object.keys(apps)[0]].oauth_token;
+  const oauthToken = findCopilotOAuthToken();
+  if (!oauthToken) throw new Error('Copilot apps.json not found or has no valid token. Is GitHub Copilot installed?');
 
   const res = await fetch('https://api.github.com/copilot_internal/v2/token', {
-    headers: { 'Authorization': `token ${oauthToken}`, ...COMMON_HEADERS },
+    headers: { 'Authorization': `token ${oauthToken}`, ...getTokenExchangeHeaders() },
   });
 
   if (!res.ok) throw new Error(`Token exchange failed: ${res.status} ${await res.text()}`);
@@ -64,4 +69,3 @@ function needsRefresh() {
   }
 }
 
-export { COMMON_HEADERS };
