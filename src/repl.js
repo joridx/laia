@@ -12,6 +12,7 @@ import { loadMemoryFiles } from './memory-files.js';
 import { createRouter, routeLabel, MODEL_IDS } from './router.js';
 import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteAutoSave } from './session.js';
 import { createAttachManager } from './attach.js';
+import { createAutoCommitter } from './git-commit.js';
 
 const COPILOT_HEADERS = {
   'Editor-Version': 'JetBrains-IC/2025.3',
@@ -20,7 +21,7 @@ const COPILOT_HEADERS = {
 };
 
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/exit', '/quit'];
 
 // --- Heuristic follow-up suggestions based on assistant response ---
 function suggestFollowUps(text) {
@@ -61,11 +62,13 @@ export async function runRepl({ config, logger }) {
 console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this session. Some AI features may be limited.');
   }
 
-  await registerBuiltinTools(config);
+  await registerBuiltinTools({ ...config, freeze: false });
   const context = createContext();
   const fileCommands = loadFileCommands(config.commandDirs);
   const router = createRouter();
   const attachManager = createAttachManager(config.workspaceRoot);
+  const autoCommitter = createAutoCommitter({ cwd: config.workspaceRoot });
+  if (config.autoCommit) autoCommitter.enabled = true;
 
   // Build full command list for tab completion
   const allCommands = [...BUILTIN_COMMANDS, ...[...fileCommands.keys()].map(k => `/${k}`)];
@@ -166,7 +169,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
 
     // Slash commands
     if (input.startsWith('/')) {
-      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager);
+      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter);
       if (handled) { rl.prompt(); continue; }
     }
 
@@ -174,9 +177,11 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     try {
       // Auto-routing: pick best model per turn when config.model === 'auto'
       const effectiveConfig = { ...config };
+      let corporateHint = null;
       if (config.model === 'auto') {
         const decision = router.route(input);
         effectiveConfig.model = decision.model;
+        corporateHint = decision.corporateHint;
         stderr.write(`\x1b[2m[auto → ${decision.model} · ${routeLabel(decision)}]\x1b[0m\n`);
       }
 
@@ -195,7 +200,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         };
       }
 
-      // Store what the model actually sees (text only, no base64) for trace/debug alignment
+      // addUser BEFORE runTurn so getHistory() includes it; addTurn AFTER stores the rest atomically
       context.addUser(typeof llmInput === 'string' ? llmInput : llmInput.text);
       if (context.needsCompaction()) context.compact();
 
@@ -203,10 +208,17 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         input: llmInput,
         config: effectiveConfig,
         logger,
-        history: context.getHistory(), // full turn transcripts (tool calls + results)
+        history: context.getHistory(),
+        corporateHint,
         onStep: (step) => {
           if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
-          else printStep(step);
+          else {
+            // Track files modified by write/edit for auto-commit
+            if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
+              autoCommitter.trackFile(step.result.path);
+            }
+            printStep(step);
+          }
         },
       });
       const text = result.text || '';
@@ -217,9 +229,11 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       } else {
         stderr.write('\x1b[33m⚠ (empty response — model returned no text)\x1b[0m\n');
       }
-      // Store full tool transcript for next turn; also store text for display/compaction
-      context.addTurnMessages(result.turnMessages);
-      context.addAssistant(text);
+      // Atomic: store full tool transcript + assistant reply together (user already added above)
+      context.addTurn({
+        assistantText: text,
+        turnMessages: result.turnMessages,
+      });
 
       // Update router stickiness based on tools actually used
       if (config.model === 'auto' && result.turnMessages) {
@@ -227,6 +241,14 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
           .filter(m => m.tool_calls)
           .flatMap(m => m.tool_calls.map(tc => tc.function?.name ?? ''));
         router.recordToolsUsed(toolNames);
+      }
+
+      // Auto-commit agent changes if enabled
+      const commitResult = autoCommitter.commitIfNeeded(text);
+      if (commitResult?.hash) {
+        stderr.write(`\x1b[2m[git] ${commitResult.hash} — ${commitResult.message}\x1b[0m\n`);
+      } else if (commitResult?.error) {
+        stderr.write(`\x1b[33m[git] commit failed: ${commitResult.error}\x1b[0m\n`);
       }
 
       // Show follow-up suggestions
@@ -237,8 +259,8 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         const inTok = result.usage.input_tokens ?? result.usage.prompt_tokens ?? '?';
         const outTok = result.usage.output_tokens ?? result.usage.completion_tokens ?? '?';
         const pct = context.usagePercent();
-        const ctxColor = pct > 80 ? 31 : pct > 60 ? 33 : 32; // red / yellow / green
-        stderr.write(`\x1b[2m[${inTok} in / ${outTok} out · \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m]\x1b[0m\n`);
+        const ctxColor = pct > 80 ? '31;1' : pct > 60 ? '33;1' : '32'; // red bold / yellow bold / green
+        stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m]\x1b[0m\n`);
       }
     } catch (err) {
       // Structured error reporting
@@ -252,14 +274,14 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   }
 }
 
-async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager) {
+async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter) {
   const spaceIdx = input.indexOf(' ');
   const name = (spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx)).toLowerCase();
   const args = spaceIdx === -1 ? '' : input.slice(spaceIdx + 1).trim();
 
   switch (name) {
     case 'help':
-      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /exit');
+      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /autocommit /exit');
       console.log('Session: /save [name], /load [name|number], /sessions');
       console.log('Attach: /attach <path|glob>, /detach <path|name|number|all>, /attached');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
@@ -391,6 +413,12 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       return true;
     }
 
+    case 'autocommit': {
+      autoCommitter.enabled = !autoCommitter.enabled;
+      stderr.write(`📝 Auto-commit ${autoCommitter.enabled ? 'ON' : 'OFF'}\n`);
+      return true;
+    }
+
     case 'swarm': {
       config.swarm = !config.swarm;
       if (config.swarm) {
@@ -431,7 +459,12 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
             input: expanded, config, logger, history: context.getHistory(),
             onStep: (step) => {
               if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
-              else printStep(step);
+              else {
+                if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
+                  autoCommitter.trackFile(step.result.path);
+                }
+                printStep(step);
+              }
             },
           });
           if (streamed) {
@@ -439,8 +472,17 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           } else if (result.text) {
             console.log(`\n${renderMarkdown(result.text)}\n`);
           }
-          context.addTurnMessages(result.turnMessages);
-          context.addAssistant(result.text || '');
+          context.addTurn({
+            assistantText: result.text || '',
+            turnMessages: result.turnMessages,
+          });
+          // Auto-commit for slash command turns too
+          const commitResult = autoCommitter.commitIfNeeded(result.text);
+          if (commitResult?.hash) {
+            stderr.write(`\x1b[2m[git] ${commitResult.hash} — ${commitResult.message}\x1b[0m\n`);
+          } else if (commitResult?.error) {
+            stderr.write(`\x1b[33m[git] commit failed: ${commitResult.error}\x1b[0m\n`);
+          }
         } catch (err) {
           stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
         }

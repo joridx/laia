@@ -35,6 +35,16 @@ export function createContext({ maxTokens = 300_000, threshold = 0.8 } = {}) {
     turns.push(truncated);
   }
 
+  // Atomic post-turn recording: stores assistant reply and full turn transcript
+  // in one call to prevent messages/turns desync (architecture review finding #2).
+  // NOTE: addUser() must be called separately BEFORE runTurn so getHistory() includes it.
+  // Returns the turn index.
+  function addTurn({ assistantText, turnMessages }) {
+    addTurnMessages(turnMessages);
+    addAssistant(assistantText);
+    return turns.length - 1;
+  }
+
   // Return full history for LLM: last MAX_HISTORY_TURNS turns with tool detail.
   // Older turns are represented only by user+assistant text pairs.
   function getHistory() {
@@ -132,5 +142,5 @@ export function createContext({ maxTokens = 300_000, threshold = 0.8 } = {}) {
     return maxTokens;
   }
 
-  return { addUser, addAssistant, addTurnMessages, getHistory, estimateTokens, needsCompaction, getMessages, clear, compact, serialize, deserialize, turnCount, usagePercent, getMaxTokens };
+  return { addUser, addAssistant, addTurnMessages, addTurn, getHistory, estimateTokens, needsCompaction, getMessages, clear, compact, serialize, deserialize, turnCount, usagePercent, getMaxTokens };
 }

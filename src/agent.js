@@ -11,12 +11,13 @@ export function createClient(config) {
   return createLLMClient({ getToken: getCopilotToken, model: config.model });
 }
 
-export async function runTurn({ input, config, logger, onStep, history = [] }) {
+export async function runTurn({ input, config, logger, onStep, history = [], corporateHint } = {}) {
   const llmClient = createClient(config);
   const systemPrompt = buildSystemPrompt({
     workspaceRoot: config.workspaceRoot,
     model: config.model,
     brainPath: config.brainPath,
+    corporateHint,
   });
   const tools = getToolSchemas();
 

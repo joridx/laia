@@ -1,10 +1,10 @@
 // 3-tier permission system
 // Tier 1 (auto): read, glob, grep, brain_search, brain_get_context, run_command — always allowed
-// Tier 2 (session): write, edit, brain_remember — ask once per session, then remember
-// Tier 3 (confirm): bash — ask every time (or press 'a' to approve all for session)
+// Tier 2 (session): write, edit, brain_remember, bash — ask once per session, then remember
+// Tier 3 (confirm): (reserved for future high-risk tools)
 
 const AUTO_ALLOW = new Set(['read', 'glob', 'grep', 'brain_search', 'brain_get_context', 'run_command', 'git_diff', 'git_status', 'git_log']);
-const SESSION_ALLOW = new Set(['write', 'edit', 'brain_remember']);
+const SESSION_ALLOW = new Set(['write', 'edit', 'brain_remember', 'bash']);
 
 function formatToolCall(name, args) {
   if (name === 'bash') return `bash: ${args?.command ?? '(unknown)'}`;

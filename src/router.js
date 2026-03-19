@@ -135,6 +135,9 @@ export function createRouter() {
       reason,
       confidence,
       matched: [...corpMatches, ...codeMatches],
+      corporateHint: domain === 'corporate' && corpMatches.length > 0
+        ? corpMatches[0]   // primary matched service name for prompt injection
+        : null,
     };
   }
 

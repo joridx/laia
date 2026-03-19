@@ -3,10 +3,17 @@
 
 export function createToolRegistry() {
   const reg = new Map();
+  let frozen = false;
   return {
-    set(name, def) { reg.set(name, { name, ...def }); },
+    set(name, def) {
+      if (frozen) throw new Error(`Registry is frozen — cannot register '${name}'`);
+      reg.set(name, { name, ...def });
+    },
     get(name) { return reg.get(name); },
-    delete(name) { return reg.delete(name); },
+    delete(name) {
+      if (frozen) throw new Error(`Registry is frozen — cannot delete '${name}'`);
+      return reg.delete(name);
+    },
     has(name) { return reg.has(name); },
     getSchemas() {
       return [...reg.values()].map(t => ({
@@ -22,6 +29,8 @@ export function createToolRegistry() {
       return tool.execute(args, callId);
     },
     getNames() { return [...reg.keys()]; },
+    freeze() { frozen = true; },
+    get frozen() { return frozen; },
   };
 }
 
@@ -67,4 +76,8 @@ export async function registerBuiltinTools(config, registry = defaultRegistry) {
     const { registerAgentTool } = await import('./agent.js');
     registerAgentTool(config, registry);
   }
+
+  // Freeze: no more registrations after bootstrap (architecture review finding #1)
+  // Exception: REPL /swarm toggle needs to add/remove agent tool → only freeze in non-REPL modes
+  if (config.freeze !== false) registry.freeze();
 }
