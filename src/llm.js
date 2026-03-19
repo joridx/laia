@@ -1,16 +1,14 @@
-// LLM client for GitHub Copilot Business API
+// LLM client — multi-provider support via @claude/providers
 // Dual endpoint: /responses (codex models) + /chat/completions (claude, gpt-5.x)
 // Node.js 24+, ESM, global fetch
 
-const BASE_URL = 'https://api.business.githubcopilot.com';
+import {
+  PROVIDERS, getProvider, detectProvider, getBaseUrl,
+  buildAuthHeaders, resolveUrl,
+} from '@claude/providers';
+
 const DEFAULT_MODEL = 'gpt-5.3-codex';
 const MAX_TOOL_ITERATIONS = 25;
-
-const COPILOT_HEADERS = {
-  'Editor-Version': 'JetBrains-IC/2025.3',
-  'Editor-Plugin-Version': 'copilot-intellij/1.5.66',
-  'Copilot-Integration-Id': 'vscode-chat',
-};
 
 // Model routing: codex → /responses, everything else → /chat/completions
 function isResponsesModel(model) {
@@ -52,8 +50,12 @@ export async function* parseSSEStream(body) {
 
 // --- HTTP layer ---
 
-export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 120_000, maxRetries = 3 } = {}) {
+export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 120_000, maxRetries = 3, providerId } = {}) {
   if (typeof getToken !== 'function') throw new Error('getToken is required');
+
+  // Resolve provider from model if not explicitly passed
+  const resolved = providerId ? { providerId, model } : detectProvider(model);
+  const provider = getProvider(resolved.providerId);
 
   async function apiCall(endpoint, body, { onStep, signal: externalSignal } = {}) {
     return withRetries(async (attempt) => {
@@ -67,13 +69,16 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
       try {
         onStep?.({ type: 'request', phase: 'api_call' });
 
-        const res = await fetch(`${BASE_URL}${endpoint}`, {
+        const url = resolveUrl(provider, endpoint);
+        const authHeaders = buildAuthHeaders(provider, token);
+
+        const res = await fetch(url, {
           method: 'POST',
           signal,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            ...COPILOT_HEADERS,
+            ...authHeaders,
+            ...provider.extraHeaders,
           },
           body: JSON.stringify(body),
         });
@@ -116,18 +121,22 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
       let chatFinishReason = undefined;
 
       try {
-        const res = await fetch(`${BASE_URL}${endpoint}`, {
+        const url = resolveUrl(provider, endpoint);
+        const authHeaders = buildAuthHeaders(provider, token);
+
+        const res = await fetch(url, {
           method: 'POST',
           signal,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            ...COPILOT_HEADERS,
+            ...authHeaders,
+            ...provider.extraHeaders,
           },
           body: JSON.stringify({
             ...body,
             stream: true,
-            ...(endpoint === '/chat/completions' ? { stream_options: { include_usage: true } } : {}),
+            ...(endpoint === '/chat/completions' || endpoint === 'chat/completions'
+              ? { stream_options: { include_usage: true } } : {}),
           }),
         });
 
@@ -140,7 +149,7 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
         }
 
         for await (const event of parseSSEStream(res.body)) {
-          if (endpoint === '/responses') {
+          if (endpoint === '/responses' || endpoint === 'responses') {
             if (event.type === 'response.output_text.delta') {
               partialText += event.delta ?? '';
               onChunk?.({ type: 'text_delta', delta: event.delta ?? '' });
@@ -149,7 +158,8 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
             } else if (event.type === 'response.failed' || event.type === 'response.incomplete') {
               throw makeError(event.response?.error?.message ?? 'Response failed', { retriable: false });
             }
-          } else if (endpoint === '/chat/completions') {
+          } else {
+            // chat/completions SSE parsing
             const delta = event?.choices?.[0]?.delta;
             if (!delta) {
               if (event?.usage) chatUsage = event.usage;
@@ -175,24 +185,23 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
           }
         }
 
-        if (endpoint === '/responses') {
+        if (endpoint === '/responses' || endpoint === 'responses') {
           if (!assembled) throw makeError('Stream ended without response.completed', { retriable: false });
           return assembled;
         }
 
-        if (endpoint === '/chat/completions') {
-          return {
-            choices: [{
-              message: {
-                role: chatRole,
-                content: chatContent || null,
-                tool_calls: chatToolCalls.length ? chatToolCalls : undefined,
-              },
-              finish_reason: chatFinishReason,
-            }],
-            usage: chatUsage,
-          };
-        }
+        // chat/completions assembled response
+        return {
+          choices: [{
+            message: {
+              role: chatRole,
+              content: chatContent || null,
+              tool_calls: chatToolCalls.length ? chatToolCalls : undefined,
+            },
+            finish_reason: chatFinishReason,
+          }],
+          usage: chatUsage,
+        };
       } catch (err) {
         if (!err.partialText) err.partialText = partialText;
         throw err;
@@ -202,7 +211,7 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
     }, { maxRetries });
   }
 
-  return { apiCall, streamingApiCall, model };
+  return { apiCall, streamingApiCall, model, providerId: resolved.providerId, provider };
 }
 
 // --- Unified agent turn (routes to correct endpoint) ---
@@ -331,19 +340,24 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
   const messages = buildChatMessages(systemPrompt, userInput, history);
   // Track where the current turn starts (after system + history, at the user message)
   const turnStartIdx = messages.length - 1;
-  const isClaude = /claude/i.test(model);
-  const onChunk = isClaude ? null : (chunk) => onStep?.({ type: 'token', text: chunk.delta });
-  if (isClaude) onStep?.({ type: 'debug', streaming: false, reason: 'provider_unsupported' });
+
+  // Provider-aware quirks: use provider.quirks instead of model-name heuristic
+  const quirks = client.provider?.quirks || {};
+  const needsDoneTool = quirks.forceToolChoiceRequired || false;
+  const disableStreaming = quirks.disableStreamingForClaude && /claude/i.test(model);
+
+  const onChunk = disableStreaming ? null : (chunk) => onStep?.({ type: 'token', text: chunk.delta });
+  if (disableStreaming) onStep?.({ type: 'debug', streaming: false, reason: 'provider_unsupported' });
 
   let chatTools;
   if (tools.length) {
     chatTools = tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
-    // Claude needs "done" tool because we always use tool_choice "required"
-    if (isClaude) chatTools.push(DONE_TOOL);
+    // Add "done" tool when provider requires tool_choice "required" (Copilot proxy quirk)
+    if (needsDoneTool) chatTools.push(DONE_TOOL);
   }
 
-  // Claude: always "required" (proxy breaks "auto"). Others: "auto".
-  const defaultToolChoice = isClaude && chatTools ? 'required' : 'auto';
+  // Provider quirk: "required" when proxy breaks "auto". Others: "auto".
+  const defaultToolChoice = needsDoneTool && chatTools ? 'required' : 'auto';
 
   async function chatCall(overrideToolChoice, chunkCb = onChunk) {
     const tc = overrideToolChoice ?? defaultToolChoice;
@@ -423,8 +437,8 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
       messages.push({ role: 'tool', tool_call_id: tc.callId, content: serialize(result) });
     }
 
-    // Claude: nudge towards done when approaching the limit, force done on last iteration
-    if (isClaude && chatTools) {
+    // Nudge towards done when approaching the limit (only with done tool)
+    if (needsDoneTool && chatTools) {
       if (i >= maxIterations - 2) {
         messages.push({ role: 'system', content: 'You have used many tool calls. Summarize your findings and call done() with your final answer now.' });
       }

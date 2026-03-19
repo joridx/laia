@@ -1,6 +1,7 @@
 // Agent turn loop: user input -> LLM -> tool calls -> LLM -> final text
 import { createLLMClient, runAgentTurn } from './llm.js';
-import { getCopilotToken } from './auth.js';
+import { getCopilotToken, getProviderToken } from './auth.js';
+import { detectProvider } from '@claude/providers';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getToolSchemas, executeTool as dispatchTool } from './tools/index.js';
 import { checkPermission, setAutoApprove } from './permissions.js';
@@ -8,7 +9,12 @@ import { createDispatchToolBatch } from './swarm.js';
 import { colorDiff } from './diff.js';
 
 export function createClient(config) {
-  return createLLMClient({ getToken: getCopilotToken, model: config.model });
+  const { providerId } = detectProvider(config.model);
+  return createLLMClient({
+    getToken: () => getProviderToken(providerId),
+    model: config.model,
+    providerId,
+  });
 }
 
 export async function runTurn({ input, config, logger, onStep, history = [], corporateHint } = {}) {

@@ -1,25 +1,45 @@
+// Authentication module — multi-provider token resolution
+// Supports: Copilot (token exchange), bearer (env var), api-key, anthropic, none
+// Cross-platform: uses @claude/providers for path resolution
+
 import { readFileSync, writeFileSync, statSync } from 'fs';
 import { join } from 'path';
+import {
+  PROVIDERS, getProvider, detectProvider,
+  resolveToken as providerResolveToken,
+  buildAuthHeaders, findCopilotAppsJson, findCopilotOAuthToken,
+  getTempDir, COPILOT_GITHUB_API_VERSION,
+} from '@claude/providers';
 
-const APPS_JSON = join(process.env.APPDATA, '..', 'Local', 'github-copilot', 'apps.json');
-const CACHE_FILE = join(process.env.TEMP, 'copilot_token_cache.json');
+const CACHE_FILE = join(getTempDir(), 'copilot_token_cache.json');
 const CACHE_TTL_SEC = 25 * 60; // refresh at 25 min (token lasts 30)
 
-const COMMON_HEADERS = {
-  'Editor-Version': 'JetBrains-IC/2025.3',
-  'Editor-Plugin-Version': 'copilot-intellij/1.5.66',
-};
+// VS Code-style headers for token exchange (same as API call headers per VS Code behavior).
+// Evaluated lazily so env var overrides (COPILOT_EDITOR_VERSION etc.) take effect.
+function getTokenExchangeHeaders() {
+  return {
+    ...PROVIDERS.copilot.extraHeaders,
+    'X-GitHub-Api-Version': COPILOT_GITHUB_API_VERSION,
+  };
+}
 
+// Keep COMMON_HEADERS export for backward compatibility (used in legacy callers).
+export const COMMON_HEADERS = getTokenExchangeHeaders();
+
+/**
+ * Get a Copilot token via the token exchange flow (apps.json → GitHub API → JWT).
+ * Caches to disk for 25 minutes.
+ */
 export async function getCopilotToken() {
   if (!needsRefresh()) {
     return JSON.parse(readFileSync(CACHE_FILE, 'utf8')).token;
   }
 
-  const apps = JSON.parse(readFileSync(APPS_JSON, 'utf8'));
-  const oauthToken = apps[Object.keys(apps)[0]].oauth_token;
+  const oauthToken = findCopilotOAuthToken();
+  if (!oauthToken) throw new Error('Copilot apps.json not found or has no valid token. Is GitHub Copilot installed?');
 
   const res = await fetch('https://api.github.com/copilot_internal/v2/token', {
-    headers: { 'Authorization': `token ${oauthToken}`, ...COMMON_HEADERS },
+    headers: { 'Authorization': `token ${oauthToken}`, ...getTokenExchangeHeaders() },
   });
 
   if (!res.ok) throw new Error(`Token exchange failed: ${res.status} ${await res.text()}`);
@@ -27,6 +47,17 @@ export async function getCopilotToken() {
   const data = await res.text();
   writeFileSync(CACHE_FILE, data);
   return JSON.parse(data).token;
+}
+
+/**
+ * Get a token for any provider. Delegates to getCopilotToken for copilot,
+ * reads env vars for all others.
+ * @param {string} providerId - Provider from PROVIDERS registry
+ * @returns {Promise<string|null>}
+ */
+export async function getProviderToken(providerId) {
+  const provider = getProvider(providerId);
+  return providerResolveToken(provider, { getCopilotToken });
 }
 
 function needsRefresh() {
@@ -38,4 +69,3 @@ function needsRefresh() {
   }
 }
 
-export { COMMON_HEADERS };
