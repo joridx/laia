@@ -1,9 +1,15 @@
 import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
 
-export function buildSystemPrompt({ workspaceRoot, model, brainPath }) {
+export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHint }) {
   const now = new Date().toISOString();
   const memFiles = loadMemoryFiles({ workspaceRoot });
   const memoryPrefix = buildMemoryContext(memFiles);
+
+  // Dynamic corporate service hint (architecture review finding #3)
+  const corpHint = corporateHint
+    ? `\n\n## ⚠ Corporate Service Detected: ${corporateHint}\nThis request involves a corporate service. Your FIRST tool call MUST be: run_command(action="search", query="${corporateHint}"). Do NOT call bash() or any other tool before run_command.`
+    : '';
+
   return `${memoryPrefix}You are Claudia, a concise and effective coding assistant running in a CLI agent.
 
 Current date/time: ${now}
@@ -90,7 +96,7 @@ Example: after implementing something, if asked to validate with Codex:
 ## Safety
 
 - Confirm before destructive actions (rm -rf, force resets, etc).
-- Do not expose secrets unless explicitly requested.`;
+- Do not expose secrets unless explicitly requested.${corpHint}`;
 }
 
 export function buildWorkerSystemPrompt({ workerId, depth, workspaceRoot, fileContents = '' }) {

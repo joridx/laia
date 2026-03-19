@@ -27,9 +27,122 @@ Replace hardcoded Copilot dependency with a transparent multi-provider system wh
 
 ## Design
 
-### New module: `src/providers.js` (~100 LOC)
+### Shared module: `@claude/providers` (~120 LOC)
 
-Single file shared pattern between Claudia and Brain (copy, not shared package — add header comment `// Synced from claudia/src/providers.js — keep in sync`).
+#### Code sharing strategy (cross-platform, cross-repo)
+
+Claudia and Brain are separate git repos. The provider registry must be shared without copy-paste drift.
+
+**Evaluated approaches:**
+
+| Approach | Windows | Linux | Pros | Cons |
+|----------|---------|-------|------|------|
+| Symlink (`ln -s`) | ❌ Needs admin + Developer Mode | ✅ | Simple | Broken on corporate Windows |
+| Copy + sync header | ✅ | ✅ | Zero deps | **Will drift** (proven anti-pattern) |
+| Junction (`mklink /J`) | ✅ (no admin needed) | N/A (use symlink) | Works | Directories only, OS-specific |
+| **npm `file:` dependency** | ✅ | ✅ | **npm-native, cross-platform** | Requires `npm install` after changes |
+| Direct relative import | ✅ | ✅ | Zero config | Assumes fixed directory layout |
+
+**Decision: npm `file:` dependency** — the providers module lives in Claudia's repo as a self-contained package. Brain depends on it via `file:` protocol.
+
+#### Directory structure
+
+```
+C:/claude/  (or ~/claude/ on Linux)
+├── claudia/
+│   ├── packages/
+│   │   └── providers/           ← NEW: shared provider package
+│   │       ├── package.json     ← {"name": "@claude/providers", "type": "module"}
+│   │       ├── index.js          ← re-exports from src/
+│   │       └── src/
+│   │           └── providers.js  ← THE shared code (~120 LOC)
+│   ├── package.json              ← adds "@claude/providers": "file:./packages/providers"
+│   └── src/
+│       └── ...                   ← imports from '@claude/providers'
+│
+└── claude_local_brain/
+    └── mcp-server/
+        ├── package.json          ← adds "@claude/providers": "file:../../claudia/packages/providers"
+        └── ...                   ← imports from '@claude/providers'
+```
+
+**Why this works cross-platform:**
+- `file:` protocol resolves relative paths using Node's `path` module → forward slashes work on Windows
+- Both repos use ESM (`"type": "module"`) → identical import syntax
+- `npm install` creates a symlink on Linux, a junction on Windows (npm handles OS differences)
+- Provider updates: edit once in `claudia/packages/providers/`, run `npm install` in Brain → done
+- CI/CD: each repo's `npm ci` resolves the dependency (Brain CI needs Claudia checkout as sibling)
+
+#### `packages/providers/package.json`
+
+```json
+{
+  "name": "@claude/providers",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/providers.js",
+  "exports": {
+    ".": "./src/providers.js"
+  }
+}
+```
+
+#### Fallback for environments without sibling repos
+
+Brain may run standalone (e.g., Claude Code MCP server without Claudia installed). The import must degrade gracefully:
+
+```js
+// claude_local_brain/mcp-server/llm.js
+let providers;
+try {
+  providers = await import('@claude/providers');
+} catch {
+  // Fallback: inline minimal copilot-only config (current behavior)
+  providers = {
+    detectProvider: () => ({ providerId: 'copilot', model: LLM_MODEL }),
+    getProvider: () => COPILOT_FALLBACK,
+    // ... minimal stubs
+  };
+}
+```
+
+#### OS-aware paths in providers.js
+
+The `findAppsJson()` function (currently in both auth.js and brain/llm.js with different implementations) moves into providers as a cross-platform utility:
+
+```js
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { homedir, platform } from 'os';
+
+export function findCopilotAppsJson() {
+  const candidates = [];
+
+  if (platform() === 'win32') {
+    // Windows: %LOCALAPPDATA%\github-copilot\apps.json
+    if (process.env.LOCALAPPDATA) {
+      candidates.push(join(process.env.LOCALAPPDATA, 'github-copilot', 'apps.json'));
+    }
+    // Fallback: %APPDATA%\..\Local
+    if (process.env.APPDATA) {
+      candidates.push(join(process.env.APPDATA, '..', 'Local', 'github-copilot', 'apps.json'));
+    }
+  } else {
+    // Linux/macOS: ~/.config/github-copilot/apps.json
+    candidates.push(join(homedir(), '.config', 'github-copilot', 'apps.json'));
+  }
+
+  return candidates.find(p => existsSync(p)) || null;
+}
+
+export function getTempDir() {
+  return process.env.TEMP || process.env.TMPDIR || '/tmp';
+}
+```
+
+This replaces:
+- `claudia/src/auth.js:4` — Windows-only `APPS_JSON` const
+- `brain/mcp-server/llm.js:133-152` — `findAppsJson()` with 3 fallback paths
 
 #### Provider registry
 
@@ -279,21 +392,43 @@ createLLMClient({ getToken: () => getProviderToken(providerId), model: config.mo
 
 ### Changes to Brain (`mcp-server/llm.js`)
 
-Same pattern. Copy `providers.js` with sync header comment.
+Same pattern. Import `@claude/providers` via npm `file:` dependency. Graceful fallback if package not found (standalone mode).
+
+**Key difference from Claudia:** Brain uses `curl` via `execFile` (not `fetch`). The provider resolution (URL, headers, auth) is identical, but the HTTP transport layer stays curl-based. `@claude/providers` is transport-agnostic — it only resolves **what** to call, not **how**.
 
 | What | Before | After |
 |------|--------|-------|
-| Lines 128-211: Copilot token code | `findAppsJson()` + `refreshCopilotToken()` | Keep as copilot provider auth path |
-| Line 262-298: `callLlm()` URL/headers | Hardcoded Copilot | `detectProvider(model)` → resolve URL + headers |
-| curl command builder | Copilot-specific headers | `buildAuthHeaders()` + `provider.extraHeaders` |
+| Lines 128-211: Copilot token code | `findAppsJson()` + `refreshCopilotToken()` | Use `findCopilotAppsJson()` from `@claude/providers`, keep token exchange |
+| Line 262-298: `callLlm()` URL/headers | Hardcoded Copilot | `detectProvider(model)` → `resolveUrl()` + `buildAuthHeaders()` |
+| curl command builder | Copilot-specific headers | `...provider.extraHeaders` spread into curl `-H` args |
 | `ALLOWED_MODELS` set | Hardcoded GPT/Codex list | Removed — any model allowed, provider auto-detected |
+
+**package.json change:**
+```json
+{
+  "dependencies": {
+    "@claude/providers": "file:../../claudia/packages/providers"
+  }
+}
+```
+
+**Standalone fallback** (Brain running without Claudia repo as sibling):
+```js
+let providers;
+try {
+  providers = await import('@claude/providers');
+} catch {
+  // Minimal copilot-only config — current behavior preserved
+  providers = { /* inline stubs */ };
+}
+```
 
 Brain env vars use same conventions but with `BRAIN_` prefix option for independence:
 - `BRAIN_LLM_MODEL` (existing) — model name, now routed via `detectProvider()`
 - `BRAIN_DEFAULT_PROVIDER` — optional override (default: same as Claudia)
 - Shares `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. with Claudia
 
-Untouched: budget system, cache, circuit breaker, all 7 task functions (rerank, expand, autotags, distill, duplicate, summarize, compact).
+Untouched: budget system, cache, circuit breaker, all 7 task functions (rerank, expand, autotags, distill, duplicate, summarize, compact), curl transport.
 
 ### Env var conventions
 
@@ -398,7 +533,7 @@ When implemented:
 | Tests break | Feature branch + rollback to `main` |
 | `isClaude` workarounds applied on non-Copilot | Fixed: workarounds gated on `provider.quirks`, not model name alone |
 | `/model` command fails on non-Copilot provider | Provider-aware: check `supports.listModels`, show message if unsupported |
-| `providers.js` copy drifts between Claudia and Brain | Sync header comment; long-term consider shared workspace if repos merge |
+| `providers.js` copy drifts between Claudia and Brain | **Eliminated**: npm `file:` dependency, single source of truth in `claudia/packages/providers/`. Brain imports via `@claude/providers`. Fallback stubs for standalone mode. |
 
 ## Scope summary
 

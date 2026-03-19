@@ -5,7 +5,7 @@ import { runOneShot } from '../src/agent.js';
 import { createLogger } from '../src/logger.js';
 
 function parseArgv(argv) {
-  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false, mcp: false, mcpStdoutPolicy: 'strict' };
+  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-p' || a === '--prompt') args.prompt = argv[++i];
@@ -16,6 +16,7 @@ function parseArgv(argv) {
     else if (a === '--swarm') args.swarm = true;
     else if (a === '--mcp') args.mcp = true;
     else if (a === '--mcp-stdout-policy') args.mcpStdoutPolicy = argv[++i];
+    else if (a === '--auto-commit') args.autoCommit = true;
     else if (a === '-v' || a === '--version') args.version = true;
     else if (!a.startsWith('-') && !args.prompt) args.prompt = a;
   }
@@ -40,6 +41,7 @@ Options:
   --mcp                 Run as MCP server over stdio (exposes agent tool)
   --mcp-stdout-policy <strict|redirect>
                         Stdout safety policy in MCP mode (default: strict)
+  --auto-commit           Enable git auto-commit after each turn
   --verbose             Verbose logging
   -h, --help            Show help
   -v, --version         Show version`);
@@ -52,7 +54,7 @@ if (args.version) {
   process.exit(0);
 }
 
-const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm });
+const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm, autoCommit: args.autoCommit });
 const logger = createLogger(config);
 
 if (args.mcp) {

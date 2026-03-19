@@ -1,7 +1,7 @@
 # Claudia — Roadmap
 
 > Comparativa amb Claude Code + pla d'implementació
-> Última actualització: 2026-03-18
+> Última actualització: 2026-03-19
 
 ---
 
@@ -32,12 +32,36 @@
 
 ---
 
+## 🔧 Architecture Review Findings (2026-03-19)
+
+> 3-round adversarial review amb 2 agents gpt-5.3-codex (Security + Architecture).
+> Resultat: 0 HIGH, 6 MEDIUM, 2 LOW. Detalls: `docs/ARCHITECTURE_REVIEW.md`
+
+### Recomanats per implementar
+
+| # | Finding | Severitat | Esforç | Status |
+|---|---------|-----------|--------|--------|
+| 1 | **Registry freeze** | MEDIUM | 7 LOC | ✅ DONE — `frozen` flag a `createToolRegistry()`, `set/delete` throw si frozen, auto-freeze post-bootstrap (except REPL) |
+| 2 | **Context `addTurn()` atòmic** | MEDIUM | 10 LOC | ✅ DONE — `addTurn({ assistantText, turnMessages })` unifica `addTurnMessages` + `addAssistant`. Bug duplicació user detectat i fixat per Codex review |
+| 3 | **Corporate workflow pre-hook** | MEDIUM | 10 LOC | ✅ DONE — Router retorna `corporateHint`, system prompt injecta `## ⚠ Corporate Service Detected` dinàmicament. Soft hint, no hard gate (Codex va acceptar: FP risk massa alt) |
+| 4 | **`allowedTools` param per workers** | MEDIUM | ~25 LOC | 🟡 DEFER — nice-to-have, no urgent (same trust boundary) |
+| 5 | **Prompt modularització** | MEDIUM | ~20 LOC | 🟡 DEFER — 94 línies no és crític, fer quan creixi |
+| 6 | **Worker trust docs** | MEDIUM | docs | 🟡 DEFER — documentació, no bloqueja res |
+| 7 | Token cache permisos | LOW | ~5 LOC | ❄️ SKIP — %TEMP% ja és per-user, token expira 30min |
+| 8 | Provider abstraction | LOW | refactor | ❄️ SKIP — YAGNI, un sol provider |
+
+---
+
 ## 📋 Backlog futur
 
 | Feature | Prioritat | Esforç | Notes |
 |---------|-----------|--------|-------|
+| ~~Registry freeze~~ | ✅ DONE | — | Implementat 2026-03-19 |
+| ~~Context `addTurn()` atòmic~~ | ✅ DONE | — | Implementat 2026-03-19 |
+| ~~Corporate workflow pre-hook~~ | ✅ DONE | — | Implementat 2026-03-19 |
 | Git auto-commit | 🟡 MED | 2h | Commit automàtic després d'edits (opt-in) |
 | MCP server connections | 🟡 MED | 4h | Connect to external MCP servers dynamically |
+| `allowedTools` per agent workers | 🟡 MED | 1h | Paràmetre opcional per restringir tools disponibles al worker |
 | `/init` command | 🟢 LOW | 1h | Genera CLAUDE.md a partir del projecte |
 | Web search tool | 🟢 LOW | 2h | WebSearch equivalent |
 | Notebook/REPL tool | 🟢 LOW | 3h | Executar Python/JS inline amb output |
@@ -70,3 +94,4 @@
 | 2026-03-17 | +4 | Token budget, CLAUDE.md hierarchy, git tools, diff preview |
 | 2026-03-18 | +20 | Codex review fixes, swarm (agent tool + semaphore + batch dispatch), MCP server mode (stdio + stdout guard), permissions refactor, spec compliance fixes (singleton client, indentation, per-worker permCtx) |
 | 2026-03-18 | +1 | Automated multi-agent code review (5 parallel claudia agents): fix 13 issues — tool timeout via Promise.race, null-safe batch results, SSE debug log, proper Error throwing, MCP full stack propagation, headless auto-deny warning, unexpected key feedback, brain-disabled user warning, structured turn error log; fix test glob quoting for Windows |
+| 2026-03-19 | +3 | Architecture review findings: registry freeze (7 LOC), atomic addTurn (10 LOC), corporate workflow pre-hook (10 LOC). All reviewed with gpt-5.3-codex adversarial debate. ANSI dim fix for ctx% color. |
