@@ -32,12 +32,13 @@ function askUser(question, rlInstance) {
     process.stdin.once('data', (data) => {
       const ch = data.toString()[0]?.toLowerCase() ?? 'n';
 
+      // \b \b erases any terminal-echoed character before writing ours
       if (ch === 'a') {
-        process.stderr.write('a (approve all for session)\n');
+        process.stderr.write('\b \ba (approve all for session)\n');
       } else if (ch === 'y' || ch === 'n') {
-        process.stderr.write(ch === 'y' ? 'y\n' : 'n\n');
+        process.stderr.write('\b \b' + (ch === 'y' ? 'y\n' : 'n\n'));
       } else {
-        process.stderr.write(`(unexpected input: '${ch}' — denied)\n`);
+        process.stderr.write(`\b \b(unexpected input: '${ch}' — denied)\n`);
       }
 
       process.stdin.setRawMode(wasRaw ?? false);
@@ -67,6 +68,7 @@ export function createPermissionContext({ autoApprove = false } = {}) {
 
       if (SESSION_ALLOW.has(toolName)) {
         const result = await askUser(`Allow tool "${toolName}" for this session?`, rlInstance);
+        if (result === 'all') { autoApproveAll = true; return true; }
         if (result) sessionApproved.add(toolName);
         return !!result;
       }

@@ -2,3 +2,8 @@ node_modules/
 .claude/
 *.log
 .env
+
+# Scratch scripts (one-off automation)
+get_*.py
+outlook_*.txt
+outlook_*.py
