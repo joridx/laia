@@ -15,6 +15,8 @@ export async function startBrain({ brainPath, verbose } = {}) {
   const env = {
     ...process.env,
     CLAUDE_BRAIN_PATH: brainPath || 'C:/claude/claude-brain-data',
+    BRAIN_LLM_FALLBACK: process.env.BRAIN_LLM_FALLBACK || 'genailab:sonnet',
+    BRAIN_LLM_FALLBACK_DISTILL: process.env.BRAIN_LLM_FALLBACK_DISTILL || 'genailab:claude',
   };
 
   transport = new StdioClientTransport({
