@@ -63,14 +63,14 @@
 | ~~Corporate workflow pre-hook~~ | ✅ DONE | — | Implementat 2026-03-19 |
 | ~~Git auto-commit~~ | ✅ DONE | — | Implementat 2026-03-17. `git-commit.js` (92 LOC), `--auto-commit` flag, `/autocommit` toggle, `git commit --only` aïllat |
 | MCP server connections | 🟡 MED | 4h | Connect to external MCP servers dynamically |
-| `allowedTools` per agent workers | 🟡 MED | 1h | Paràmetre opcional per restringir tools disponibles al worker |
+| ~~`allowedTools` per agent workers~~ | ✅ DONE | — | Implementat 2026-03-18. Schema param + filter + execution guard a `agent.js` |
 | `/init` command | 🟢 LOW | 1h | Genera CLAUDE.md a partir del projecte |
 | Web search tool | 🟢 LOW | 2h | WebSearch equivalent |
 | Notebook/REPL tool | 🟢 LOW | 3h | Executar Python/JS inline amb output |
 | Vim/Emacs keybindings | 🟢 LOW | 1h | readline config |
 | Interactive diff approval | 🟢 LOW | 4h | Confirmar diffs abans d'escriure (y/n) |
 | `/undo` command | 🟢 LOW | 2h | Revertir últim edit/write |
-| Cost tracking | 🟢 LOW | 1h | Comptador de tokens acumulats per sessió |
+| ~~Cost tracking~~ | ✅ DONE | — | Implementat 2026-03-17. `sessionTokens` acumulat, `Σ` display, `formatTokenCount` a `repl.js` |
 
 ---
 

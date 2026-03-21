@@ -21,7 +21,7 @@ let workerCounter = 0;
 export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIMEOUT_MS, maxDepth = DEFAULT_MAX_DEPTH } = {}) {
   const runAgentTurnFn = _runAgentTurn ?? _runAgentTurnDefault;
 
-  async function execute({ prompt, files = [], model, timeout, _depth = 0, _signal } = {}) {
+  async function execute({ prompt, files = [], model, timeout, allowedTools, _depth = 0, _signal } = {}) {
     // Recursion guard
     if (_depth >= maxDepth) {
       return { success: false, error: `max recursion depth (${maxDepth}) exceeded`, workerId: 'blocked' };
@@ -54,6 +54,10 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
     const permCtx = createPermissionContext({ autoApprove: true });
 
     const workerExecuteTool = async (name, args, callId) => {
+      // Enforce allowedTools at execution level too (defense in depth)
+      if (allowedTools?.length && !allowedTools.includes(name) && name !== 'agent') {
+        return { error: true, message: `Tool '${name}' not in allowedTools for this worker` };
+      }
       const allowed = await permCtx.checkPermission(name, args);
       if (!allowed) return { error: true, message: 'Worker permission denied' };
       if (name === 'agent') {
@@ -74,13 +78,21 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
     });
 
     try {
+      // Build tool list: apply allowedTools filter, then depth guard for agent recursion
+      let workerTools = getToolSchemas();
+      if (allowedTools?.length) {
+        const allowed = new Set(allowedTools);
+        workerTools = workerTools.filter(t => allowed.has(t.name));
+      }
+      workerTools = workerTools.filter(t => t.name !== 'agent' || _depth + 1 < maxDepth);
+
       const result = await Promise.race([
         runAgentTurnFn({
           client,
           systemPrompt,
           userInput: prompt,
           history: [],
-          tools: getToolSchemas().filter(t => t.name !== 'agent' || _depth + 1 < maxDepth),
+          tools: workerTools,
           executeTool: workerExecuteTool,
           signal: controller.signal,
           onStep: (step) => {
@@ -124,6 +136,11 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
         },
         model: { type: 'string', description: 'Model override for this worker (optional, default: config model)' },
         timeout: { type: 'number', description: 'Timeout in milliseconds (optional, default: 60000)' },
+        allowedTools: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Restrict worker to these tools only (optional, default: all tools). Example: ["read","grep","glob"] for read-only worker.',
+        },
       },
       required: ['prompt'],
       additionalProperties: false,

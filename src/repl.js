@@ -16,7 +16,14 @@ import { createAttachManager } from './attach.js';
 import { createAutoCommitter } from './git-commit.js';
 
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/tokens', '/exit', '/quit'];
+
+// --- Human-readable token count (e.g. 1234 → "1.2k", 1234567 → "1.2M") ---
+function formatTokenCount(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+  return String(n);
+}
 
 // --- Heuristic follow-up suggestions based on assistant response ---
 function suggestFollowUps(text) {
@@ -64,6 +71,9 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   const attachManager = createAttachManager(config.workspaceRoot);
   const autoCommitter = createAutoCommitter({ cwd: config.workspaceRoot });
   if (config.autoCommit) autoCommitter.enabled = true;
+
+  // Session-wide token accumulator
+  const sessionTokens = { turns: 0, totalIn: 0, totalOut: 0 };
 
   // Build full command list for tab completion
   const allCommands = [...BUILTIN_COMMANDS, ...[...fileCommands.keys()].map(k => `/${k}`)];
@@ -251,11 +261,16 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       selectedSuggestion = 0;
       showSuggestions();
       if (result.usage) {
-        const inTok = result.usage.input_tokens ?? result.usage.prompt_tokens ?? '?';
-        const outTok = result.usage.output_tokens ?? result.usage.completion_tokens ?? '?';
+        const inTok = result.usage.input_tokens ?? result.usage.prompt_tokens ?? 0;
+        const outTok = result.usage.output_tokens ?? result.usage.completion_tokens ?? 0;
+        // Accumulate session totals
+        sessionTokens.turns++;
+        sessionTokens.totalIn += (typeof inTok === 'number' ? inTok : 0);
+        sessionTokens.totalOut += (typeof outTok === 'number' ? outTok : 0);
         const pct = context.usagePercent();
         const ctxColor = pct > 80 ? '31;1' : pct > 60 ? '33;1' : '32'; // red bold / yellow bold / green
-        stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m]\x1b[0m\n`);
+        const totalStr = formatTokenCount(sessionTokens.totalIn + sessionTokens.totalOut);
+        stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m · Σ${totalStr}]\x1b[0m\n`);
       }
     } catch (err) {
       // Structured error reporting
