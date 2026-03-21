@@ -61,7 +61,7 @@
 | ~~Registry freeze~~ | ✅ DONE | — | Implementat 2026-03-19 |
 | ~~Context `addTurn()` atòmic~~ | ✅ DONE | — | Implementat 2026-03-19 |
 | ~~Corporate workflow pre-hook~~ | ✅ DONE | — | Implementat 2026-03-19 |
-| Git auto-commit | 🟡 MED | 2h | Commit automàtic després d'edits (opt-in) |
+| ~~Git auto-commit~~ | ✅ DONE | — | Implementat 2026-03-17. `git-commit.js` (92 LOC), `--auto-commit` flag, `/autocommit` toggle, `git commit --only` aïllat |
 | MCP server connections | 🟡 MED | 4h | Connect to external MCP servers dynamically |
 | `allowedTools` per agent workers | 🟡 MED | 1h | Paràmetre opcional per restringir tools disponibles al worker |
 | `/init` command | 🟢 LOW | 1h | Genera CLAUDE.md a partir del projecte |
