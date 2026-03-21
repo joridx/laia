@@ -14,9 +14,11 @@ import { createRouter, routeLabel, MODEL_IDS } from './router.js';
 import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteAutoSave } from './session.js';
 import { createAttachManager } from './attach.js';
 import { createAutoCommitter } from './git-commit.js';
+import { createUndoStack } from './undo.js';
+import { resolve as resolvePath } from 'path';
 
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/tokens', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/exit', '/quit'];
 
 // --- Human-readable token count (e.g. 1234 → "1.2k", 1234567 → "1.2M") ---
 function formatTokenCount(n) {
@@ -71,6 +73,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   const attachManager = createAttachManager(config.workspaceRoot);
   const autoCommitter = createAutoCommitter({ cwd: config.workspaceRoot });
   if (config.autoCommit) autoCommitter.enabled = true;
+  const undoStack = createUndoStack();
 
   // Session-wide token accumulator
   const sessionTokens = { turns: 0, totalIn: 0, totalOut: 0 };
@@ -174,7 +177,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
 
     // Slash commands
     if (input.startsWith('/')) {
-      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter);
+      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack);
       if (handled) { rl.prompt(); continue; }
     }
 
@@ -208,6 +211,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       // addUser BEFORE runTurn so getHistory() includes it; addTurn AFTER stores the rest atomically
       context.addUser(typeof llmInput === 'string' ? llmInput : llmInput.text);
       if (context.needsCompaction()) context.compact();
+      undoStack.startTurn();
 
       const result = await runTurn({
         input: llmInput,
@@ -218,9 +222,12 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         onStep: (step) => {
           if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
           else {
-            // Track files modified by write/edit for auto-commit
+            // Track files modified by write/edit for auto-commit + undo
             if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
               autoCommitter.trackFile(step.result.path);
+            }
+            if (step.type === 'tool_call' && (step.name === 'write' || step.name === 'edit') && step.args?.path) {
+              undoStack.trackFile(resolvePath(config.workspaceRoot, step.args.path));
             }
             printStep(step);
           }
@@ -234,6 +241,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       } else {
         stderr.write('\x1b[33m⚠ (empty response — model returned no text)\x1b[0m\n');
       }
+      undoStack.commitTurn();
       // Atomic: store full tool transcript + assistant reply together (user already added above)
       context.addTurn({
         assistantText: text,
@@ -284,16 +292,17 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   }
 }
 
-async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter) {
+async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack) {
   const spaceIdx = input.indexOf(' ');
   const name = (spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx)).toLowerCase();
   const args = spaceIdx === -1 ? '' : input.slice(spaceIdx + 1).trim();
 
   switch (name) {
     case 'help':
-      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /autocommit /exit');
+      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /autocommit /undo /exit');
       console.log('Session: /save [name], /load [name|number], /sessions');
       console.log('Attach: /attach <path|glob>, /detach <path|name|number|all>, /attached');
+      console.log('Undo: /undo — revert files changed in last turn (up to 10 turns)');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
       console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
       return true;
@@ -429,6 +438,28 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       return true;
     }
 
+    case 'undo': {
+      if (undoStack.depth === 0) {
+        stderr.write('\x1b[33mNothing to undo\x1b[0m\n');
+        return true;
+      }
+      const files = undoStack.peek();
+      const { relative } = await import('path');
+      stderr.write(`\x1b[33m↩️  Undo last turn (${files.length} file${files.length > 1 ? 's' : ''}):\x1b[0m\n`);
+      for (const f of files) {
+        stderr.write(`  ${relative(config.workspaceRoot, f).split('\\').join('/')}\n`);
+      }
+      const result = undoStack.undo();
+      if (result.restored.length) {
+        stderr.write(`\x1b[32m✓ Restored: ${result.restored.map(f => relative(config.workspaceRoot, f).split('\\').join('/')).join(', ')}\x1b[0m\n`);
+      }
+      if (result.deleted.length) {
+        stderr.write(`\x1b[32m✓ Deleted (were new): ${result.deleted.map(f => relative(config.workspaceRoot, f).split('\\').join('/')).join(', ')}\x1b[0m\n`);
+      }
+      stderr.write(`\x1b[2m[${undoStack.depth} more undo${undoStack.depth !== 1 ? 's' : ''} available]\x1b[0m\n`);
+      return true;
+    }
+
     case 'swarm': {
       config.swarm = !config.swarm;
       if (config.swarm) {
@@ -464,6 +495,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
         stderr.write(`\x1b[2m[/${name}] Expanding command...\x1b[0m\n`);
         try {
           context.addUser(expanded);
+          undoStack.startTurn();
           let streamed = false;
           const result = await runTurn({
             input: expanded, config, logger, history: context.getHistory(),
@@ -473,10 +505,14 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
                 if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
                   autoCommitter.trackFile(step.result.path);
                 }
+                if (step.type === 'tool_call' && (step.name === 'write' || step.name === 'edit') && step.args?.path) {
+                  undoStack.trackFile(resolvePath(config.workspaceRoot, step.args.path));
+                }
                 printStep(step);
               }
             },
           });
+          undoStack.commitTurn();
           if (streamed) {
             process.stdout.write('\n\n');
           } else if (result.text) {

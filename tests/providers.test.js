@@ -36,12 +36,11 @@ describe('@claude/providers — registry', () => {
     }
   });
 
-  it('copilot has Copilot-specific headers and quirks', () => {
+  it('copilot has Copilot-specific headers and empty quirks', () => {
     const c = PROVIDERS.copilot;
     assert.ok(c.extraHeaders['Editor-Version']);
     assert.ok(c.extraHeaders['Copilot-Integration-Id']);
-    assert.ok(c.quirks.forceToolChoiceRequired);
-    assert.ok(c.quirks.disableStreamingForClaude);
+    assert.deepEqual(c.quirks, {});
   });
 });
 
