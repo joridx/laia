@@ -1,7 +1,7 @@
 # Claudia — Roadmap
 
-> Comparativa amb Claude Code + pla d'implementació
-> Última actualització: 2026-03-21 (sessió 2)
+> CLI coding assistant — V1 Feature Complete 🏁
+> Última actualització: 2026-03-21 (sessió 3)
 
 ---
 
@@ -19,18 +19,21 @@
 | Auto-compaction | ✅ | ✅ | `context.js` — trigger at 80% capacity |
 | Vision/Images | ✅ | ✅ | Multimodal: attach → base64 → content parts → API |
 | Model routing | ✅ | ❌ | `router.js` — auto per-turn (codex/claude/mini) |
-| 30+ corporate skills | ✅ | ❌ | `commands/` — Jira, Confluence, Teams, etc. |
-| **Daily briefing** | ✅ | ✅ | `/briefing` — 7 parallel workers (brain, jira, postgres, outlook, teams), anomaly detection. Works in both Claude Code (native parallel) & Claudia (Copilot fix) |
+| 35 corporate skills | ✅ | ❌ | `commands/` — Jira, Confluence, Teams, Outlook, PostgreSQL, GitHub, Jenkins, etc. |
+| **Daily briefing** | ✅ | ✅ | `/briefing` — 7 parallel workers, anomaly detection |
 | Brain/memory (MCP) | ✅ | ✅* | Brain MCP server vs CLAUDE.md (*diferent mètode) |
 | Image auto-routing | ✅ | ❌ | `hasImages → gpt-5.3-codex` automàtic |
 | Attachment manager | ✅ | ✅ | `/attach` amb glob, dedup, images, binary detection |
-| **Token budget display** | ✅ | ❌ | `[in / out · 45% ctx]` amb color 🟢🟡🔴 |
+| **Token budget + /tokens** | ✅ | ❌ | Per-turn `[in/out · ctx%]`, session `Σ`, `/tokens` command |
 | **CLAUDE.md hierarchy** | ✅ | ✅ | 5-level: user → project → managed (50KB/file, 100KB total) |
 | **Git tools** | ✅ | ✅ | `git_diff`, `git_status`, `git_log` — tier 1, read-only |
+| **Git auto-commit** | ✅ | ❌ | `git-commit.js` (92 LOC), `--auto-commit`, `/autocommit`, `git commit --only` aïllat |
 | **Diff preview** | ✅ | ✅ | Unified diff colorit al terminal per edit/write |
-| **Swarm — `agent` tool** | ✅ | ❌ | `tools/agent.js` + `swarm.js` — workers in-process amb context net, paral·lels via semaphore |
-| **Parallel agents (Copilot fix)** | ✅ | ✅ | Fix 3 bugs: streaming disabled, forceToolChoiceRequired, index offset. `filter(Boolean)` + quirks removed |
-| **MCP server mode** | ✅ | ❌ | `--mcp` flag: exposa tool `agent` via MCP stdio. Stdout guard (strict/redirect). |
+| **Swarm — `agent` tool** | ✅ | ❌ | `tools/agent.js` + `swarm.js` — workers in-process, paral·lels, `allowedTools` filter |
+| **Parallel agents (Copilot fix)** | ✅ | ✅ | Fix 3 bugs: streaming, forceToolChoiceRequired, index offset |
+| **MCP server mode** | ✅ | ❌ | `--mcp` flag: exposa tool `agent` via MCP stdio |
+| **/undo stack** | ✅ | ❌ | `undo.js` (113 LOC), 10-turn stack, conflict detection, workspace guard |
+| **Cost tracking** | ✅ | ❌ | `sessionTokens` acumulat per sessió, `Σ` display, `formatTokenCount` |
 
 ---
 
@@ -39,38 +42,34 @@
 > 3-round adversarial review amb 2 agents gpt-5.3-codex (Security + Architecture).
 > Resultat: 0 HIGH, 6 MEDIUM, 2 LOW. Detalls: `docs/ARCHITECTURE_REVIEW.md`
 
-### Recomanats per implementar
-
-| # | Finding | Severitat | Esforç | Status |
-|---|---------|-----------|--------|--------|
-| 1 | **Registry freeze** | MEDIUM | 7 LOC | ✅ DONE — `frozen` flag a `createToolRegistry()`, `set/delete` throw si frozen, auto-freeze post-bootstrap (except REPL) |
-| 2 | **Context `addTurn()` atòmic** | MEDIUM | 10 LOC | ✅ DONE — `addTurn({ assistantText, turnMessages })` unifica `addTurnMessages` + `addAssistant`. Bug duplicació user detectat i fixat per Codex review |
-| 3 | **Corporate workflow pre-hook** | MEDIUM | 10 LOC | ✅ DONE — Router retorna `corporateHint`, system prompt injecta `## ⚠ Corporate Service Detected` dinàmicament. Soft hint, no hard gate (Codex va acceptar: FP risk massa alt) |
-| 4 | **`allowedTools` param per workers** | MEDIUM | ~25 LOC | 🟡 DEFER — nice-to-have, no urgent (same trust boundary) |
-| 5 | **Prompt modularització** | MEDIUM | ~20 LOC | 🟡 DEFER — 94 línies no és crític, fer quan creixi |
-| 6 | **Worker trust docs** | MEDIUM | docs | 🟡 DEFER — documentació, no bloqueja res |
-| 7 | Token cache permisos | LOW | ~5 LOC | ❄️ SKIP — %TEMP% ja és per-user, token expira 30min |
-| 8 | Provider abstraction | LOW | refactor | ❄️ SKIP — YAGNI, un sol provider |
+| # | Finding | Severitat | Status |
+|---|---------|-----------|--------|
+| 1 | **Registry freeze** | MEDIUM | ✅ DONE |
+| 2 | **Context `addTurn()` atòmic** | MEDIUM | ✅ DONE |
+| 3 | **Corporate workflow pre-hook** | MEDIUM | ✅ DONE |
+| 4 | **`allowedTools` per workers** | MEDIUM | ✅ DONE |
+| 5 | Prompt modularització | MEDIUM | 🟡 DEFER (94 línies, no crític) |
+| 6 | Worker trust docs | MEDIUM | 🟡 DEFER (documentació) |
+| 7 | Token cache permisos | LOW | ❄️ SKIP |
+| 8 | Provider abstraction | LOW | ❄️ SKIP |
 
 ---
 
 ## 📋 Backlog futur
 
-| Feature | Prioritat | Esforç | Notes |
-|---------|-----------|--------|-------|
-| ~~Registry freeze~~ | ✅ DONE | — | Implementat 2026-03-19 |
-| ~~Context `addTurn()` atòmic~~ | ✅ DONE | — | Implementat 2026-03-19 |
-| ~~Corporate workflow pre-hook~~ | ✅ DONE | — | Implementat 2026-03-19 |
-| ~~Git auto-commit~~ | ✅ DONE | — | Implementat 2026-03-17. `git-commit.js` (92 LOC), `--auto-commit` flag, `/autocommit` toggle, `git commit --only` aïllat |
-| MCP server connections | 🟡 MED | 4h | Connect to external MCP servers dynamically |
-| ~~`allowedTools` per agent workers~~ | ✅ DONE | — | Implementat 2026-03-18. Schema param + filter + execution guard a `agent.js` |
-| `/init` command | 🟢 LOW | 1h | Genera CLAUDE.md a partir del projecte |
-| Web search tool | 🟢 LOW | 2h | WebSearch equivalent |
-| Notebook/REPL tool | 🟢 LOW | 3h | Executar Python/JS inline amb output |
-| Vim/Emacs keybindings | 🟢 LOW | 1h | readline config |
-| Interactive diff approval | 🟢 LOW | 4h | Confirmar diffs abans d'escriure (y/n) |
-| ~~`/undo` command~~ | ✅ DONE | — | Implementat 2026-03-17. `undo.js` (113 LOC), stack 10 turns, conflict detection, workspace guard |
-| ~~Cost tracking~~ | ✅ DONE | — | Implementat 2026-03-17. `sessionTokens` acumulat, `Σ` display, `formatTokenCount` a `repl.js` |
+| Feature | Prioritat | Notes |
+|---------|-----------|-------|
+| MCP server connections | 🟡 DEFER | Connectar a MCP servers externs. 35 skills ja cobreixen tot. Fer quan hi hagi necessitat real. |
+| Prompt modularització | 🟡 DEFER | Separar system prompt en mòduls. Fer quan creixi. |
+| Worker trust docs | 🟡 DEFER | Documentar model de trust dels workers. |
+
+### Dropped (acordat amb Codex review 2026-03-21)
+- `/init` command — CLAUDE.md ja existeix a tots els projectes
+- Interactive diff approval — /undo + auto-commit ja cobreixen
+- Web search tool — no necessari per workflow actual
+- Notebook/REPL tool — bash() ja executa Python/JS
+- Vim/Emacs keybindings — readline default és suficient
+- Generic retry wrapper — cada skill gestiona els seus errors
 
 ---
 
@@ -94,9 +93,9 @@
 |------|---------|----------|
 | 2026-03-15 | MVP | Agent loop, streaming, tools, permissions, sessions |
 | 2026-03-16 | +5 | Vision/images, router, attachments, brain MCP |
-| 2026-03-17 | +4 | Token budget, CLAUDE.md hierarchy, git tools, diff preview |
-| 2026-03-18 | +20 | Codex review fixes, swarm (agent tool + semaphore + batch dispatch), MCP server mode (stdio + stdout guard), permissions refactor, spec compliance fixes (singleton client, indentation, per-worker permCtx) |
-| 2026-03-18 | +1 | Automated multi-agent code review (5 parallel claudia agents): fix 13 issues — tool timeout via Promise.race, null-safe batch results, SSE debug log, proper Error throwing, MCP full stack propagation, headless auto-deny warning, unexpected key feedback, brain-disabled user warning, structured turn error log; fix test glob quoting for Windows |
-| 2026-03-19 | +3 | Architecture review findings: registry freeze (7 LOC), atomic addTurn (10 LOC), corporate workflow pre-hook (10 LOC). All reviewed with gpt-5.3-codex adversarial debate. ANSI dim fix for ctx% color. |
-| 2026-03-19 | +2 | **Multi-provider LLM routing (api-agnostic-v2):** `@claude/providers` shared package (5 providers: copilot, openai, anthropic, azure_openai, ollama). `detectProvider()` with explicit prefix override + pattern auto-detect + availability guard. VS Code-style Copilot headers (vscode/1.109.5). Deterministic token selection from apps.json (appId > ghu_ > sorted). Brain integration with standalone fallback. |
-| 2026-03-21 | +2 | **`/briefing` daily briefing skill:** 7-module parallel worker architecture (brain_todo, brain_warnings, jira, binary_engine, csv_engine, outlook, teams_calendar). Correct PostgreSQL schemas (completed/witherror, start_time). Anomaly detection with baselines. 4-round Codex design review. E2E validated 7/7 modules OK. **Parallel agents fix:** 3 Copilot streaming bugs fixed (disableStreamingForClaude, forceToolChoiceRequired, index offset → filter(Boolean)). Agents now truly parallel in both Claude Code & Claudia. |
+| 2026-03-17 | +4 | Token budget, CLAUDE.md hierarchy, git tools, diff preview, auto-commit, undo stack, cost tracking |
+| 2026-03-18 | +20 | Codex review fixes, swarm (agent tool + semaphore + batch dispatch + allowedTools), MCP server mode (stdio + stdout guard), permissions refactor |
+| 2026-03-18 | +1 | Automated multi-agent code review (5 parallel agents): fix 13 issues |
+| 2026-03-19 | +3 | Architecture review: registry freeze, atomic addTurn, corporate pre-hook |
+| 2026-03-19 | +2 | **Multi-provider LLM routing (api-agnostic-v2):** `@claude/providers` shared package (5 providers) |
+| 2026-03-21 | +4 | **`/briefing` daily briefing skill** (7 parallel workers). **Parallel agents fix** (3 Copilot streaming bugs). **V1 Feature Complete** declared after Codex review. |

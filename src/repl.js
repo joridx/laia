@@ -299,10 +299,11 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
 
   switch (name) {
     case 'help':
-      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /autocommit /undo /exit');
+      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /autocommit /undo /tokens /exit');
       console.log('Session: /save [name], /load [name|number], /sessions');
       console.log('Attach: /attach <path|glob>, /detach <path|name|number|all>, /attached');
       console.log('Undo: /undo — revert files changed in last turn (up to 10 turns)');
+      console.log('Tokens: /tokens — show session token usage and context window stats');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
       console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
       return true;
@@ -460,6 +461,32 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
         stderr.write(`\x1b[33m⚠️  Conflicts (files modified after agent edit): ${result.conflicts.map(f => relative(config.workspaceRoot, f).split('\\').join('/')).join(', ')}\x1b[0m\n`);
       }
       stderr.write(`\x1b[2m[${undoStack.depth} more undo${undoStack.depth !== 1 ? 's' : ''} available]\x1b[0m\n`);
+      return true;
+    }
+
+    case 'tokens': {
+      const pct = context.usagePercent();
+      const ctxEst = context.estimateTokens();
+      const ctxMax = context.getMaxTokens();
+      const turns = context.turnCount();
+      const totalAll = sessionTokens.totalIn + sessionTokens.totalOut;
+      const ctxColor = pct > 80 ? '31;1' : pct > 60 ? '33;1' : '32';
+      stderr.write('\x1b[1m📊 Token Usage\x1b[0m\n');
+      stderr.write(`\n  \x1b[1mSession\x1b[0m\n`);
+      stderr.write(`    Turns:      ${sessionTokens.turns}\n`);
+      stderr.write(`    Input:      ${formatTokenCount(sessionTokens.totalIn)}\n`);
+      stderr.write(`    Output:     ${formatTokenCount(sessionTokens.totalOut)}\n`);
+      stderr.write(`    Total:      \x1b[1m${formatTokenCount(totalAll)}\x1b[0m\n`);
+      stderr.write(`\n  \x1b[1mContext Window\x1b[0m\n`);
+      stderr.write(`    Estimated:  ${formatTokenCount(ctxEst)} / ${formatTokenCount(ctxMax)}\n`);
+      stderr.write(`    Usage:      \x1b[${ctxColor}m${pct}%\x1b[0m\n`);
+      stderr.write(`    Turns:      ${turns}\n`);
+      if (attachManager.count() > 0) {
+        stderr.write(`\n  \x1b[1mAttachments\x1b[0m\n`);
+        stderr.write(`    Files:      ${attachManager.count()}\n`);
+        stderr.write(`    Tokens:     ~${formatTokenCount(attachManager.estimateTokens())}\n`);
+      }
+      stderr.write('\n');
       return true;
     }
 
