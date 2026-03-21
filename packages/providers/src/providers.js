@@ -34,8 +34,8 @@ export const PROVIDERS = {
         'Copilot-Integration-Id': 'vscode-chat',
       };
     },
-    // Copilot proxy quirks: drops tool_calls with tool_choice:"auto" for Claude models
-    quirks: { forceToolChoiceRequired: true, disableStreamingForClaude: true },
+    // Copilot proxy quirks (2026-03-21): streaming fixes tool_calls + enables parallel agents
+    quirks: {},
   },
   openai: {
     id: 'openai',

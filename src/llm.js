@@ -196,7 +196,7 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
             message: {
               role: chatRole,
               content: chatContent || null,
-              tool_calls: chatToolCalls.length ? chatToolCalls : undefined,
+              tool_calls: chatToolCalls.length ? chatToolCalls.filter(Boolean) : undefined,
             },
             finish_reason: chatFinishReason,
           }],
