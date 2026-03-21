@@ -69,7 +69,7 @@
 | Notebook/REPL tool | 🟢 LOW | 3h | Executar Python/JS inline amb output |
 | Vim/Emacs keybindings | 🟢 LOW | 1h | readline config |
 | Interactive diff approval | 🟢 LOW | 4h | Confirmar diffs abans d'escriure (y/n) |
-| `/undo` command | 🟢 LOW | 2h | Revertir últim edit/write |
+| ~~`/undo` command~~ | ✅ DONE | — | Implementat 2026-03-17. `undo.js` (113 LOC), stack 10 turns, conflict detection, workspace guard |
 | ~~Cost tracking~~ | ✅ DONE | — | Implementat 2026-03-17. `sessionTokens` acumulat, `Σ` display, `formatTokenCount` a `repl.js` |
 
 ---

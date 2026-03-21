@@ -73,7 +73,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   const attachManager = createAttachManager(config.workspaceRoot);
   const autoCommitter = createAutoCommitter({ cwd: config.workspaceRoot });
   if (config.autoCommit) autoCommitter.enabled = true;
-  const undoStack = createUndoStack();
+  const undoStack = createUndoStack({ workspaceRoot: config.workspaceRoot });
 
   // Session-wide token accumulator
   const sessionTokens = { turns: 0, totalIn: 0, totalOut: 0 };
@@ -455,6 +455,9 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       }
       if (result.deleted.length) {
         stderr.write(`\x1b[32m✓ Deleted (were new): ${result.deleted.map(f => relative(config.workspaceRoot, f).split('\\').join('/')).join(', ')}\x1b[0m\n`);
+      }
+      if (result.conflicts?.length) {
+        stderr.write(`\x1b[33m⚠️  Conflicts (files modified after agent edit): ${result.conflicts.map(f => relative(config.workspaceRoot, f).split('\\').join('/')).join(', ')}\x1b[0m\n`);
       }
       stderr.write(`\x1b[2m[${undoStack.depth} more undo${undoStack.depth !== 1 ? 's' : ''} available]\x1b[0m\n`);
       return true;

@@ -16,7 +16,7 @@ describe('createUndoStack', () => {
 
   beforeEach(() => {
     dir = makeTmpDir();
-    undo = createUndoStack();
+    undo = createUndoStack({ workspaceRoot: dir });
   });
 
   afterEach(() => {
@@ -190,5 +190,56 @@ describe('createUndoStack', () => {
 
   it('peek returns null when nothing to undo', () => {
     assert.equal(undo.peek(), null);
+  });
+
+  it('cancelTurn discards pending snapshots', () => {
+    const file = join(dir, 'test.txt');
+    writeFileSync(file, 'original');
+
+    undo.startTurn();
+    undo.trackFile(file);
+    writeFileSync(file, 'modified');
+    undo.cancelTurn(); // discard instead of commit
+
+    assert.equal(undo.depth, 0);
+    assert.equal(readFileSync(file, 'utf8'), 'modified'); // file stays modified
+  });
+
+  it('refuses files outside workspace root', () => {
+    const outsideFile = join(tmpdir(), 'claudia-undo-outside-' + Date.now() + '.txt');
+    try {
+      writeFileSync(outsideFile, 'outside');
+
+      undo.startTurn();
+      undo.trackFile(outsideFile); // should be silently ignored
+      writeFileSync(outsideFile, 'modified');
+      undo.commitTurn();
+
+      assert.equal(undo.depth, 0); // nothing tracked → empty turn
+    } finally {
+      try { rmSync(outsideFile); } catch {}
+    }
+  });
+
+  it('detects conflicts when file modified after agent edit', async () => {
+    const file = join(dir, 'test.txt');
+    writeFileSync(file, 'original');
+
+    undo.startTurn();
+    undo.trackFile(file);
+    writeFileSync(file, 'agent edit');
+    undo.commitTurn();
+
+    // Simulate user editing the file 2 seconds later
+    await new Promise(r => setTimeout(r, 50));
+    writeFileSync(file, 'user manual edit');
+    // Force mtime forward by 2 seconds for conflict detection
+    const { utimesSync } = await import('fs');
+    const future = new Date(Date.now() + 2000);
+    utimesSync(file, future, future);
+
+    const result = undo.undo();
+    assert.ok(result.conflicts.length > 0);
+    assert.equal(readFileSync(file, 'utf8'), 'original'); // still restores
   });
 });
