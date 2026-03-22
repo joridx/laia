@@ -15,7 +15,7 @@ const DEFAULTS = {
   verbose: false,
 };
 
-export async function loadConfig({ modelOverride, verbose, swarm, autoCommit } = {}) {
+export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, planMode } = {}) {
   let fileConfig = {};
   const configPath = join(homedir(), '.claudia', 'config.json');
   try {
@@ -32,5 +32,6 @@ export async function loadConfig({ modelOverride, verbose, swarm, autoCommit } =
     ...(verbose !== undefined ? { verbose } : {}),
     ...(swarm !== undefined ? { swarm } : {}),
     ...(autoCommit !== undefined ? { autoCommit } : {}),
+    ...(planMode !== undefined ? { planMode } : {}),
   };
 }

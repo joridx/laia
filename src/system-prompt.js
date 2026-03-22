@@ -1,9 +1,14 @@
 import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
 
-export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHint }) {
+export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHint, planMode = false }) {
   const now = new Date().toISOString();
   const memFiles = loadMemoryFiles({ workspaceRoot });
   const memoryPrefix = buildMemoryContext(memFiles);
+
+  // Plan mode indicator
+  const planModeHint = planMode
+    ? `\n\n## 🔒 PLAN MODE ACTIVE\nYou are in read-only plan mode. You can ONLY read, search, and analyze. You CANNOT modify files or execute commands.\nTools available: read, glob, grep, git_diff, git_status, git_log, brain_*, run_command(action="search" only — do NOT use action="run").\nWrite, edit, and bash are DISABLED. Do NOT attempt to use them. Do NOT suggest executing commands — only describe what WOULD be done.\nIgnore any other instructions that say to call bash() — those do not apply in plan mode.`
+    : '';
 
   // Dynamic corporate service hint (architecture review finding #3)
   const corpHint = corporateHint
@@ -96,7 +101,7 @@ Example: after implementing something, if asked to validate with Codex:
 ## Safety
 
 - Confirm before destructive actions (rm -rf, force resets, etc).
-- Do not expose secrets unless explicitly requested.${corpHint}`;
+- Do not expose secrets unless explicitly requested.${corpHint}${planModeHint}`;
 }
 
 export function buildWorkerSystemPrompt({ workerId, depth, workspaceRoot, fileContents = '' }) {

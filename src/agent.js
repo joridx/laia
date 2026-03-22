@@ -8,6 +8,9 @@ import { checkPermission, setAutoApprove } from './permissions.js';
 import { createDispatchToolBatch } from './swarm.js';
 import { colorDiff } from './diff.js';
 
+// Tools excluded in plan mode (mutating operations)
+const PLAN_MODE_EXCLUDED_TOOLS = ['write', 'edit', 'bash'];
+
 export function createClient(config) {
   const { providerId } = detectProvider(config.model);
   return createLLMClient({
@@ -17,19 +20,26 @@ export function createClient(config) {
   });
 }
 
-export async function runTurn({ input, config, logger, onStep, history = [], corporateHint } = {}) {
+export async function runTurn({ input, config, logger, onStep, history = [], corporateHint, planMode = false } = {}) {
   const llmClient = createClient(config);
   const systemPrompt = buildSystemPrompt({
     workspaceRoot: config.workspaceRoot,
     model: config.model,
     brainPath: config.brainPath,
     corporateHint,
+    planMode,
   });
-  const tools = getToolSchemas();
+  const tools = planMode
+    ? getToolSchemas({ exclude: PLAN_MODE_EXCLUDED_TOOLS })
+    : getToolSchemas();
+
+  // Server-side enforcement: block mutating tools in plan mode even if model emits them
+  const blockedTools = planMode ? new Set(PLAN_MODE_EXCLUDED_TOOLS) : null;
 
   // Swarm mode: parallel batch dispatcher for concurrent agent() calls
   const executeToolBatch = config.swarm
     ? createDispatchToolBatch(async (name, args, callId) => {
+        if (blockedTools?.has(name)) return { error: true, message: `Tool '${name}' is disabled in plan mode` };
         const allowed = await checkPermission(name, args);
         if (!allowed) throw new Error('User denied permission');
         return dispatchTool(name, args, callId);
@@ -43,6 +53,7 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
     history,
     tools,
     executeTool: async (name, args, callId) => {
+      if (blockedTools?.has(name)) return { error: true, message: `Tool '${name}' is disabled in plan mode` };
       const allowed = await checkPermission(name, args);
       if (!allowed) throw new Error('User denied permission');
       return dispatchTool(name, args, callId);
@@ -74,6 +85,7 @@ export async function runOneShot({ prompt, config, logger, json }) {
       input: prompt,
       config,
       logger,
+      planMode: config.planMode || false,
       onStep: json ? undefined : (step) => {
         if (step.type === 'token') streamed = true;
         printStep(step);

@@ -18,7 +18,7 @@ import { createUndoStack } from './undo.js';
 import { resolve as resolvePath } from 'path';
 
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/plan', '/execute', '/exit', '/quit'];
 
 // --- Human-readable token count (e.g. 1234 → "1.2k", 1234567 → "1.2M") ---
 function formatTokenCount(n) {
@@ -55,7 +55,9 @@ function suggestFollowUps(text) {
   return s.slice(0, 3);
 }
 
-export async function runRepl({ config, logger }) {
+export async function runRepl({ config, logger, planMode: initialPlanMode = false }) {
+  // Plan mode state (togglable via /plan and /execute)
+  let planMode = initialPlanMode || config.planMode || false;
   // Start brain MCP server
   stderr.write('\x1b[2m[brain] Starting MCP server...\x1b[0m\n');
   try {
@@ -102,11 +104,16 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     input: stdin,
     output: stdout,
     completer,
-    prompt: '\x1b[1mclaudia>\x1b[0m ',
+    prompt: planMode ? '\x1b[33m[PLAN]\x1b[0m \x1b[1mclaudia>\x1b[0m ' : '\x1b[1mclaudia>\x1b[0m ',
   });
 
   // Register readline with permission system so it pauses during prompts
   setReadlineInterface(rl);
+
+  // Helper to update prompt badge when plan mode toggles
+  function updatePrompt() {
+    rl.setPrompt(planMode ? '\x1b[33m[PLAN]\x1b[0m \x1b[1mclaudia>\x1b[0m ' : '\x1b[1mclaudia>\x1b[0m ');
+  }
 
   function showSuggestions() {
     if (!suggestions.length) return;
@@ -147,7 +154,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     workspaceRoot: config.workspaceRoot,
   };
 
-  printBanner(config);
+  printBanner(config, planMode);
   rl.prompt();
 
   rl.on('close', async () => {
@@ -177,7 +184,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
 
     // Slash commands
     if (input.startsWith('/')) {
-      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack);
+      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, { getPlanMode: () => planMode, setPlanMode: (v) => { planMode = v; updatePrompt(); } });
       if (handled) { rl.prompt(); continue; }
     }
 
@@ -219,6 +226,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         logger,
         history: context.getHistory(),
         corporateHint,
+        planMode,
         onStep: (step) => {
           if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
           else {
@@ -292,18 +300,19 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   }
 }
 
-async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack) {
+async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, planCtrl = {}) {
   const spaceIdx = input.indexOf(' ');
   const name = (spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx)).toLowerCase();
   const args = spaceIdx === -1 ? '' : input.slice(spaceIdx + 1).trim();
 
   switch (name) {
     case 'help':
-      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /autocommit /undo /tokens /exit');
+      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /autocommit /undo /tokens /plan /execute /exit');
       console.log('Session: /save [name], /load [name|number], /sessions');
       console.log('Attach: /attach <path|glob>, /detach <path|name|number|all>, /attached');
       console.log('Undo: /undo — revert files changed in last turn (up to 10 turns)');
       console.log('Tokens: /tokens — show session token usage and context window stats');
+      console.log('Plan: /plan — read-only mode (no write/edit/bash), /execute — back to normal');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
       console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
       return true;
@@ -436,6 +445,26 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
     case 'autocommit': {
       autoCommitter.enabled = !autoCommitter.enabled;
       stderr.write(`📝 Auto-commit ${autoCommitter.enabled ? 'ON' : 'OFF'}\n`);
+      return true;
+    }
+
+    case 'plan': {
+      if (planCtrl.getPlanMode?.()) {
+        stderr.write('\x1b[33mAlready in plan mode. Use /execute to switch back.\x1b[0m\n');
+      } else {
+        planCtrl.setPlanMode?.(true);
+        stderr.write('\x1b[33m🔒 Plan mode ON — read-only (write/edit/bash disabled)\x1b[0m\n');
+      }
+      return true;
+    }
+
+    case 'execute': {
+      if (!planCtrl.getPlanMode?.()) {
+        stderr.write('\x1b[33mAlready in execute mode.\x1b[0m\n');
+      } else {
+        planCtrl.setPlanMode?.(false);
+        stderr.write('\x1b[32m🔓 Execute mode ON — all tools available\x1b[0m\n');
+      }
       return true;
     }
 
@@ -638,15 +667,16 @@ async function askYesNo(rl) {
   });
 }
 
-function printBanner(config) {
+function printBanner(config, planMode) {
   const W = 29; // inner width of box
   const C = '\x1b[1m\x1b[36m', R = '\x1b[0m';
   const visLen = (s) => s.replace(/\x1b\[[0-9;]*m/g, '').length;
   const pad = (s) => s + ' '.repeat(Math.max(0, W - visLen(s)));
   const modelLabel = config.model === 'auto' ? 'auto (routing)' : config.model;
+  const modeLabel = planMode ? '\x1b[33m[PLAN]\x1b[0m' : '';
   console.log(`
 ${C}  ┌${'─'.repeat(W)}┐${R}
-${C}  │${R}${pad(`  ${C}claudia${R} v0.1.0`)}${C}│${R}
+${C}  │${R}${pad(`  ${C}claudia${R} v0.1.0${modeLabel ? ' ' + modeLabel : ''}`)}${C}│${R}
 ${C}  │${R}${pad(`  model: ${modelLabel}`)}${C}│${R}
 ${C}  │${R}${pad('  /help for commands')}${C}│${R}
 ${C}  └${'─'.repeat(W)}┘${R}

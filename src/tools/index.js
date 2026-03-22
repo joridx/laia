@@ -15,8 +15,13 @@ export function createToolRegistry() {
       return reg.delete(name);
     },
     has(name) { return reg.has(name); },
-    getSchemas() {
-      return [...reg.values()].map(t => ({
+    getSchemas(opts = {}) {
+      let schemas = [...reg.values()];
+      if (opts.exclude?.length) {
+        const excluded = new Set(opts.exclude);
+        schemas = schemas.filter(t => !excluded.has(t.name));
+      }
+      return schemas.map(t => ({
         type: 'function',
         name: t.name,
         description: t.description,
@@ -39,7 +44,7 @@ export const defaultRegistry = createToolRegistry();
 
 // Backwards-compat: delegate to defaultRegistry
 export function registerTool(name, def) { defaultRegistry.set(name, def); }
-export function getToolSchemas() { return defaultRegistry.getSchemas(); }
+export function getToolSchemas(opts) { return defaultRegistry.getSchemas(opts); }
 export async function executeTool(name, args, callId) { return defaultRegistry.execute(name, args, callId); }
 export function getToolNames() { return defaultRegistry.getNames(); }
 
