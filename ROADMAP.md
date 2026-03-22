@@ -30,6 +30,7 @@
 | **Git auto-commit** | ✅ | ❌ | `git-commit.js` (92 LOC), `--auto-commit`, `/autocommit`, `git commit --only` aïllat |
 | **Diff preview** | ✅ | ✅ | Unified diff colorit al terminal per edit/write |
 | **Swarm — `agent` tool** | ✅ | ❌ | `tools/agent.js` + `swarm.js` — workers in-process, paral·lels, `allowedTools` filter |
+| **Agent Profiles** | ✅ | ❌ | YAML profiles (`~/.claudia/agents/`) — per-agent model, tools, prompt, maxSteps |
 | **Parallel agents (Copilot fix)** | ✅ | ✅ | Fix 3 bugs: streaming, forceToolChoiceRequired, index offset |
 | **MCP server mode** | ✅ | ❌ | `--mcp` flag: exposa tool `agent` via MCP stdio |
 | **/undo stack** | ✅ | ❌ | `undo.js` (113 LOC), 10-turn stack, conflict detection, workspace guard |
@@ -63,7 +64,7 @@
 | # | Feature | Effort | Status |
 |---|---------|--------|--------|
 | 1 | **Plan Mode** (`/plan`, `/execute`, `--plan`) | 4h | ✅ DONE (2026-03-22) |
-| 2 | **Subagents v2a** — per-agent model + allowedTools (YAML profiles) | 4h | 📋 TODO |
+| 2 | **Subagents v2a** — per-agent model + allowedTools (YAML profiles) | 4h | ✅ DONE (2026-03-22) |
 | 3 | **Brain memory quality** — dedup + decay + auto-archive | 8h | 📋 TODO |
 | 4 | **CLI flags** — `--effort`, `--fork-session` | 4h | 📋 TODO |
 | 5 | **Subagents v2b** — persistent agent memory (namespaced tags) | 6h | 📋 TODO |
@@ -118,3 +119,4 @@ Deferred to V3+: hooks framework, path rules, code-intel, skills v2, channels, p
 | 2026-03-19 | +2 | **Multi-provider LLM routing (api-agnostic-v2):** `@claude/providers` shared package (5 providers) |
 | 2026-03-21 | +4 | **`/briefing` daily briefing skill** (7 parallel workers). **Parallel agents fix** (3 Copilot streaming bugs). **V1 Feature Complete** declared after Codex review. |
 | 2026-03-22 | +1 | **Plan Mode** (`/plan`, `/execute`, `--plan`). Dual enforcement (schema + dispatch). Reviewed by Codex. V2 roadmap defined (6 items, ~30h). |
+| 2026-03-22 | +1 | **Agent Profiles V2a** — YAML profiles (`~/.claudia/agents/`), resolveToolSet, customPrompt, maxSteps cap. 3 example profiles. Reviewed by Codex (3 rounds). |
