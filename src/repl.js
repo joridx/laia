@@ -222,7 +222,20 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       }
 
       let streamed = false;
-      let streamBuf = '';
+      let streamBuf = '';  // accumulates ALL streamed text (not just last fragment)
+      let spinnerTimer = null;
+      let spinnerFrame = 0;
+      const spinnerChars = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+      function startSpinner() {
+        if (spinnerTimer) return;
+        spinnerTimer = setInterval(() => {
+          const ch = spinnerChars[spinnerFrame++ % spinnerChars.length];
+          stderr.write(`\r\x1b[36m${ch}\x1b[0m`);
+        }, 80);
+      }
+      function stopSpinner() {
+        if (spinnerTimer) { clearInterval(spinnerTimer); spinnerTimer = null; stderr.write('\r\x1b[0K'); }
+      }
       // Prepend attached files to input for LLM context
       const ctx = attachManager.buildContext();
       let llmInput;
@@ -254,10 +267,10 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
           if (step.type === 'token') {
             streamed = true;
             streamBuf += step.text;
-            process.stdout.write(step.text);
+            startSpinner();  // visual feedback without raw markdown
           } else {
             if (step.type === 'tool_call') {
-              streamBuf = ''; // reset — tool output follows, can't erase past this
+              stopSpinner();
             }
             // Track files modified by write/edit for auto-commit + undo
             if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
@@ -271,19 +284,8 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         },
       });
       const text = result.text || '';
-      if (streamed) {
-        if (streamBuf) {
-          // Erase the last streamed fragment and re-render it formatted
-          const rawLines = streamBuf.split('\n').length;
-          process.stdout.write(`\x1b[${rawLines}F\x1b[0J`);
-        }
-        // Always render the full text with markdown formatting
-        if (text) {
-          console.log(`\n${renderMarkdown(text)}\n`);
-        } else {
-          process.stdout.write('\n\n');
-        }
-      } else if (text) {
+      stopSpinner();
+      if (text) {
         console.log(`\n${renderMarkdown(text)}\n`);
       } else {
         stderr.write('\x1b[33m⚠ (empty response — model returned no text)\x1b[0m\n');
@@ -757,16 +759,29 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           undoStack.startTurn();
           let streamed = false;
           let streamBuf = '';
+          let spinnerTimer2 = null;
+          let spinnerFrame2 = 0;
+          const spinChars = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+          function startSpin() {
+            if (spinnerTimer2) return;
+            spinnerTimer2 = setInterval(() => {
+              const ch = spinChars[spinnerFrame2++ % spinChars.length];
+              stderr.write(`\r\x1b[36m${ch}\x1b[0m`);
+            }, 80);
+          }
+          function stopSpin() {
+            if (spinnerTimer2) { clearInterval(spinnerTimer2); spinnerTimer2 = null; stderr.write('\r\x1b[0K'); }
+          }
           const result = await runTurn({
             input: expanded, config, logger, history: context.getHistory(),
             onStep: (step) => {
               if (step.type === 'token') {
                 streamed = true;
                 streamBuf += step.text;
-                process.stdout.write(step.text);
+                startSpin();
               } else {
                 if (step.type === 'tool_call') {
-                  streamBuf = ''; // reset — tool output follows
+                  stopSpin();
                 }
                 if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
                   autoCommitter.trackFile(step.result.path);
@@ -779,17 +794,8 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
             },
           });
           undoStack.commitTurn();
-          if (streamed) {
-            if (streamBuf) {
-              const rawLines = streamBuf.split('\n').length;
-              process.stdout.write(`\x1b[${rawLines}F\x1b[0J`);
-            }
-            if (result.text) {
-              console.log(`\n${renderMarkdown(result.text)}\n`);
-            } else {
-              process.stdout.write('\n\n');
-            }
-          } else if (result.text) {
+          stopSpin();
+          if (result.text) {
             console.log(`\n${renderMarkdown(result.text)}\n`);
           }
           context.addTurn({
