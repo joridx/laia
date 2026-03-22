@@ -1,7 +1,7 @@
 # Claudia — Roadmap
 
 > CLI coding assistant — V1 Feature Complete 🏁
-> Última actualització: 2026-03-21 (sessió 3)
+> Última actualització: 2026-03-22 (sessió 4)
 
 ---
 
@@ -34,6 +34,7 @@
 | **MCP server mode** | ✅ | ❌ | `--mcp` flag: exposa tool `agent` via MCP stdio |
 | **/undo stack** | ✅ | ❌ | `undo.js` (113 LOC), 10-turn stack, conflict detection, workspace guard |
 | **Cost tracking** | ✅ | ❌ | `sessionTokens` acumulat per sessió, `Σ` display, `formatTokenCount` |
+| **Plan Mode** | ✅ | ✅ | `/plan`, `/execute`, `--plan` — read-only mode (dual enforcement: schema + dispatch) |
 
 ---
 
@@ -52,6 +53,23 @@
 | 6 | Worker trust docs | MEDIUM | 🟡 DEFER (documentació) |
 | 7 | Token cache permisos | LOW | ❄️ SKIP |
 | 8 | Provider abstraction | LOW | ❄️ SKIP |
+
+---
+
+## 🚀 V2 — Improvements (basat en Claude Code docs research 2026-03-22)
+
+> Proposta acordada amb Codex en 2 rondes. Document complet: `knowledge/tools/claudia-brain-v2-proposal-2026-03-22.md`
+
+| # | Feature | Effort | Status |
+|---|---------|--------|--------|
+| 1 | **Plan Mode** (`/plan`, `/execute`, `--plan`) | 4h | ✅ DONE (2026-03-22) |
+| 2 | **Subagents v2a** — per-agent model + allowedTools (YAML profiles) | 4h | 📋 TODO |
+| 3 | **Brain memory quality** — dedup + decay + auto-archive | 8h | 📋 TODO |
+| 4 | **CLI flags** — `--effort`, `--fork-session` | 4h | 📋 TODO |
+| 5 | **Subagents v2b** — persistent agent memory (namespaced tags) | 6h | 📋 TODO |
+| 6 | **`/agents` command** — list/edit/validate profiles | 4-6h | 📋 TODO |
+
+Deferred to V3+: hooks framework, path rules, code-intel, skills v2, channels, plugins.
 
 ---
 
@@ -99,3 +117,4 @@
 | 2026-03-19 | +3 | Architecture review: registry freeze, atomic addTurn, corporate pre-hook |
 | 2026-03-19 | +2 | **Multi-provider LLM routing (api-agnostic-v2):** `@claude/providers` shared package (5 providers) |
 | 2026-03-21 | +4 | **`/briefing` daily briefing skill** (7 parallel workers). **Parallel agents fix** (3 Copilot streaming bugs). **V1 Feature Complete** declared after Codex review. |
+| 2026-03-22 | +1 | **Plan Mode** (`/plan`, `/execute`, `--plan`). Dual enforcement (schema + dispatch). Reviewed by Codex. V2 roadmap defined (6 items, ~30h). |
