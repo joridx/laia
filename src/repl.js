@@ -17,10 +17,11 @@ import { createAutoCommitter } from './git-commit.js';
 import { createUndoStack } from './undo.js';
 import { resolve as resolvePath } from 'path';
 
+import { loadProfile, listProfiles } from './profiles.js';
 import { normalizeEffort } from './config.js';
 
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/plan', '/execute', '/effort', '/fork', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/plan', '/execute', '/effort', '/fork', '/agents', '/exit', '/quit'];
 
 // --- Human-readable token count (e.g. 1234 → "1.2k", 1234567 → "1.2M") ---
 function formatTokenCount(n) {
@@ -335,6 +336,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       console.log('Tokens: /tokens — show session token usage and context window stats');
       console.log('Plan: /plan — read-only mode (no write/edit/bash), /execute — back to normal');
       console.log('Effort: /effort <low|medium|high|max> — set reasoning effort, /effort — show current');
+      console.log('Agents: /agents — list profiles, /agents validate, /agents show <name>');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
       console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
       return true;
@@ -520,6 +522,65 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       const newId = randomBytes(8).toString('hex');
       context._sessionId = newId;
       stderr.write(`\x1b[32m🔀 Forked session: ${oldId.slice(0,8)}... → ${newId.slice(0,8)}...\x1b[0m\n`);
+      return true;
+    }
+
+    case 'agents': {
+      const sub = args.split(/\s+/)[0]?.toLowerCase() || '';
+      const subArg = args.split(/\s+/).slice(1).join(' ').trim();
+
+      if (sub === 'validate') {
+        const profiles = listProfiles();
+        if (profiles.length === 0) {
+          stderr.write('No profiles found in ~/.claudia/agents/\n');
+          return true;
+        }
+        let valid = 0, invalid = 0;
+        for (const p of profiles) {
+          try {
+            loadProfile(p.name);
+            stderr.write(`  ✅ ${p.name}\n`);
+            valid++;
+          } catch (e) {
+            stderr.write(`  ❌ ${p.name}: ${e.message}\n`);
+            invalid++;
+          }
+        }
+        stderr.write(`\n${valid} valid, ${invalid} invalid\n`);
+      } else if (sub === 'show') {
+        if (!subArg) {
+          stderr.write('Usage: /agents show <name>\n');
+          return true;
+        }
+        try {
+          const p = loadProfile(subArg);
+          if (!p) { stderr.write(`Profile '${subArg}' not found\n`); return true; }
+          stderr.write(`\n👤 ${p.name}\n`);
+          for (const [key, val] of Object.entries(p)) {
+            if (key === 'systemPrompt') { stderr.write(`  ${key}: (${val.length} chars)\n`); }
+            else { stderr.write(`  ${key}: ${JSON.stringify(val)}\n`); }
+          }
+        } catch (e) {
+          stderr.write(`\x1b[33mError: ${e.message}\x1b[0m\n`);
+        }
+      } else {
+        // Default: list all profiles
+        const profiles = listProfiles();
+        if (profiles.length === 0) {
+          stderr.write('No profiles found. Create one at ~/.claudia/agents/<name>.yml\n');
+          return true;
+        }
+        stderr.write('\n👤 Agent Profiles (~/.claudia/agents/)\n\n');
+        const maxName = Math.max(6, ...profiles.map(p => p.name.length));
+        stderr.write(`  ${'Name'.padEnd(maxName)}  Model              Description\n`);
+        stderr.write(`  ${''.padEnd(maxName, '─')}  ${''.padEnd(18, '─')}  ${''.padEnd(30, '─')}\n`);
+        for (const p of profiles) {
+          const model = (p.model || '-').slice(0, 18).padEnd(18);
+          const desc = (p.description || '-').slice(0, 50);
+          stderr.write(`  ${p.name.padEnd(maxName)}  ${model}  ${desc}\n`);
+        }
+        stderr.write(`\n${profiles.length} profiles. Commands: /agents validate, /agents show <name>\n`);
+      }
       return true;
     }
 
