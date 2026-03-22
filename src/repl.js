@@ -336,7 +336,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       console.log('Tokens: /tokens — show session token usage and context window stats');
       console.log('Plan: /plan — read-only mode (no write/edit/bash), /execute — back to normal');
       console.log('Effort: /effort <low|medium|high|max> — set reasoning effort, /effort — show current');
-      console.log('Agents: /agents — list profiles, /agents validate, /agents show <name>');
+      console.log('Agents: /agents — list profiles, /agents show|validate|create <name>');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
       console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
       return true;
@@ -547,6 +547,26 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           }
         }
         stderr.write(`\n${valid} valid, ${invalid} invalid\n`);
+      } else if (sub === 'create') {
+        if (!subArg) {
+          stderr.write('Usage: /agents create <name>\n');
+          return true;
+        }
+        const safeName = subArg.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+        const { existsSync: exists, writeFileSync: writeFs, mkdirSync: mkDir } = await import('fs');
+        const { join: joinPath } = await import('path');
+        const { homedir: home } = await import('os');
+        const dir = joinPath(home(), '.claudia', 'agents');
+        mkDir(dir, { recursive: true });
+        const filePath = joinPath(dir, `${safeName}.yml`);
+        if (exists(filePath)) {
+          stderr.write(`\x1b[33mProfile '${safeName}' already exists: ${filePath}\x1b[0m\n`);
+          return true;
+        }
+        const template = `# Agent profile: ${safeName}\nname: ${safeName}\ndescription: ""\nmodel: claude-opus-4.6\n# allowedTools: [read, glob, grep]\n# deniedTools: [agent]\nmaxSteps: 30\ntimeout: 60000\n# systemPrompt: |\n#   You are a specialized agent...\n`;
+        writeFs(filePath, template);
+        stderr.write(`\x1b[32m✅ Created: ${filePath}\x1b[0m\n`);
+        stderr.write('Edit the file to customize model, tools, and prompt.\n');
       } else if (sub === 'show') {
         if (!subArg) {
           stderr.write('Usage: /agents show <name>\n');
@@ -579,7 +599,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           const desc = (p.description || '-').slice(0, 50);
           stderr.write(`  ${p.name.padEnd(maxName)}  ${model}  ${desc}\n`);
         }
-        stderr.write(`\n${profiles.length} profiles. Commands: /agents validate, /agents show <name>\n`);
+        stderr.write(`\n${profiles.length} profiles. Commands: /agents validate, /agents show <name>, /agents create <name>\n`);
       }
       return true;
     }
