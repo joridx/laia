@@ -272,11 +272,13 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       });
       const text = result.text || '';
       if (streamed) {
-        if (streamBuf && text) {
-          // Erase the raw streamed text and re-render with ANSI formatting
+        if (streamBuf) {
+          // Erase the last streamed fragment and re-render it formatted
           const rawLines = streamBuf.split('\n').length;
-          // Move cursor up N lines, clear from cursor to end of screen
           process.stdout.write(`\x1b[${rawLines}F\x1b[0J`);
+        }
+        // Always render the full text with markdown formatting
+        if (text) {
           console.log(`\n${renderMarkdown(text)}\n`);
         } else {
           process.stdout.write('\n\n');
@@ -778,9 +780,11 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           });
           undoStack.commitTurn();
           if (streamed) {
-            if (streamBuf && result.text) {
+            if (streamBuf) {
               const rawLines = streamBuf.split('\n').length;
               process.stdout.write(`\x1b[${rawLines}F\x1b[0J`);
+            }
+            if (result.text) {
               console.log(`\n${renderMarkdown(result.text)}\n`);
             } else {
               process.stdout.write('\n\n');
