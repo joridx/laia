@@ -66,7 +66,7 @@
 | 1 | **Plan Mode** (`/plan`, `/execute`, `--plan`) | 4h | ✅ DONE (2026-03-22) |
 | 2 | **Subagents v2a** — per-agent model + allowedTools (YAML profiles) | 4h | ✅ DONE (2026-03-22) |
 | 3 | **Brain memory quality** — dedup + decay + auto-archive | 8h | ✅ DONE (2026-03-22) |
-| 4 | **CLI flags** — `--effort`, `--fork-session` | 4h | 📋 TODO |
+| 4 | **CLI flags** — `--effort`, `--fork` | 4h | ✅ DONE (2026-03-22) |
 | 5 | **Subagents v2b** — persistent agent memory (namespaced tags) | 6h | 📋 TODO |
 | 6 | **`/agents` command** — list/edit/validate profiles | 4-6h | 📋 TODO |
 
