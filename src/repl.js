@@ -3,7 +3,7 @@ import { stdin, stdout, stderr } from 'process';
 import { registerBuiltinTools, defaultRegistry } from './tools/index.js';
 import { runTurn, printStep } from './agent.js';
 import { createContext } from './context.js';
-import { loadFileCommands, expandCommand } from './commands/loader.js';
+import { loadFileCommands, expandCommand, listSkills, loadSkill } from './skills.js';
 import { getCopilotToken, getProviderToken } from './auth.js';
 import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@claude/providers';
 import { startBrain, stopBrain } from './brain/client.js';
@@ -21,7 +21,7 @@ import { loadProfile, listProfiles } from './profiles.js';
 import { normalizeEffort } from './config.js';
 
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/plan', '/execute', '/effort', '/fork', '/agents', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/plan', '/execute', '/effort', '/fork', '/agents', '/skills', '/exit', '/quit'];
 
 // --- Human-readable token count (e.g. 1234 → "1.2k", 1234567 → "1.2M") ---
 function formatTokenCount(n) {
@@ -337,6 +337,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       console.log('Plan: /plan — read-only mode (no write/edit/bash), /execute — back to normal');
       console.log('Effort: /effort <low|medium|high|max> — set reasoning effort, /effort — show current');
       console.log('Agents: /agents — list profiles, /agents show|validate|create <name>');
+      console.log('Skills: /skills — list all skills (v3 + legacy), /skills show <name>');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
       console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
       return true;
@@ -522,6 +523,52 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       const newId = randomBytes(8).toString('hex');
       context._sessionId = newId;
       stderr.write(`\x1b[32m🔀 Forked session: ${oldId.slice(0,8)}... → ${newId.slice(0,8)}...\x1b[0m\n`);
+      return true;
+    }
+
+    case 'skills': {
+      const sub = args.split(/\s+/)[0]?.toLowerCase() || '';
+      const subArg = args.split(/\s+/).slice(1).join(' ').trim();
+
+      if (sub === 'show') {
+        if (!subArg) { stderr.write('Usage: /skills show <name>\n'); return true; }
+        const skill = loadSkill(subArg, { force: true });
+        if (!skill) { stderr.write(`Skill '${subArg}' not found\n`); return true; }
+        stderr.write(`\n📦 ${skill.name} [${skill.source}]\n`);
+        stderr.write(`  Description: ${skill.description}\n`);
+        stderr.write(`  Schema: ${skill.schema}\n`);
+        stderr.write(`  Invocation: ${skill.invocation}\n`);
+        stderr.write(`  Context: ${skill.context}\n`);
+        stderr.write(`  Arguments: ${skill.arguments} ${skill.argumentHint ? `(${skill.argumentHint})` : ''}\n`);
+        if (skill.allowedTools.length) stderr.write(`  Allowed tools: ${skill.allowedTools.join(', ')}\n`);
+        if (skill.tags.length) stderr.write(`  Tags: ${skill.tags.join(', ')}\n`);
+        if (skill.skillDir) stderr.write(`  Directory: ${skill.skillDir}\n`);
+        stderr.write(`  Source: ${skill.sourceFile}\n`);
+        if (skill.warnings.length) {
+          stderr.write(`  ⚠️ Warnings: ${skill.warnings.join('; ')}\n`);
+        }
+        stderr.write(`  Body: ${skill.body.length} chars\n`);
+      } else {
+        // Default: list all skills
+        const skills = listSkills({ force: true });
+        if (skills.length === 0) {
+          stderr.write('No skills found.\n');
+          return true;
+        }
+        const v3Count = skills.filter(s => s.source === 'v3').length;
+        const legacyCount = skills.filter(s => s.source === 'legacy').length;
+        stderr.write(`\n📦 Skills (${v3Count} v3, ${legacyCount} legacy)\n\n`);
+        const maxName = Math.max(6, ...skills.map(s => s.name.length));
+        stderr.write(`  ${'Name'.padEnd(maxName)}  Source  Description\n`);
+        stderr.write(`  ${''.padEnd(maxName, '─')}  ${''.padEnd(6, '─')}  ${''.padEnd(40, '─')}\n`);
+        for (const s of skills.sort((a, b) => a.name.localeCompare(b.name))) {
+          const src = s.source.padEnd(6);
+          const desc = (s.description || '-').slice(0, 50);
+          const warn = s.warnings.length ? ' ⚠️' : '';
+          stderr.write(`  ${s.name.padEnd(maxName)}  ${src}  ${desc}${warn}\n`);
+        }
+        stderr.write(`\n${skills.length} skills. Commands: /skills show <name>\n`);
+      }
       return true;
     }
 
