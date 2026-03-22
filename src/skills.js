@@ -10,7 +10,7 @@ import { readdirSync, readFileSync, statSync, existsSync, mkdirSync } from 'fs';
 import { join, basename, resolve, relative, sep } from 'path';
 import { homedir } from 'os';
 
-const SKILLS_DIR = join(homedir(), '.claudia', 'skills');
+const SKILLS_DIR = join(homedir(), '.claude', 'skills');
 const LEGACY_DIRS = [
   join(homedir(), '.claude', 'commands'),
   join(homedir(), '.claudia', 'commands'),

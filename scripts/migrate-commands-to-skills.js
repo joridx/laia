@@ -7,7 +7,7 @@ import { join, basename } from 'path';
 import { homedir } from 'os';
 
 const COMMANDS_DIR = join(homedir(), '.claude', 'commands');
-const SKILLS_DIR = join(homedir(), '.claudia', 'skills');
+const SKILLS_DIR = join(homedir(), '.claude', 'skills');
 const SKIP = ['README.md', 'confluence.md.bak'];  // skip non-skill files
 
 // Parse existing frontmatter
