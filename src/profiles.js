@@ -12,6 +12,7 @@ const VALID_FIELDS = new Set([
   'name', 'description', 'model',
   'allowedTools', 'deniedTools',
   'maxSteps', 'timeout', 'systemPrompt',
+  'brain', 'memoryPrefetch', 'memoryPrefetchLimit',
 ]);
 
 const MAX_STEPS_CAP = 100;
@@ -192,6 +193,40 @@ function validate(profile, filePath, expectedName) {
   if (profile.allowedTools?.length && profile.deniedTools?.length) {
     throw new ProfileValidationError(`Cannot specify both allowedTools and deniedTools in ${filePath}`);
   }
+
+  // V2b: brain capability object
+  if (profile.brain !== undefined) {
+    if (typeof profile.brain !== 'object' || Array.isArray(profile.brain)) {
+      throw new ProfileValidationError(`'brain' must be an object {search, remember} in ${filePath}`);
+    }
+    for (const key of Object.keys(profile.brain)) {
+      if (!['search', 'remember'].includes(key)) {
+        throw new ProfileValidationError(`Unknown brain field '${key}' in ${filePath}`);
+      }
+      if (typeof profile.brain[key] !== 'boolean') {
+        throw new ProfileValidationError(`brain.${key} must be boolean in ${filePath}`);
+      }
+    }
+  }
+  // Defaults for brain
+  if (!profile.brain) profile.brain = { search: true, remember: false };
+  if (profile.brain.search === undefined) profile.brain.search = true;
+  if (profile.brain.remember === undefined) profile.brain.remember = false;
+
+  // V2b: memoryPrefetch
+  if (profile.memoryPrefetch !== undefined) {
+    if (!['none', 'topK'].includes(profile.memoryPrefetch)) {
+      throw new ProfileValidationError(`'memoryPrefetch' must be 'none' or 'topK' in ${filePath}`);
+    }
+  }
+  if (!profile.memoryPrefetch) profile.memoryPrefetch = 'none';
+  if (profile.memoryPrefetchLimit !== undefined) {
+    if (!Number.isFinite(profile.memoryPrefetchLimit) || !Number.isInteger(profile.memoryPrefetchLimit) || profile.memoryPrefetchLimit <= 0) {
+      throw new ProfileValidationError(`'memoryPrefetchLimit' must be a positive integer in ${filePath}`);
+    }
+    if (profile.memoryPrefetchLimit > 20) profile.memoryPrefetchLimit = 20;
+  }
+  if (!profile.memoryPrefetchLimit) profile.memoryPrefetchLimit = 5;
 
   return profile;
 }

@@ -104,7 +104,7 @@ Example: after implementing something, if asked to validate with Codex:
 - Do not expose secrets unless explicitly requested.${corpHint}${planModeHint}`;
 }
 
-export function buildWorkerSystemPrompt({ workerId, depth, workspaceRoot, fileContents = '', customPrompt }) {
+export function buildWorkerSystemPrompt({ workerId, depth, workspaceRoot, fileContents = '', customPrompt, profileName, prefetchedMemory }) {
   const now = new Date().toISOString();
   const BASE_SAFETY = `Complete the assigned task and return a CONCISE result. Do not ask clarifying questions.
 Do not add unsolicited explanations. Work only on what was asked.`;
@@ -115,6 +115,11 @@ Workspace root: ${workspaceRoot}`;
   const roleSection = customPrompt
     ? `## Role\n\n${customPrompt}`
     : 'You are a focused worker agent.';
+
+  // V2b: Agent memory hint
+  const agentMemoryHint = profileName
+    ? `\n\n## Agent Memory\nYou are agent profile "${profileName}". Your brain_remember calls are auto-tagged with "agent:${profileName}". Use brain_search to find learnings from your past runs.`
+    : '';
 
   return `${roleSection}
 
@@ -134,6 +139,6 @@ ${METADATA}
 
 1. Inspect before acting. Never guess file contents.
 2. Do exactly what was asked. No extra changes.
-3. Return a short summary of what was done or found.
-${fileContents ? `\n## Pre-loaded Files\n\n${fileContents}` : ''}`;
+3. Return a short summary of what was done or found.${agentMemoryHint}
+${fileContents ? `\n## Pre-loaded Files\n\n${fileContents}` : ''}${prefetchedMemory ? `\n\n## Prior Knowledge (agent-scoped, may be stale — verify before applying)\n\n${prefetchedMemory}` : ''}`;
 }

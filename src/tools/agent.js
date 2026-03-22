@@ -51,12 +51,36 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
     // Build injected file contents
     const fileContents = buildFileContents(files, config.workspaceRoot ?? process.cwd());
 
+    // V2b: Memory prefetch — inject agent-relevant learnings into worker context
+    let prefetchedMemory = '';
+    if (profile?.memoryPrefetch === 'topK' && profileName) {
+      try {
+        const searchQuery = prompt.slice(0, 200);
+        const limit = profile.memoryPrefetchLimit || 5;
+        const brainResult = await executeTool('brain_search', {
+          query: searchQuery,
+          agentContext: profileName,
+          limit,
+        });
+        if (brainResult && typeof brainResult === 'string' && brainResult.length > 10) {
+          // Truncate to avoid prompt bloat (max ~2000 chars)
+          prefetchedMemory = brainResult.slice(0, 2000);
+        } else if (brainResult?.text) {
+          prefetchedMemory = String(brainResult.text).slice(0, 2000);
+        }
+      } catch {
+        // Fail-open: prefetch failure should not block agent spawn
+      }
+    }
+
     // Worker system prompt — profile customPrompt augments, never replaces base safety
     const systemPrompt = buildWorkerSystemPrompt({
       workerId, depth: _depth + 1,
       workspaceRoot: config.workspaceRoot ?? process.cwd(),
       fileContents,
       customPrompt: profile?.systemPrompt,
+      profileName: profileName || null,
+      prefetchedMemory,
     });
 
     // Per-worker LLM client — provider-aware
@@ -82,6 +106,20 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
       if (!effectiveToolNames.has(name)) {
         return { error: true, message: `Tool '${name}' not allowed for this worker${profile ? ` (profile: ${profileName})` : ''}` };
       }
+
+      // V2b: Agent memory namespace injection
+      if (profileName) {
+        if (name === 'brain_remember') {
+          // Auto-tag with agent:<profile> + add agentProfile metadata
+          const existingTags = (args.tags || []).filter(t => !t.startsWith('agent:'));
+          args = { ...args, tags: [...existingTags, `agent:${profileName}`], agentProfile: profileName };
+        }
+        if (name === 'brain_search') {
+          // Pass agent context for boosted results
+          args = { ...args, agentContext: profileName };
+        }
+      }
+
       const allowed = await permCtx.checkPermission(name, args);
       if (!allowed) return { error: true, message: 'Worker permission denied' };
       if (name === 'agent') {
@@ -106,6 +144,14 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
       let workerTools = getToolSchemas()
         .filter(t => effectiveToolNames.has(t.name))
         .filter(t => t.name !== 'agent' || _depth + 1 < maxDepth);
+
+      // V2b: Remove brain tools based on profile capabilities
+      if (profile && !profile.brain?.remember) {
+        workerTools = workerTools.filter(t => t.name !== 'brain_remember');
+      }
+      if (profile && !profile.brain?.search) {
+        workerTools = workerTools.filter(t => t.name !== 'brain_search');
+      }
 
       const result = await Promise.race([
         runAgentTurnFn({
