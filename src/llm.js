@@ -50,7 +50,7 @@ export async function* parseSSEStream(body) {
 
 // --- HTTP layer ---
 
-export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 120_000, maxRetries = 3, providerId } = {}) {
+export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 300_000, maxRetries = 3, providerId } = {}) {
   if (typeof getToken !== 'function') throw new Error('getToken is required');
 
   // Resolve provider from model if not explicitly passed
@@ -302,7 +302,7 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
       transcript.push({ type: 'function_call', call_id: tc.callId, name: tc.name, arguments: JSON.stringify(tc.args) });
     }
 
-    const TOOL_TIMEOUT_MS = 20000;
+    const TOOL_TIMEOUT_MS = 60000;
 async function withTimeout(promise, ms, name, callId) {
   return Promise.race([
     promise,
