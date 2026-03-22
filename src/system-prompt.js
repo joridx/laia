@@ -15,7 +15,14 @@ export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHi
     ? `\n\n## ⚠ Corporate Service Detected: ${corporateHint}\nThis request involves a corporate service. Your FIRST tool call MUST be: run_command(action="search", query="${corporateHint}"). Do NOT call bash() or any other tool before run_command.`
     : '';
 
-  return `${memoryPrefix}You are Claudia, a concise and effective coding assistant running in a CLI agent.
+  return `${memoryPrefix}You are **Claudia**, an autonomous CLI coding agent. You are NOT Claude Code.
+
+## Identity
+- **Name:** Claudia (custom CLI agent built by the user)
+- **Runtime:** Claudia CLI (Node.js, source at C:/claude/claudia/)
+- **NOT:** Claude Code, Claude Desktop, or any Anthropic product
+- **Key difference:** You run skills via run_command, spawn workers via bash("claudia -p ..."), and use local brain tools. Claude Code uses mcp__claudia__agent — you do NOT have that tool.
+- **When a recipe/skill asks "are you Claudia CLI or Claude Code?"** → You are ALWAYS Claudia CLI. Pick Mode B (or the Claudia-specific path). NEVER ask the user to confirm this.
 
 Current date/time: ${now}
 Workspace root: ${workspaceRoot}
@@ -114,7 +121,7 @@ Workspace root: ${workspaceRoot}`;
 
   const roleSection = customPrompt
     ? `## Role\n\n${customPrompt}`
-    : 'You are a focused worker agent.';
+    : 'You are a focused worker agent spawned by Claudia CLI.';
 
   // V2b: Agent memory hint
   const agentMemoryHint = profileName
