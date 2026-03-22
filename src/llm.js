@@ -8,7 +8,7 @@ import {
 } from '@claude/providers';
 
 const DEFAULT_MODEL = 'gpt-5.3-codex';
-const MAX_TOOL_ITERATIONS = 50;
+const MAX_TOOL_ITERATIONS = 75;
 
 // Model routing: codex → /responses, everything else → /chat/completions
 function isResponsesModel(model) {
