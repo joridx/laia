@@ -70,7 +70,20 @@
 | 5 | **Subagents v2b** — persistent agent memory (namespaced tags) | 6h | 📋 TODO |
 | 6 | **`/agents` command** — list/edit/validate profiles | 4-6h | 📋 TODO |
 
-Deferred to V3+: hooks framework, path rules, code-intel, skills v2, channels, plugins.
+Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channels, plugins.
+
+---
+
+## 🔮 V3 — Skills System (planificat 2026-03-22)
+
+> Migrar de `~/.claude/commands/*.md` a `~/.claudia/skills/*/SKILL.md`.
+> Principi: "Claude-compatible, Claudia-opinionated". Document complet: `knowledge/tools/claudia-skills-v3-plan-2026-03-22.md`
+
+| Phase | Feature | Effort | Status |
+|-------|---------|--------|--------|
+| 1 | **Skill Loader** — discover, load, frontmatter, supporting files, /skills | 4h | 📋 TODO |
+| 2 | **Migration** — commands/*.md → skills/*/SKILL.md (simple script) | 2h | 📋 TODO |
+| 3 | **Auto-invoke + Fork** — invocation:both, context:fork, project-level | 6h | 🟡 DEFERRED |
 
 ---
 
