@@ -168,4 +168,16 @@ function parseSessionFile(filepath) {
   }
 }
 
+export function forkSession(nameOrIndex) {
+  const source = loadSession(nameOrIndex);
+  if (!source || source.error) return source;
+  return {
+    ...source,
+    sessionId: randomBytes(8).toString('hex'),
+    createdAt: new Date().toISOString(),
+    forkedFrom: source.sessionId,
+    forkedAt: new Date().toISOString(),
+  };
+}
+
 export { SESSIONS_DIR, AUTOSAVE_FILE, sanitizeName };

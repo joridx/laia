@@ -15,7 +15,16 @@ const DEFAULTS = {
   verbose: false,
 };
 
-export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, planMode } = {}) {
+// V2: Normalize effort level (low|medium|high|max → low|medium|high)
+const VALID_EFFORTS = { low: 'low', medium: 'medium', high: 'high', max: 'high' };
+export function normalizeEffort(input) {
+  if (!input) return null;
+  const key = String(input).toLowerCase().trim();
+  if (!VALID_EFFORTS[key]) throw new Error(`Invalid effort '${input}'. Valid: low, medium, high, max`);
+  return VALID_EFFORTS[key];
+}
+
+export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, planMode, effort } = {}) {
   let fileConfig = {};
   const configPath = join(homedir(), '.claudia', 'config.json');
   try {
@@ -33,5 +42,6 @@ export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, pl
     ...(swarm !== undefined ? { swarm } : {}),
     ...(autoCommit !== undefined ? { autoCommit } : {}),
     ...(planMode !== undefined ? { planMode } : {}),
+    ...(effort ? { effort: normalizeEffort(effort) } : {}),
   };
 }

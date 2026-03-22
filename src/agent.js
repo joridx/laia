@@ -20,7 +20,7 @@ export function createClient(config) {
   });
 }
 
-export async function runTurn({ input, config, logger, onStep, history = [], corporateHint, planMode = false } = {}) {
+export async function runTurn({ input, config, logger, onStep, history = [], corporateHint, planMode = false, effort } = {}) {
   const llmClient = createClient(config);
   const systemPrompt = buildSystemPrompt({
     workspaceRoot: config.workspaceRoot,
@@ -59,6 +59,7 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
       return dispatchTool(name, args, callId);
     },
     executeToolBatch,
+    effort,
     onStep: (step) => {
       logger.info('agent_step', step);
       onStep?.(step);

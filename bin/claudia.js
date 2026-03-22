@@ -5,7 +5,7 @@ import { runOneShot } from '../src/agent.js';
 import { createLogger } from '../src/logger.js';
 
 function parseArgv(argv) {
-  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false, plan: false };
+  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false, plan: false, effort: null, fork: null };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-p' || a === '--prompt') args.prompt = argv[++i];
@@ -18,6 +18,8 @@ function parseArgv(argv) {
     else if (a === '--mcp-stdout-policy') args.mcpStdoutPolicy = argv[++i];
     else if (a === '--auto-commit') args.autoCommit = true;
     else if (a === '--plan') args.plan = true;
+    else if (a === '--effort') args.effort = argv[++i];
+    else if (a === '--fork') args.fork = argv[++i];
     else if (a === '-v' || a === '--version') args.version = true;
     else if (!a.startsWith('-') && !args.prompt) args.prompt = a;
   }
@@ -44,6 +46,8 @@ Options:
                         Stdout safety policy in MCP mode (default: strict)
   --auto-commit           Enable git auto-commit after each turn
   --plan                Read-only plan mode (no write/edit/bash)
+  --effort <level>      Reasoning effort: low, medium, high, max (default: none)
+  --fork <name|id>      Fork a saved session (new ID, preserves history)
   --verbose             Verbose logging
   -h, --help            Show help
   -v, --version         Show version`);
@@ -56,7 +60,7 @@ if (args.version) {
   process.exit(0);
 }
 
-const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm, autoCommit: args.autoCommit, planMode: args.plan });
+const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm, autoCommit: args.autoCommit, planMode: args.plan, effort: args.effort });
 const logger = createLogger(config);
 
 if (args.mcp) {
@@ -65,5 +69,5 @@ if (args.mcp) {
 } else if (args.prompt) {
   await runOneShot({ prompt: args.prompt, config, logger, json: args.json });
 } else {
-  await runRepl({ config, logger, planMode: args.plan });
+  await runRepl({ config, logger, planMode: args.plan, forkSession: args.fork });
 }

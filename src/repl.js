@@ -11,14 +11,16 @@ import { setReadlineInterface } from './permissions.js';
 import { renderMarkdown } from './render.js';
 import { loadMemoryFiles } from './memory-files.js';
 import { createRouter, routeLabel, MODEL_IDS } from './router.js';
-import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteAutoSave } from './session.js';
+import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteAutoSave, forkSession as forkSessionFn } from './session.js';
 import { createAttachManager } from './attach.js';
 import { createAutoCommitter } from './git-commit.js';
 import { createUndoStack } from './undo.js';
 import { resolve as resolvePath } from 'path';
 
+import { normalizeEffort } from './config.js';
+
 // --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/plan', '/execute', '/exit', '/quit'];
+const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/plan', '/execute', '/effort', '/fork', '/exit', '/quit'];
 
 // --- Human-readable token count (e.g. 1234 → "1.2k", 1234567 → "1.2M") ---
 function formatTokenCount(n) {
@@ -55,9 +57,12 @@ function suggestFollowUps(text) {
   return s.slice(0, 3);
 }
 
-export async function runRepl({ config, logger, planMode: initialPlanMode = false }) {
+export async function runRepl({ config, logger, planMode: initialPlanMode = false, forkSession: forkTarget = null }) {
   // Plan mode state (togglable via /plan and /execute)
   let planMode = initialPlanMode || config.planMode || false;
+
+  // V2: Effort state (togglable via /effort)
+  let effort = config.effort || null;
   // Start brain MCP server
   stderr.write('\x1b[2m[brain] Starting MCP server...\x1b[0m\n');
   try {
@@ -129,6 +134,20 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     selectedSuggestion = -1;
   }
 
+  // V2: --fork startup: load session, assign new ID, skip autosave
+  if (forkTarget) {
+    const forked = forkSessionFn(forkTarget);
+    if (forked && !forked.error) {
+      const ok = context.deserialize(forked);
+      if (ok) {
+        stderr.write(`\x1b[32m🔀 Forked from ${forked.forkedFrom?.slice(0,8) ?? '?'} → ${forked.sessionId?.slice(0,8) ?? '?'} (${forked.turns?.length ?? 0} turns)\x1b[0m\n`);
+      } else {
+        stderr.write(`\x1b[33m⚠ Failed to fork session\x1b[0m\n`);
+      }
+    } else {
+      stderr.write(`\x1b[33m⚠ Session not found: ${forkTarget}\x1b[0m\n`);
+    }
+  } else {
   // Try to restore autosave on startup
   const autosaveData = loadAutoSave();
   if (autosaveData && !autosaveData.error && autosaveData.turns?.length > 0) {
@@ -146,6 +165,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       deleteAutoSave();
     }
   }
+  } // end of fork/autosave if-else
 
   // Session metadata for saves
   const sessionMeta = {
@@ -184,7 +204,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
 
     // Slash commands
     if (input.startsWith('/')) {
-      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, { getPlanMode: () => planMode, setPlanMode: (v) => { planMode = v; updatePrompt(); } });
+      const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, { getPlanMode: () => planMode, setPlanMode: (v) => { planMode = v; updatePrompt(); } }, { getEffort: () => effort, setEffort: (v) => { effort = v; } });
       if (handled) { rl.prompt(); continue; }
     }
 
@@ -227,6 +247,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         history: context.getHistory(),
         corporateHint,
         planMode,
+        effort,
         onStep: (step) => {
           if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
           else {
@@ -300,7 +321,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   }
 }
 
-async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, planCtrl = {}) {
+async function handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, planCtrl = {}, effortCtrl = {}) {
   const spaceIdx = input.indexOf(' ');
   const name = (spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx)).toLowerCase();
   const args = spaceIdx === -1 ? '' : input.slice(spaceIdx + 1).trim();
@@ -313,6 +334,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       console.log('Undo: /undo — revert files changed in last turn (up to 10 turns)');
       console.log('Tokens: /tokens — show session token usage and context window stats');
       console.log('Plan: /plan — read-only mode (no write/edit/bash), /execute — back to normal');
+      console.log('Effort: /effort <low|medium|high|max> — set reasoning effort, /effort — show current');
       console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
       console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
       return true;
@@ -465,6 +487,39 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
         planCtrl.setPlanMode?.(false);
         stderr.write('\x1b[32m🔓 Execute mode ON — all tools available\x1b[0m\n');
       }
+      return true;
+    }
+
+    case 'effort': {
+      if (!args) {
+        const current = effortCtrl.getEffort?.() || 'default (none)';
+        stderr.write(`🧠 Current effort: ${current}\n`);
+        stderr.write('Usage: /effort <low|medium|high|max>\n');
+      } else {
+        try {
+          const normalized = normalizeEffort(args);
+          effortCtrl.setEffort?.(normalized);
+          stderr.write(`🧠 Effort set to: ${normalized}\n`);
+        } catch (e) {
+          stderr.write(`\x1b[33m${e.message}\x1b[0m\n`);
+        }
+      }
+      return true;
+    }
+
+    case 'fork': {
+      // Save current state first
+      const serialized = context.serialize();
+      if (serialized?.turns?.length > 0) {
+        const savedPath = saveSession(serialized, { model: config.model, workspaceRoot: config.workspaceRoot });
+        stderr.write(`\x1b[2m[session] Pre-fork saved: ${savedPath}\x1b[0m\n`);
+      }
+      // Fork: assign new session ID
+      const { randomBytes } = await import('crypto');
+      const oldId = context._sessionId || 'unknown';
+      const newId = randomBytes(8).toString('hex');
+      context._sessionId = newId;
+      stderr.write(`\x1b[32m🔀 Forked session: ${oldId.slice(0,8)}... → ${newId.slice(0,8)}...\x1b[0m\n`);
       return true;
     }
 

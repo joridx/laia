@@ -216,13 +216,13 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
 
 // --- Unified agent turn (routes to correct endpoint) ---
 
-export async function runAgentTurn({ client, systemPrompt, userInput, history = [], tools = [], executeTool, executeToolBatch, onStep, maxIterations = MAX_TOOL_ITERATIONS, signal } = {}) {
+export async function runAgentTurn({ client, systemPrompt, userInput, history = [], tools = [], executeTool, executeToolBatch, onStep, maxIterations = MAX_TOOL_ITERATIONS, signal, effort } = {}) {
   const model = client.model ?? DEFAULT_MODEL;
 
   if (isResponsesModel(model)) {
-    return runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal });
+    return runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal, effort });
   } else {
-    return runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal });
+    return runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal, effort });
   }
 }
 
@@ -257,15 +257,19 @@ async function runToolsBatch(toolCalls, executeToolBatch, onStep) {
 
 // --- /responses endpoint (codex models) ---
 
-async function runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal }) {
+async function runResponsesTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal, effort }) {
   const transcript = buildResponsesInput(systemPrompt, userInput, history);
   const toolsDef = tools.length ? tools : undefined;
   // Canonical chat-format turn messages collected for context storage
   const turnChat = [{ role: 'user', content: userInputText(userInput) }];
 
+  // V2: Effort param for /responses → reasoning.effort
+  const effortParam = effort ? { reasoning: { effort } } : {};
+
   let response = await client.streamingApiCall('/responses', {
     model, input: transcript, tools: toolsDef,
     ...(tools.length ? { tool_choice: 'auto' } : {}),
+    ...effortParam,
   }, { onChunk: (chunk) => onStep?.({ type: 'token', text: chunk.delta }), signal });
 
   for (let i = 0; i <= maxIterations; i++) {
@@ -336,7 +340,7 @@ const DONE_TOOL = {
   },
 };
 
-async function runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal }) {
+async function runChatTurn({ client, model, systemPrompt, userInput, history, tools, executeTool, executeToolBatch, onStep, maxIterations, signal, effort }) {
   const messages = buildChatMessages(systemPrompt, userInput, history);
   // Track where the current turn starts (after system + history, at the user message)
   const turnStartIdx = messages.length - 1;
@@ -361,7 +365,7 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
 
   async function chatCall(overrideToolChoice, chunkCb = onChunk) {
     const tc = overrideToolChoice ?? defaultToolChoice;
-    const body = { model, messages, tools: chatTools, ...(chatTools ? { tool_choice: tc } : {}) };
+    const body = { model, messages, tools: chatTools, ...(chatTools ? { tool_choice: tc } : {}), ...(effort ? { reasoning_effort: effort } : {}) };
     if (chunkCb) {
       return client.streamingApiCall('/chat/completions', body, { onChunk: chunkCb, signal });
     } else {
