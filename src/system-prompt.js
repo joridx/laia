@@ -104,15 +104,25 @@ Example: after implementing something, if asked to validate with Codex:
 - Do not expose secrets unless explicitly requested.${corpHint}${planModeHint}`;
 }
 
-export function buildWorkerSystemPrompt({ workerId, depth, workspaceRoot, fileContents = '' }) {
+export function buildWorkerSystemPrompt({ workerId, depth, workspaceRoot, fileContents = '', customPrompt }) {
   const now = new Date().toISOString();
-  return `You are a focused worker agent (ID: ${workerId}, depth: ${depth}).
-
+  const BASE_SAFETY = `Complete the assigned task and return a CONCISE result. Do not ask clarifying questions.
+Do not add unsolicited explanations. Work only on what was asked.`;
+  const METADATA = `Worker ID: ${workerId} | Depth: ${depth}
 Current date/time: ${now}
-Workspace root: ${workspaceRoot}
+Workspace root: ${workspaceRoot}`;
 
-Complete the assigned task and return a CONCISE result. Do not ask clarifying questions.
-Do not add unsolicited explanations. Work only on what was asked.
+  const roleSection = customPrompt
+    ? `## Role\n\n${customPrompt}`
+    : 'You are a focused worker agent.';
+
+  return `${roleSection}
+
+## Rules
+
+${BASE_SAFETY}
+
+${METADATA}
 
 ## Tools
 
@@ -120,7 +130,7 @@ Do not add unsolicited explanations. Work only on what was asked.
 - bash(command), glob(pattern), grep(query, path?)
 - git_diff(), git_status(), git_log()
 
-## Rules
+## Guidelines
 
 1. Inspect before acting. Never guess file contents.
 2. Do exactly what was asked. No extra changes.

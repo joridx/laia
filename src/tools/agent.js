@@ -8,40 +8,58 @@ import { createLLMClient, runAgentTurn as _runAgentTurnDefault } from '../llm.js
 import { getCopilotToken, getProviderToken } from '../auth.js';
 import { detectProvider } from '@claude/providers';
 import { buildWorkerSystemPrompt } from '../system-prompt.js';
-import { executeTool, getToolSchemas, registerTool } from './index.js';
+import { executeTool, getToolSchemas, getToolNames, registerTool } from './index.js';
 import { createPermissionContext } from '../permissions.js';
+import { loadProfile, resolveToolSet } from '../profiles.js';
 
 const MAX_FILE_BYTES = 100_000;
 const MAX_TOTAL_BYTES = 500_000;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_DEPTH = 3;
+const MAX_STEPS_CAP = 100;
 
 let workerCounter = 0;
 
 export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIMEOUT_MS, maxDepth = DEFAULT_MAX_DEPTH } = {}) {
   const runAgentTurnFn = _runAgentTurn ?? _runAgentTurnDefault;
 
-  async function execute({ prompt, files = [], model, timeout, allowedTools, _depth = 0, _signal } = {}) {
+  async function execute({ prompt, files = [], model, timeout, allowedTools, profile: profileName, _depth = 0, _signal } = {}) {
     // Recursion guard
     if (_depth >= maxDepth) {
       return { success: false, error: `max recursion depth (${maxDepth}) exceeded`, workerId: 'blocked' };
     }
 
+    // Load profile if specified
+    let profile = null;
+    if (profileName) {
+      try {
+        profile = loadProfile(profileName);
+        if (!profile) return { success: false, error: `Profile '${profileName}' not found in ~/.claudia/agents/`, workerId: 'blocked' };
+      } catch (e) {
+        return { success: false, error: e.message, workerId: 'blocked' };
+      }
+    }
+
     const workerId = `worker-${++workerCounter}`;
-    const effectiveTimeout = timeout ?? timeoutMs;
+    const effectiveTimeout = timeout ?? profile?.timeout ?? timeoutMs;
+    const effectiveModel = model ?? profile?.model ?? config.model;
+    const effectiveMaxSteps = Math.min(
+      profile?.maxSteps ?? MAX_STEPS_CAP,
+      MAX_STEPS_CAP
+    );
 
     // Build injected file contents
     const fileContents = buildFileContents(files, config.workspaceRoot ?? process.cwd());
 
-    // Worker system prompt (focused, no REPL/brain/session instructions)
+    // Worker system prompt — profile customPrompt augments, never replaces base safety
     const systemPrompt = buildWorkerSystemPrompt({
       workerId, depth: _depth + 1,
       workspaceRoot: config.workspaceRoot ?? process.cwd(),
       fileContents,
+      customPrompt: profile?.systemPrompt,
     });
 
     // Per-worker LLM client — provider-aware
-    const effectiveModel = model ?? config.model;
     const { providerId } = detectProvider(effectiveModel);
     const client = createLLMClient({
       getToken: () => getProviderToken(providerId),
@@ -53,10 +71,16 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
     // Workers never prompt interactively — autoApprove is by design, not by omission.
     const permCtx = createPermissionContext({ autoApprove: true });
 
+    // Resolve tool set: profile + inline overrides
+    const baseToolNames = getToolNames();
+    const resolvedNames = resolveToolSet(baseToolNames, profile, { allowedTools });
+    const effectiveToolNames = new Set(resolvedNames);
+
     const workerExecuteTool = async (name, args, callId) => {
-      // Enforce allowedTools at execution level too (defense in depth)
-      if (allowedTools?.length && !allowedTools.includes(name) && name !== 'agent') {
-        return { error: true, message: `Tool '${name}' not in allowedTools for this worker` };
+      // Enforce tool restrictions at execution level (defense in depth)
+      // Note: 'agent' is handled by depth guard in tool list building, not here
+      if (!effectiveToolNames.has(name)) {
+        return { error: true, message: `Tool '${name}' not allowed for this worker${profile ? ` (profile: ${profileName})` : ''}` };
       }
       const allowed = await permCtx.checkPermission(name, args);
       if (!allowed) return { error: true, message: 'Worker permission denied' };
@@ -78,13 +102,10 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
     });
 
     try {
-      // Build tool list: apply allowedTools filter, then depth guard for agent recursion
-      let workerTools = getToolSchemas();
-      if (allowedTools?.length) {
-        const allowed = new Set(allowedTools);
-        workerTools = workerTools.filter(t => allowed.has(t.name));
-      }
-      workerTools = workerTools.filter(t => t.name !== 'agent' || _depth + 1 < maxDepth);
+      // Build tool schemas from resolved set, then depth guard
+      let workerTools = getToolSchemas()
+        .filter(t => effectiveToolNames.has(t.name))
+        .filter(t => t.name !== 'agent' || _depth + 1 < maxDepth);
 
       const result = await Promise.race([
         runAgentTurnFn({
@@ -95,6 +116,7 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
           tools: workerTools,
           executeTool: workerExecuteTool,
           signal: controller.signal,
+          maxIterations: effectiveMaxSteps,
           onStep: (step) => {
             // Workers MUST NOT write to stdout (corrupts MCP JSON-RPC protocol)
             if (step.type === 'tool_call') {
@@ -129,6 +151,7 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
       type: 'object',
       properties: {
         prompt: { type: 'string', description: 'Task description and instructions for the worker' },
+        profile: { type: 'string', description: 'Named agent profile from ~/.claudia/agents/<name>.yml (overrides model, tools, timeout, prompt)' },
         files: {
           type: 'array',
           items: { type: 'string' },
