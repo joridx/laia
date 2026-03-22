@@ -754,11 +754,18 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           context.addUser(expanded);
           undoStack.startTurn();
           let streamed = false;
+          let streamBuf = '';
           const result = await runTurn({
             input: expanded, config, logger, history: context.getHistory(),
             onStep: (step) => {
-              if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
-              else {
+              if (step.type === 'token') {
+                streamed = true;
+                streamBuf += step.text;
+                process.stdout.write(step.text);
+              } else {
+                if (step.type === 'tool_call') {
+                  streamBuf = ''; // reset — tool output follows
+                }
                 if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
                   autoCommitter.trackFile(step.result.path);
                 }
@@ -771,7 +778,13 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           });
           undoStack.commitTurn();
           if (streamed) {
-            process.stdout.write('\n\n');
+            if (streamBuf && result.text) {
+              const rawLines = streamBuf.split('\n').length;
+              process.stdout.write(`\x1b[${rawLines}F\x1b[0J`);
+              console.log(`\n${renderMarkdown(result.text)}\n`);
+            } else {
+              process.stdout.write('\n\n');
+            }
           } else if (result.text) {
             console.log(`\n${renderMarkdown(result.text)}\n`);
           }
