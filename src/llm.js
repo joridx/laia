@@ -104,7 +104,10 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
     return withRetries(async (attempt) => {
       const token = await getToken({ attempt });
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      // Reset timer on each SSE chunk (keep-alive). This prevents abort during
+      // long-running streaming responses where chunks arrive steadily.
+      let timer = setTimeout(() => controller.abort(), timeoutMs);
+      const resetTimer = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), timeoutMs); };
       const signal = externalSignal
         ? AbortSignal.any([controller.signal, externalSignal])
         : controller.signal;
@@ -149,6 +152,7 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 1
         }
 
         for await (const event of parseSSEStream(res.body)) {
+          resetTimer();  // keep-alive: reset abort timer on each SSE chunk
           if (endpoint === '/responses' || endpoint === 'responses') {
             if (event.type === 'response.output_text.delta') {
               partialText += event.delta ?? '';
