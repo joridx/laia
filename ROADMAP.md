@@ -82,7 +82,7 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | Phase | Feature | Effort | Status |
 |-------|---------|--------|--------|
 | 1 | **Skill Loader** — discover, load, frontmatter, supporting files, /skills | 4h | ✅ DONE (2026-03-22) |
-| 2 | **Migration** — commands/*.md → skills/*/SKILL.md (simple script) | 2h | 📋 TODO |
+| 2 | **Migration** — commands/*.md → skills/*/SKILL.md (simple script) | 2h | ✅ DONE (2026-03-22) |
 | 3 | **Auto-invoke + Fork** — invocation:both, context:fork, project-level | 6h | 🟡 DEFERRED |
 
 ---
