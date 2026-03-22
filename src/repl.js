@@ -222,6 +222,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       }
 
       let streamed = false;
+      let streamBuf = '';
       // Prepend attached files to input for LLM context
       const ctx = attachManager.buildContext();
       let llmInput;
@@ -250,8 +251,14 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         planMode,
         effort,
         onStep: (step) => {
-          if (step.type === 'token') { streamed = true; process.stdout.write(step.text); }
-          else {
+          if (step.type === 'token') {
+            streamed = true;
+            streamBuf += step.text;
+            process.stdout.write(step.text);
+          } else {
+            if (step.type === 'tool_call') {
+              streamBuf = ''; // reset — tool output follows, can't erase past this
+            }
             // Track files modified by write/edit for auto-commit + undo
             if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
               autoCommitter.trackFile(step.result.path);
@@ -265,7 +272,15 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       });
       const text = result.text || '';
       if (streamed) {
-        process.stdout.write('\n\n');
+        if (streamBuf && text) {
+          // Erase the raw streamed text and re-render with ANSI formatting
+          const rawLines = streamBuf.split('\n').length;
+          // Move cursor up N lines, clear from cursor to end of screen
+          process.stdout.write(`\x1b[${rawLines}F\x1b[0J`);
+          console.log(`\n${renderMarkdown(text)}\n`);
+        } else {
+          process.stdout.write('\n\n');
+        }
       } else if (text) {
         console.log(`\n${renderMarkdown(text)}\n`);
       } else {
