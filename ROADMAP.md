@@ -65,7 +65,7 @@
 |---|---------|--------|--------|
 | 1 | **Plan Mode** (`/plan`, `/execute`, `--plan`) | 4h | ✅ DONE (2026-03-22) |
 | 2 | **Subagents v2a** — per-agent model + allowedTools (YAML profiles) | 4h | ✅ DONE (2026-03-22) |
-| 3 | **Brain memory quality** — dedup + decay + auto-archive | 8h | 📋 TODO |
+| 3 | **Brain memory quality** — dedup + decay + auto-archive | 8h | ✅ DONE (2026-03-22) |
 | 4 | **CLI flags** — `--effort`, `--fork-session` | 4h | 📋 TODO |
 | 5 | **Subagents v2b** — persistent agent memory (namespaced tags) | 6h | 📋 TODO |
 | 6 | **`/agents` command** — list/edit/validate profiles | 4-6h | 📋 TODO |
@@ -120,3 +120,4 @@ Deferred to V3+: hooks framework, path rules, code-intel, skills v2, channels, p
 | 2026-03-21 | +4 | **`/briefing` daily briefing skill** (7 parallel workers). **Parallel agents fix** (3 Copilot streaming bugs). **V1 Feature Complete** declared after Codex review. |
 | 2026-03-22 | +1 | **Plan Mode** (`/plan`, `/execute`, `--plan`). Dual enforcement (schema + dispatch). Reviewed by Codex. V2 roadmap defined (6 items, ~30h). |
 | 2026-03-22 | +1 | **Agent Profiles V2a** — YAML profiles (`~/.claudia/agents/`), resolveToolSet, customPrompt, maxSteps cap. 3 example profiles. Reviewed by Codex (3 rounds). |
+| 2026-03-22 | +1 | **Brain Memory Quality V2** — type-aware idle decay, cold tier, dedup tuning (0.70→0.65), brain_health dashboard with grade. Production: 1233 all-active → 484 active + 281 stale + 154 cold + 247 fading. Reviewed by Codex (3 rounds). |
