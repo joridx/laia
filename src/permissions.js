@@ -1,10 +1,10 @@
 // 3-tier permission system
 // Tier 1 (auto): read, glob, grep, brain_search, brain_get_context, run_command — always allowed
-// Tier 2 (session): write, edit, brain_remember, bash — ask once per session, then remember
+// Tier 2 (session): write, edit, brain_remember, bash, agent — ask once per session, then remember
 // Tier 3 (confirm): (reserved for future high-risk tools)
 
 const AUTO_ALLOW = new Set(['read', 'glob', 'grep', 'brain_search', 'brain_get_context', 'run_command', 'git_diff', 'git_status', 'git_log']);
-const SESSION_ALLOW = new Set(['write', 'edit', 'brain_remember', 'bash']);
+const SESSION_ALLOW = new Set(['write', 'edit', 'brain_remember', 'bash', 'agent']);
 
 function formatToolCall(name, args) {
   if (name === 'bash') return `bash: ${args?.command ?? '(unknown)'}`;
@@ -57,30 +57,41 @@ export function createPermissionContext({ autoApprove = false } = {}) {
   const sessionApproved = new Set();
   let autoApproveAll = autoApprove;
   let rlInstance = null;
+  // Serializes concurrent permission prompts so only one stdin prompt is active at a time.
+  // Each call chains onto the tail; rechecks autoApproveAll/sessionApproved after queuing
+  // so an 'a' answer on the first prompt auto-approves all queued ones.
+  let promptQueue = Promise.resolve();
 
   return {
     setAutoApprove(enabled) { autoApproveAll = enabled; },
     setReadlineInterface(rl) { rlInstance = rl; },
     async checkPermission(toolName, args) {
+      // Fast-path: no prompting needed
       if (autoApproveAll) return true;
       if (AUTO_ALLOW.has(toolName)) return true;
       if (sessionApproved.has(toolName)) return true;
 
-      if (SESSION_ALLOW.has(toolName)) {
-        const result = await askUser(`Allow tool "${toolName}" for this session?`, rlInstance);
-        if (result === 'all') { autoApproveAll = true; return true; }
-        if (result) sessionApproved.add(toolName);
-        return !!result;
-      }
+      // Queue the prompt — recheck state after waiting in case a prior prompt set autoApproveAll
+      const queued = promptQueue.then(async () => {
+        if (autoApproveAll) return true;
+        if (sessionApproved.has(toolName)) return true;
 
-      // Tier 3: always confirm (press 'a' to approve all for session)
-      const desc = formatToolCall(toolName, args);
-      const result = await askUser(`Execute ${desc}?`, rlInstance);
-      if (result === 'all') {
-        sessionApproved.add(toolName);
-        return true;
-      }
-      return result === true;
+        if (SESSION_ALLOW.has(toolName)) {
+          const result = await askUser(`Allow tool "${toolName}" for this session?`, rlInstance);
+          if (result === 'all') { autoApproveAll = true; return true; }
+          if (result) sessionApproved.add(toolName);
+          return !!result;
+        }
+
+        // Tier 3: always confirm (press 'a' to approve all for session)
+        const desc = formatToolCall(toolName, args);
+        const result = await askUser(`Execute ${desc}?`, rlInstance);
+        if (result === 'all') { sessionApproved.add(toolName); return true; }
+        return result === true;
+      }).catch(() => false); // fail closed; keeps chain alive on unexpected errors
+
+      promptQueue = queued.then(() => {}, () => {});
+      return queued;
     },
   };
 }
