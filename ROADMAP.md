@@ -76,8 +76,9 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 
 ## 🔮 V3 — Skills System (planificat 2026-03-22)
 
-> Migrar de `~/.claude/commands/*.md` a `~/.claudia/skills/*/SKILL.md`.
-> Principi: "Claude-compatible, Claudia-opinionated". Document complet: `knowledge/tools/claudia-skills-v3-plan-2026-03-22.md`
+> Migrar de `~/.claude/commands/*.md` a `~/.claude/skills/*/SKILL.md`.
+> Principi: "Claude-compatible, Claudia-opinionated". Compatible amb Claude Code natiu.
+> Document complet: `knowledge/tools/claudia-skills-v3-plan-2026-03-22.md`
 
 | Phase | Feature | Effort | Status |
 |-------|---------|--------|--------|
@@ -113,7 +114,7 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | Fitxers src/ | 32 (20 core + 11 tools + 1 shared pkg) |
 | Tools LLM | 14 (read, write, edit, bash, glob, grep, brain×3, run_command, git×3, agent) |
 | LOC (src/) | ~4400 |
-| Skills | 35 (`~/.claude/commands/`) |
+| Skills | 36 (`~/.claude/skills/*/SKILL.md`) — compatible Claude Code + Claudia |
 | Dependències extra | 2 (`fast-glob`, `@modelcontextprotocol/sdk`) |
 | Node.js | 24+ (ESM) |
 
