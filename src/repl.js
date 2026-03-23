@@ -178,20 +178,25 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
 
   // --- Esc key interrupt support ---
   let turnAbort = null;  // AbortController for current turn
+  let stopSpinnerRef = null;  // reference to current turn's stopSpinner for immediate cleanup
+  function onEscKeypress(_ch, key) {
+    if (key && key.name === 'escape' && turnAbort && !turnAbort.signal.aborted) {
+      turnAbort.abort();
+      if (stopSpinnerRef) stopSpinnerRef();  // immediate spinner cleanup
+      stderr.write('\n\x1b[33m⏸  Interrupted (Esc). Waiting for your input.\x1b[0m\n');
+    }
+  }
   if (stdin.isTTY) {
     emitKeypressEvents(stdin, rl);
-    stdin.on('keypress', (_ch, key) => {
-      if (key && key.name === 'escape' && turnAbort) {
-        turnAbort.abort();
-        stderr.write('\n\x1b[33m⏸  Interrupted (Esc). Waiting for your input.\x1b[0m\n');
-      }
-    });
+    stdin.on('keypress', onEscKeypress);
   }
 
   printBanner(config, planMode);
   rl.prompt();
 
   rl.on('close', async () => {
+    // Clean up keypress listener
+    if (stdin.isTTY) stdin.off('keypress', onEscKeypress);
     // Auto-save on exit if there are turns
     if (context.turnCount() > 0) {
       try {
@@ -249,6 +254,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       function stopSpinner() {
         if (spinnerTimer) { clearInterval(spinnerTimer); spinnerTimer = null; stderr.write('\r\x1b[0K'); }
       }
+      stopSpinnerRef = stopSpinner;  // expose to Esc handler
       // Prepend attached files to input for LLM context
       const ctx = attachManager.buildContext();
       let llmInput;
@@ -345,7 +351,8 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m · Σ${totalStr}]\x1b[0m\n`);
       }
     } catch (err) {
-      if (err.name === 'AbortError' || turnAbort?.signal?.aborted) {
+      const isAbort = err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || turnAbort?.signal?.aborted;
+      if (isAbort) {
         stopSpinner();
         // Don't log abort as error — user intentionally interrupted
       } else {
@@ -357,6 +364,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       }
     } finally {
       turnAbort = null;
+      stopSpinnerRef = null;
     }
 
     rl.prompt();
