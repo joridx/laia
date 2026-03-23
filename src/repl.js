@@ -16,6 +16,7 @@ import { createAttachManager } from './attach.js';
 import { createAutoCommitter } from './git-commit.js';
 import { createUndoStack } from './undo.js';
 import { resolve as resolvePath } from 'path';
+import { emitKeypressEvents } from 'readline';
 
 import { loadProfile, listProfiles } from './profiles.js';
 import { normalizeEffort } from './config.js';
@@ -175,6 +176,18 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     workspaceRoot: config.workspaceRoot,
   };
 
+  // --- Esc key interrupt support ---
+  let turnAbort = null;  // AbortController for current turn
+  if (stdin.isTTY) {
+    emitKeypressEvents(stdin, rl);
+    stdin.on('keypress', (_ch, key) => {
+      if (key && key.name === 'escape' && turnAbort) {
+        turnAbort.abort();
+        stderr.write('\n\x1b[33m⏸  Interrupted (Esc). Waiting for your input.\x1b[0m\n');
+      }
+    });
+  }
+
   printBanner(config, planMode);
   rl.prompt();
 
@@ -255,6 +268,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       if (context.needsCompaction()) context.compact();
       undoStack.startTurn();
 
+      turnAbort = new AbortController();
       const result = await runTurn({
         input: llmInput,
         config: effectiveConfig,
@@ -263,6 +277,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         corporateHint,
         planMode,
         effort,
+        signal: turnAbort.signal,
         onStep: (step) => {
           if (step.type === 'token') {
             streamed = true;
@@ -330,11 +345,18 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m · Σ${totalStr}]\x1b[0m\n`);
       }
     } catch (err) {
-      // Structured error reporting
-      logger.error('turn_error', { error: err.message, full: err.stack, input });
-      // Surface error to user as visible message
-      stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
-      stderr.write(`\x1b[33m(Turn aborted due to error. Check logs for details.)\x1b[0m\n`);
+      if (err.name === 'AbortError' || turnAbort?.signal?.aborted) {
+        stopSpinner();
+        // Don't log abort as error — user intentionally interrupted
+      } else {
+        // Structured error reporting
+        logger.error('turn_error', { error: err.message, full: err.stack, input });
+        // Surface error to user as visible message
+        stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
+        stderr.write(`\x1b[33m(Turn aborted due to error. Check logs for details.)\x1b[0m\n`);
+      }
+    } finally {
+      turnAbort = null;
     }
 
     rl.prompt();
