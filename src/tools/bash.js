@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { defaultRegistry } from './index.js';
+import { compactBashOutput } from './bash-compact.js';
 
 // Find Git Bash on Windows
 function findBashShell() {
@@ -45,13 +46,18 @@ export function registerBashTool(config, registry = defaultRegistry) {
           opts.shell = true;
         }
 
-        const stdout = execSync(command, opts);
-        return { exitCode: 0, stdout: stdout.substring(0, 10000) };
+        const rawStdout = execSync(command, opts);
+        const compact = compactBashOutput(rawStdout);
+        return { exitCode: 0, stdout: compact.stdout, ...(compact.rawFile && { rawFile: compact.rawFile }) };
       } catch (err) {
+        const rawStdout = err.stdout ?? '';
+        const rawStderr = err.stderr ?? '';
+        const compact = compactBashOutput(rawStdout, rawStderr);
         return {
           exitCode: err.status ?? 1,
-          stdout: (err.stdout ?? '').substring(0, 5000),
-          stderr: (err.stderr ?? '').substring(0, 5000),
+          stdout: compact.stdout,
+          stderr: compact.stderr,
+          ...(compact.rawFile && { rawFile: compact.rawFile }),
         };
       }
     },

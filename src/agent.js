@@ -56,7 +56,14 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
       if (blockedTools?.has(name)) return { error: true, message: `Tool '${name}' is disabled in plan mode` };
       const allowed = await checkPermission(name, args);
       if (!allowed) throw new Error('User denied permission');
-      return dispatchTool(name, args, callId);
+      const t0 = Date.now();
+      const result = await dispatchTool(name, args, callId);
+      const durationMs = Date.now() - t0;
+      // Log tool output stats for context consumption analysis (lightweight: use .length on known string fields)
+      const bytesOut = (result.stdout?.length || 0) + (result.stderr?.length || 0) + (result.error ? 100 : 0);
+      const bytesIn = JSON.stringify(args).length;
+      logger.logToolStats?.({ tool: name, bytesIn, bytesOut, truncated: !!result.rawFile, rawFile: result.rawFile, exitCode: result.exitCode, durationMs });
+      return result;
     },
     executeToolBatch,
     effort,
