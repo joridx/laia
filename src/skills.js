@@ -303,12 +303,18 @@ export function expandCommand(command, args) {
 const USER_PLACEHOLDER_RE = /\{\{user\.([a-z_]+)\}\}/g;
 
 function replaceUserPlaceholders(text) {
-  if (!USER_PLACEHOLDER_RE.test(text)) return text;
+  if (!text.includes('{{user.')) return text;
   const profile = loadUserProfile();
-  if (!profile) return text;
-  // Reset regex lastIndex after test()
+  if (!profile) {
+    // Warn once if user.json is missing and placeholders are present
+    if (!replaceUserPlaceholders._warned) {
+      console.error('⚠ user.json not found at ~/.claudia/user.json — {{user.*}} placeholders will not be replaced.');
+      replaceUserPlaceholders._warned = true;
+    }
+    return text;
+  }
   return text.replace(USER_PLACEHOLDER_RE, (match, key) => {
-    return profile[key] !== undefined ? profile[key] : match;
+    return profile[key] !== undefined ? String(profile[key]) : match;
   });
 }
 

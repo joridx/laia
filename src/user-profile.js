@@ -25,6 +25,8 @@ let _cache = null;
 let _cacheTs = 0;
 const CACHE_TTL_MS = 30000; // Reload every 30s max
 
+const REQUIRED_FIELDS = ['email'];
+
 /**
  * Load user profile from ~/.claudia/user.json.
  * Returns the parsed object or null if not found.
@@ -32,13 +34,24 @@ const CACHE_TTL_MS = 30000; // Reload every 30s max
  */
 export function loadUserProfile() {
   const now = Date.now();
-  if (_cache !== null && (now - _cacheTs) < CACHE_TTL_MS) {
+  if (_cache !== undefined && (now - _cacheTs) < CACHE_TTL_MS) {
     return _cache;
   }
 
   try {
     const raw = readFileSync(USER_PROFILE_PATH, 'utf8');
-    _cache = JSON.parse(raw);
+    const profile = JSON.parse(raw);
+
+    // Warn about missing required fields (once)
+    if (!loadUserProfile._checkedFields) {
+      const missing = REQUIRED_FIELDS.filter(f => !profile[f]);
+      if (missing.length) {
+        console.error(`⚠ user.json is missing required fields: ${missing.join(', ')}`);
+      }
+      loadUserProfile._checkedFields = true;
+    }
+
+    _cache = profile;
     _cacheTs = now;
     return _cache;
   } catch {
