@@ -3,8 +3,12 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { join } from 'path';
+import { homedir } from 'os';
 
-const BRAIN_SERVER_PATH = 'C:/claude/claude_local_brain/mcp-server/index.js';
+// Derive paths from home directory (portable across users)
+const BRAIN_SERVER_PATH = process.env.BRAIN_SERVER_PATH || join(homedir(), 'claude', 'claude_local_brain', 'mcp-server', 'index.js');
+const DEFAULT_BRAIN_DATA = join(homedir(), 'claude', 'claude-brain-data');
 
 let client = null;
 let transport = null;
@@ -14,7 +18,7 @@ export async function startBrain({ brainPath, verbose } = {}) {
 
   const env = {
     ...process.env,
-    CLAUDE_BRAIN_PATH: brainPath || 'C:/claude/claude-brain-data',
+    CLAUDE_BRAIN_PATH: brainPath || DEFAULT_BRAIN_DATA,
     BRAIN_LLM_FALLBACK: process.env.BRAIN_LLM_FALLBACK || 'genailab:sonnet',
     BRAIN_LLM_FALLBACK_DISTILL: process.env.BRAIN_LLM_FALLBACK_DISTILL || 'genailab:claude',
   };

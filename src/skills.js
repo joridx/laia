@@ -9,6 +9,7 @@
 import { readdirSync, readFileSync, statSync, existsSync, mkdirSync } from 'fs';
 import { join, basename, resolve, relative, sep } from 'path';
 import { homedir } from 'os';
+import { loadUserProfile } from './user-profile.js';
 
 const SKILLS_DIR = join(homedir(), '.claude', 'skills');
 const LEGACY_DIRS = [
@@ -250,7 +251,7 @@ function resolveRefsInText(text, skillDir, depth = 0, seen = new Set()) {
   });
 }
 
-// --- Expand skill (replace args + resolve refs) ---
+// --- Expand skill (replace args + resolve refs + user profile) ---
 
 export function expandSkill(skill, args = '') {
   let body = skill.body
@@ -261,6 +262,9 @@ export function expandSkill(skill, args = '') {
   if (skill.skillDir) {
     body = resolveRefsInText(body, skill.skillDir);
   }
+
+  // Replace {{user.*}} placeholders with values from ~/.claudia/user.json
+  body = replaceUserPlaceholders(body);
 
   return body;
 }
@@ -284,9 +288,28 @@ export function loadFileCommands(commandDirs) {
 }
 
 export function expandCommand(command, args) {
-  return command.body
+  let body = command.body
     .replace(/\{\{args\}\}/g, args)
     .replace(/\$ARGUMENTS/g, args);
+
+  // Replace {{user.*}} placeholders with values from ~/.claudia/user.json
+  body = replaceUserPlaceholders(body);
+
+  return body;
+}
+
+// --- User profile placeholder replacement ---
+
+const USER_PLACEHOLDER_RE = /\{\{user\.([a-z_]+)\}\}/g;
+
+function replaceUserPlaceholders(text) {
+  if (!USER_PLACEHOLDER_RE.test(text)) return text;
+  const profile = loadUserProfile();
+  if (!profile) return text;
+  // Reset regex lastIndex after test()
+  return text.replace(USER_PLACEHOLDER_RE, (match, key) => {
+    return profile[key] !== undefined ? profile[key] : match;
+  });
 }
 
 // --- Ensure skills directory exists ---

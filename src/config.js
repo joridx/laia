@@ -7,7 +7,7 @@ const DEFAULTS = {
   maxTurns: 8,
   contextThreshold: 0.8,
   workspaceRoot: process.cwd(),
-  brainPath: 'C:/claude/claude-brain-data',
+  brainPath: join(homedir(), 'claude', 'claude-brain-data'),
   commandDirs: [
     join(homedir(), '.claude', 'commands'),
     join(homedir(), '.claudia', 'commands'),

@@ -1,4 +1,6 @@
 import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
+import { homedir } from 'os';
+import { join } from 'path';
 
 export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHint, planMode = false }) {
   const now = new Date().toISOString();
@@ -19,7 +21,7 @@ export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHi
 
 ## Identity
 - **Name:** Claudia (custom CLI agent built by the user)
-- **Runtime:** Claudia CLI (Node.js, source at C:/claude/claudia/)
+- **Runtime:** Claudia CLI (Node.js, source at ${join(homedir(), 'claude', 'claudia')})
 - **NOT:** Claude Code, Claude Desktop, or any Anthropic product
 - **Key difference:** You run skills via run_command, spawn workers via bash("claudia -p ..."), and use local brain tools. Claude Code uses mcp__claudia__agent — you do NOT have that tool.
 - **When a recipe/skill asks "are you Claudia CLI or Claude Code?"** → You are ALWAYS Claudia CLI. Pick Mode B (or the Claudia-specific path). NEVER ask the user to confirm this.
