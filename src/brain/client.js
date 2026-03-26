@@ -5,27 +5,48 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { join } from 'path';
 import { homedir } from 'os';
+import { existsSync } from 'fs';
 
 // Derive paths from home directory (portable across users)
-const BRAIN_SERVER_PATH = process.env.BRAIN_SERVER_PATH || join(homedir(), 'claude', 'claude_local_brain', 'mcp-server', 'index.js');
-const DEFAULT_BRAIN_DATA = join(homedir(), 'claude', 'claude-brain-data');
+// Supports both C:\claude\ (custom install) and %USERPROFILE%\claude\ (standard)
+function findBrainServerPath() {
+  if (process.env.BRAIN_SERVER_PATH) return process.env.BRAIN_SERVER_PATH;
+  // Standard location: ~/claude/claude_local_brain/
+  const homeDefault = join(homedir(), 'claude', 'claude_local_brain', 'mcp-server', 'index.js');
+  if (existsSync(homeDefault)) return homeDefault;
+  // Alternative: C:\claude\claude_local_brain\ (Windows custom install)
+  const winAlt = 'C:\\claude\\claude_local_brain\\mcp-server\\index.js';
+  if (process.platform === 'win32' && existsSync(winAlt)) return winAlt;
+  return homeDefault; // fallback even if not found (will error at spawn time)
+}
+
+function findBrainDataPath() {
+  const homeDefault = join(homedir(), 'claude', 'claude-brain-data');
+  if (existsSync(homeDefault)) return homeDefault;
+  const winAlt = 'C:\\claude\\claude-brain-data';
+  if (process.platform === 'win32' && existsSync(winAlt)) return winAlt;
+  return homeDefault;
+}
 
 let client = null;
 let transport = null;
 
-export async function startBrain({ brainPath, verbose } = {}) {
+export async function startBrain({ brainPath, brainServerPath, verbose } = {}) {
   if (client) return client;
+
+  const serverPath = brainServerPath || findBrainServerPath();
+  const dataPath = brainPath || findBrainDataPath();
 
   const env = {
     ...process.env,
-    CLAUDE_BRAIN_PATH: brainPath || DEFAULT_BRAIN_DATA,
+    CLAUDE_BRAIN_PATH: dataPath,
     BRAIN_LLM_FALLBACK: process.env.BRAIN_LLM_FALLBACK || 'genailab:sonnet',
     BRAIN_LLM_FALLBACK_DISTILL: process.env.BRAIN_LLM_FALLBACK_DISTILL || 'genailab:claude',
   };
 
   transport = new StdioClientTransport({
     command: 'node',
-    args: [BRAIN_SERVER_PATH],
+    args: [serverPath],
     env,
   });
 
