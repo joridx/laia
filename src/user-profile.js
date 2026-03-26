@@ -4,15 +4,16 @@
 //
 // File format (~/.claudia/user.json):
 // {
-//   "email": "name.surname@allianz.es",
+//   "email": "name.surname@company.com",
 //   "jira_key": "name.surname",
 //   "employee_id": "e999999",
-//   "central_account": "E999999_AZIBL",
+//   "central_account": "E999999_CORP",
 //   "entra_object_id": "uuid-here",
 //   "full_name": "Surname, Name",
-//   "company": "Allianz Technology S.L.",
+//   "company": "Company Name Ltd.",
 //   "linkedin_slug": "name-surname-xxxxxx",
-//   "home_dir": "C:/Users/e999999"
+//   "home_dir": "C:/Users/e999999"          // optional, auto-detected
+//   "email_encoded": "auto-derived"          // auto-computed from email
 // }
 
 import { readFileSync } from 'fs';
