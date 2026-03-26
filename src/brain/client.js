@@ -11,13 +11,21 @@ import { existsSync } from 'fs';
 // Supports both C:\claude\ (custom install) and %USERPROFILE%\claude\ (standard)
 function findBrainServerPath() {
   if (process.env.BRAIN_SERVER_PATH) return process.env.BRAIN_SERVER_PATH;
-  // Standard location: ~/claude/claude_local_brain/
-  const homeDefault = join(homedir(), 'claude', 'claude_local_brain', 'mcp-server', 'index.js');
-  if (existsSync(homeDefault)) return homeDefault;
-  // Alternative: C:\claude\claude_local_brain\ (Windows custom install)
-  const winAlt = 'C:\\claude\\claude_local_brain\\mcp-server\\index.js';
-  if (process.platform === 'win32' && existsSync(winAlt)) return winAlt;
-  return homeDefault; // fallback even if not found (will error at spawn time)
+
+  // Try both naming conventions: hyphen and underscore
+  const candidates = [
+    join(homedir(), 'claude', 'claude-local-brain', 'mcp-server', 'index.js'),
+    join(homedir(), 'claude', 'claude_local_brain', 'mcp-server', 'index.js'),
+  ];
+  if (process.platform === 'win32') {
+    candidates.push('C:\\claude\\claude-local-brain\\mcp-server\\index.js');
+    candidates.push('C:\\claude\\claude_local_brain\\mcp-server\\index.js');
+  }
+
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return candidates[0]; // fallback (will error at spawn time with a clear path)
 }
 
 function findBrainDataPath() {
