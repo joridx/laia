@@ -17,6 +17,7 @@ import { createAutoCommitter } from './git-commit.js';
 import { createUndoStack } from './undo.js';
 import { resolve as resolvePath } from 'path';
 import { emitKeypressEvents } from 'readline';
+import { createPasteStream, SENTINEL_RE } from './paste.js';
 
 import { loadProfile, listProfiles } from './profiles.js';
 import { normalizeEffort } from './config.js';
@@ -107,8 +108,11 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     return [[], line];
   }
 
+  // Bracketed paste: intercept paste markers, replace \n with sentinel
+  const { stream: pasteStream, enable: enablePaste, disable: disablePaste } = createPasteStream(stdin, stdout);
+
   const rl = readline.createInterface({
-    input: stdin,
+    input: pasteStream,
     output: stdout,
     completer,
     prompt: planMode ? '\x1b[33m[PLAN]\x1b[0m \x1b[1mclaudia>\x1b[0m ' : '\x1b[1mclaudia>\x1b[0m ',
@@ -187,16 +191,21 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     }
   }
   if (stdin.isTTY) {
-    emitKeypressEvents(stdin, rl);
-    stdin.on('keypress', onEscKeypress);
+    emitKeypressEvents(pasteStream, rl);
+    pasteStream.on('keypress', onEscKeypress);
   }
 
   printBanner(config, planMode);
+  enablePaste();
+  process.on('exit', disablePaste);
+  process.on('SIGINT', disablePaste);
+  process.on('SIGTERM', disablePaste);
   rl.prompt();
 
   rl.on('close', async () => {
-    // Clean up keypress listener
-    if (stdin.isTTY) stdin.off('keypress', onEscKeypress);
+    // Clean up keypress listener + paste mode
+    if (stdin.isTTY) pasteStream.off('keypress', onEscKeypress);
+    disablePaste();
     // Auto-save on exit if there are turns
     if (context.turnCount() > 0) {
       try {
@@ -209,7 +218,8 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   });
 
   for await (const line of rl) {
-    let input = line.trim();
+    // Restore real newlines from paste sentinel, then trim
+    let input = line.replace(SENTINEL_RE, '\n').trim();
 
     // If empty input + suggestion selected → use suggestion
     if (!input && selectedSuggestion >= 0 && suggestions[selectedSuggestion]) {
