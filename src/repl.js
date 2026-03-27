@@ -363,7 +363,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     } catch (err) {
       const isAbort = err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || turnAbort?.signal?.aborted;
       if (isAbort) {
-        stopSpinner();
+        if (stopSpinnerRef) stopSpinnerRef();
         // Don't log abort as error — user intentionally interrupted
       } else {
         // Structured error reporting
