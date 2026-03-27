@@ -48,8 +48,8 @@ export async function startBrain({ brainPath, brainServerPath, verbose } = {}) {
   const env = {
     ...process.env,
     CLAUDE_BRAIN_PATH: dataPath,
-    BRAIN_LLM_FALLBACK: process.env.BRAIN_LLM_FALLBACK || 'genailab:sonnet',
-    BRAIN_LLM_FALLBACK_DISTILL: process.env.BRAIN_LLM_FALLBACK_DISTILL || 'genailab:claude',
+    BRAIN_LLM_FALLBACK: process.env.BRAIN_LLM_FALLBACK || 'bedrock:haiku',
+    BRAIN_LLM_FALLBACK_DISTILL: process.env.BRAIN_LLM_FALLBACK_DISTILL || 'bedrock:haiku',
   };
 
   transport = new StdioClientTransport({
