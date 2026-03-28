@@ -110,3 +110,7 @@ export async function brainGetContext(opts = {}) {
 export async function brainLogSession(summary, tags) {
   return callBrainTool('brain_log_session', { summary, tags });
 }
+
+export async function brainFeedback(args) {
+  return callBrainTool('brain_feedback', args);
+}

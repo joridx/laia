@@ -6,7 +6,7 @@ import { createContext } from './context.js';
 import { loadFileCommands, expandCommand, listSkills, loadSkill } from './skills.js';
 import { getCopilotToken, getProviderToken } from './auth.js';
 import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@claude/providers';
-import { startBrain, stopBrain } from './brain/client.js';
+import { startBrain, stopBrain, brainFeedback } from './brain/client.js';
 import { setReadlineInterface } from './permissions.js';
 import { renderMarkdown } from './render.js';
 import { loadMemoryFiles } from './memory-files.js';
@@ -35,6 +35,124 @@ function formatTokenCount(n) {
 }
 
 // --- Heuristic follow-up suggestions based on assistant response ---
+
+// --- P15.2: Post-turn implicit relevance feedback ---
+const FEEDBACK_MIN_RESPONSE = 50;
+async function sendFeedback(turnMessages, responseText) {
+  if (!turnMessages || !responseText) return;
+
+  // Clean response: strip code blocks, markdown links, table borders
+  const cleaned = responseText.slice(0, 2000);
+  if (cleaned.length < FEEDBACK_MIN_RESPONSE) return;
+
+  // Find all brain_search tool calls in the turn
+  const searchCalls = [];
+  for (let i = 0; i < turnMessages.length; i++) {
+    const msg = turnMessages[i];
+    if (!msg.tool_calls) continue;
+    for (const tc of msg.tool_calls) {
+      const fn = tc.function;
+      if (!fn || fn.name !== 'brain_search') continue;
+      // The result is in the next message(s) with matching tool_call_id
+      const resultMsg = turnMessages.find(m => m.role === 'tool' && m.tool_call_id === tc.id);
+      if (!resultMsg?.content) continue;
+      try {
+        const args = JSON.parse(fn.arguments || '{}');
+        const result = JSON.parse(resultMsg.content);
+        searchCalls.push({ query: args.query, result });
+      } catch { /* skip malformed */ }
+    }
+  }
+  if (!searchCalls.length) return;
+
+  const isMulti = searchCalls.length > 1;
+  const globalUsed = new Set();
+
+  for (const call of searchCalls) {
+    // Extract learnings from result (handle various formats)
+    const learnings = extractLearningsFromResult(call.result);
+    if (!learnings.length) continue;
+
+    const slugs = learnings.map(l => l.slug);
+    const titles = learnings.map(l => l.title);
+    const explorationSlugs = learnings.filter(l => l._exploration).map(l => l.slug);
+
+    // Quick check: does this search have any "used" results?
+    // For multi-search turns, skip if no usage (avoid cross-contamination)
+    if (isMulti) {
+      const hasUsage = slugs.some(s => {
+        if (globalUsed.has(s)) return false;
+        const title = titles[slugs.indexOf(s)] || s.replace(/-/g, ' ');
+        return cleaned.toLowerCase().includes(s) || cleaned.toLowerCase().includes(title.toLowerCase());
+      });
+      if (!hasUsage) continue;
+    }
+
+    // Filter out already-counted slugs (max 1 hit per learning per turn)
+    const dedupedSlugs = slugs.filter(s => !globalUsed.has(s));
+    const dedupedTitles = dedupedSlugs.map(s => titles[slugs.indexOf(s)]);
+
+    try {
+      await brainFeedback({
+        query: call.query,
+        result_slugs: dedupedSlugs,
+        result_titles: dedupedTitles,
+        exploration_slugs: explorationSlugs.filter(s => dedupedSlugs.includes(s)),
+        response: cleaned,
+      });
+      dedupedSlugs.forEach(s => globalUsed.add(s));
+    } catch { /* feedback is best-effort */ }
+  }
+}
+
+// Extract learning slugs/titles from brain_search result (handles string or object)
+function extractLearningsFromResult(result) {
+  // result might be a string or already parsed
+  let data = result;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch { return []; }
+  }
+  if (!data) return [];
+
+  // Format: { result: "..." } or { query, result } from brain tool wrapper
+  const text = data.result || data;
+  if (typeof text === 'string') {
+    // Parse learnings from formatted brain_search output
+    // Format: "## slug-name\n**Title**\n..."
+    const learnings = [];
+    const slugMatches = text.matchAll(/##\s+([a-z0-9-]+)/g);
+    for (const m of slugMatches) {
+      const slug = m[1];
+      // Try to find title after slug
+      const afterSlug = text.slice(m.index + m[0].length, m.index + m[0].length + 200);
+      const titleMatch = afterSlug.match(/\*\*(.+?)\*\*/)
+        || afterSlug.match(/^\s*(.+?)\n/);
+      learnings.push({
+        slug,
+        title: titleMatch ? titleMatch[1].trim() : slug.replace(/-/g, ' '),
+      });
+    }
+    if (learnings.length) return learnings;
+
+    // Alternative format: "- **title** (slug)" or "slug: title"
+    const altMatches = text.matchAll(/[\-•]\s+\*\*(.+?)\*\*.*?\(([a-z0-9-]+)\)/g);
+    for (const m of altMatches) {
+      learnings.push({ slug: m[2], title: m[1] });
+    }
+    return learnings;
+  }
+
+  // Object format with learnings array
+  if (Array.isArray(data.learnings)) {
+    return data.learnings.map(l => ({
+      slug: l.slug || '',
+      title: l.title || l.headline || '',
+      _exploration: l._exploration || false,
+    }));
+  }
+  return [];
+}
+
 function suggestFollowUps(text) {
   if (!text) return [];
   const s = [];
@@ -334,6 +452,9 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
         assistantText: text,
         turnMessages: result.turnMessages,
       });
+
+      // P15.2: Implicit relevance feedback — fire-and-forget
+      sendFeedback(result.turnMessages, text).catch(() => {});
 
       // Update router stickiness based on tools actually used
       if (config.model === 'auto' && result.turnMessages) {
