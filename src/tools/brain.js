@@ -44,6 +44,8 @@ export function registerBrainTools(config, registry = defaultRegistry) {
       try {
         const result = await brainRemember({
           learnings: [{ type, title, description, tags }],
+          source_type: 'conversation',
+          created_by: 'agent',
         });
         return { stored: true, result };
       } catch (err) {
