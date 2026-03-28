@@ -195,7 +195,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     pasteStream.on('keypress', onEscKeypress);
   }
 
-  printBanner(config, planMode);
+  await animateCatBanner(config, planMode);
   enablePaste();
   process.on('exit', disablePaste);
   process.on('SIGINT', disablePaste);
@@ -928,25 +928,78 @@ async function askYesNo(rl) {
   });
 }
 
-function printBanner(config, planMode) {
-  const W = 29; // inner width of box
-  const C = '\x1b[1m\x1b[36m', R = '\x1b[0m';
-  const visLen = (s) => s.replace(/\x1b\[[0-9;]*m/g, '').length;
-  const pad = (s) => s + ' '.repeat(Math.max(0, W - visLen(s)));
+// --- Cat logo animation ---
+const CAT_POSES = [
+  // Pose 0: Neutral (default)
+  { l1: ' /\\_/\\', l2: '( ◦.◦ )', l3: '  >‿<' },
+  // Pose 1: Blink left
+  { l1: ' /\\_/\\', l2: '( -.◦ )', l3: '  >‿<' },
+  // Pose 2: Happy
+  { l1: ' /\\_/\\', l2: '( ^.^ )', l3: '  >‿<' },
+  // Pose 3: Blink right
+  { l1: ' /\\_/\\', l2: '( ◦.- )', l3: '  >‿<' },
+  // Pose 4: Working
+  { l1: ' /\\_/\\', l2: '( ◦_◦ )', l3: '  >‿<' },
+  // Pose 5: Sleeping
+  { l1: ' /\\_/\\', l2: '( -.- )', l3: '  >‿<' },
+];
+
+// Animate the cat logo at startup (quick blink sequence then settle)
+async function animateCatBanner(config, planMode) {
+  const R = '\x1b[0m';
+  const CAT = '\x1b[38;2;167;139;250m';   // Violet #A78BFA
+  const CATB = '\x1b[1m\x1b[38;2;167;139;250m'; // Bold violet
+  const DIM = '\x1b[2m';
+
   const modelLabel = config.model === 'auto' ? 'auto (routing)' : config.model;
-  const modeLabel = planMode ? '\x1b[33m[PLAN]\x1b[0m' : '';
-  console.log(`
-${C}  ┌${'─'.repeat(W)}┐${R}
-${C}  │${R}${pad(`  ${C}claudia${R} v0.1.0${modeLabel ? ' ' + modeLabel : ''}`)}${C}│${R}
-${C}  │${R}${pad(`  model: ${modelLabel}`)}${C}│${R}
-${C}  │${R}${pad('  /help for commands')}${C}│${R}
-${C}  └${'─'.repeat(W)}┘${R}
-`);
+  const modeLabel = planMode ? ' \x1b[33m[PLAN]\x1b[0m' : '';
+  const cwd = config.workspaceRoot?.replace(process.env.HOME, '~') || '.';
+
+  const renderFrame = (pose) => {
+    const p = CAT_POSES[pose] || CAT_POSES[0];
+    return [
+      `${CAT}${p.l1}${R}   ${CATB}Claudia${R} v0.1.0${modeLabel}`,
+      `${CAT}${p.l2}${R}   ${DIM}${modelLabel}${R}`,
+      `${CAT}${p.l3}${R}    ${DIM}${cwd}${R}`,
+    ];
+  };
+
+  // Animation sequence: neutral → blink → neutral → happy
+  const sequence = [0, 0, 1, 0, 3, 0, 2];
+  const delays =   [200, 150, 80, 150, 80, 150, 0];
+
+  // Check if terminal supports cursor movement
+  const canAnimate = stderr.isTTY && !process.env.CI;
+
+  if (canAnimate) {
+    // Print initial frame
+    const lines = renderFrame(sequence[0]);
+    stderr.write('\n');
+    for (const line of lines) stderr.write(line + '\n');
+    stderr.write('\n');
+
+    // Animate through poses
+    for (let i = 1; i < sequence.length; i++) {
+      await new Promise(r => setTimeout(r, delays[i - 1]));
+      const frame = renderFrame(sequence[i]);
+      // Move cursor up 4 lines (3 lines + 1 blank) and rewrite
+      stderr.write(`\x1b[4A`);
+      for (const line of frame) stderr.write('\x1b[2K' + line + '\n');
+      stderr.write('\x1b[2K\n');
+    }
+  } else {
+    // No animation — just print the happy pose
+    const lines = renderFrame(2);
+    stderr.write('\n');
+    for (const line of lines) stderr.write(line + '\n');
+    stderr.write('\n');
+  }
+
   // Show loaded CLAUDE.md files
   const memFiles = loadMemoryFiles({ workspaceRoot: config.workspaceRoot });
   if (memFiles.length) {
     for (const f of memFiles) {
-      process.stderr.write(`\x1b[2m  📋 ${f.level}: ${f.path}\x1b[0m\n`);
+      stderr.write(`\x1b[2m  📋 ${f.level}: ${f.path}\x1b[0m\n`);
     }
   }
 }
