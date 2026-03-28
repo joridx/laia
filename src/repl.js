@@ -15,7 +15,9 @@ import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteA
 import { createAttachManager } from './attach.js';
 import { createAutoCommitter } from './git-commit.js';
 import { createUndoStack } from './undo.js';
-import { resolve as resolvePath } from 'path';
+import { resolve as resolvePath, dirname, join } from 'path';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { emitKeypressEvents } from 'readline';
 import { createPasteStream, SENTINEL_RE } from './paste.js';
 
@@ -928,6 +930,10 @@ async function askYesNo(rl) {
   });
 }
 
+// --- Version (read from package.json) ---
+const __dirname_repl = dirname(fileURLToPath(import.meta.url));
+const PKG_VERSION = JSON.parse(readFileSync(join(__dirname_repl, '..', 'package.json'), 'utf8')).version;
+
 // --- Cat logo animation ---
 const CAT_POSES = [
   // Pose 0: Neutral (default)
@@ -958,7 +964,7 @@ async function animateCatBanner(config, planMode) {
   const renderFrame = (pose) => {
     const p = CAT_POSES[pose] || CAT_POSES[0];
     return [
-      `${CAT}${p.l1}${R}   ${CATB}Claudia${R} v0.1.0${modeLabel}`,
+      `${CAT}${p.l1}${R}   ${CATB}Claudia${R} v${PKG_VERSION}${modeLabel}`,
       `${CAT}${p.l2}${R}   ${DIM}${modelLabel}${R}`,
       `${CAT}${p.l3}${R}    ${DIM}${cwd}${R}`,
     ];
