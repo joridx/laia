@@ -9,11 +9,18 @@ import { existsSync } from 'fs';
 
 function findOutlookServerPath() {
   if (process.env.OUTLOOK_MCP_PATH) return process.env.OUTLOOK_MCP_PATH;
-  const homeDefault = join(homedir(), 'claude', 'claude_local_brain', 'mcp-servers', 'outlook-mcp', 'src', 'index.js');
-  if (existsSync(homeDefault)) return homeDefault;
-  const winAlt = 'C:\\claude\\claude_local_brain\\mcp-servers\\outlook-mcp\\src\\index.js';
-  if (process.platform === 'win32' && existsSync(winAlt)) return winAlt;
-  return homeDefault;
+  // Try both naming conventions (guions and underscores)
+  const candidates = [
+    join(homedir(), 'claude', 'claude-local-brain', 'mcp-servers', 'outlook-mcp', 'src', 'index.js'),
+    join(homedir(), 'claude', 'claude_local_brain', 'mcp-servers', 'outlook-mcp', 'src', 'index.js'),
+  ];
+  if (process.platform === 'win32') {
+    candidates.push(
+      'C:\\claude\\claude-local-brain\\mcp-servers\\outlook-mcp\\src\\index.js',
+      'C:\\claude\\claude_local_brain\\mcp-servers\\outlook-mcp\\src\\index.js',
+    );
+  }
+  return candidates.find(p => existsSync(p)) || candidates[0];
 }
 
 let client = null;
