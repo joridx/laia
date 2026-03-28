@@ -50,13 +50,23 @@ export async function startBrain({ brainPath, brainServerPath, verbose } = {}) {
     CLAUDE_BRAIN_PATH: dataPath,
     BRAIN_LLM_FALLBACK: process.env.BRAIN_LLM_FALLBACK || 'bedrock:haiku',
     BRAIN_LLM_FALLBACK_DISTILL: process.env.BRAIN_LLM_FALLBACK_DISTILL || 'bedrock:haiku',
+    BRAIN_QUIET: '1',  // suppress banner/noise when spawned as child
   };
 
   transport = new StdioClientTransport({
     command: 'node',
     args: [serverPath],
     env,
+    stderr: 'pipe',  // suppress brain server banner from polluting REPL output
   });
+
+  // Always drain child stderr to prevent pipe deadlock;
+  // only forward to terminal in verbose mode
+  if (transport.stderr) {
+    transport.stderr.on('data', (chunk) => {
+      if (verbose) process.stderr.write(`[brain:stderr] ${chunk}`);
+    });
+  }
 
   client = new Client({ name: 'claudia', version: '0.1.0' }, {});
   await client.connect(transport);

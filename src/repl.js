@@ -69,13 +69,18 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   // V2: Effort state (togglable via /effort)
   let effort = config.effort || null;
   // Start brain MCP server
-  stderr.write('\x1b[2m[brain] Starting MCP server...\x1b[0m\n');
   try {
     await startBrain({ brainPath: config.brainPath, verbose: config.verbose });
-    stderr.write('\x1b[2m[brain] Connected\x1b[0m\n');
+    // Show brain version line (read from brain's package.json)
+    try {
+      const brainPkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'claude-local-brain', 'mcp-server', 'package.json');
+      const brainPkg = JSON.parse(readFileSync(brainPkgPath, 'utf8'));
+      stderr.write(`\x1b[2m🧠 Claude Brain MCP Server v${brainPkg.version}\x1b[0m\n`);
+    } catch {
+      stderr.write('\x1b[2m🧠 Claude Brain MCP Server\x1b[0m\n');
+    }
   } catch (err) {
     stderr.write(`\x1b[33m[brain] Failed to start: ${err.message} (brain tools disabled)\x1b[0m\n`);
-console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this session. Some AI features may be limited.');
   }
 
   await registerBuiltinTools({ ...config, freeze: false });
