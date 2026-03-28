@@ -100,6 +100,8 @@ async function sendFeedback(turnMessages, responseText) {
         exploration_slugs: explorationSlugs.filter(s => dedupedSlugs.includes(s)),
         response: cleaned,
       });
+      // Only add actually sent slugs that were used — not all, to avoid suppressing
+      // appearances/misses in subsequent same-turn searches
       dedupedSlugs.forEach(s => globalUsed.add(s));
     } catch (e) {
       // Feedback is best-effort; log in debug mode via environment
@@ -120,27 +122,28 @@ function extractLearningsFromResult(result) {
   // Format: { result: "..." } or { query, result } from brain tool wrapper
   const text = data.result || data;
   if (typeof text === 'string') {
-    // Parse learnings from formatted brain_search output
-    // Format: "## slug-name\n**Title**\n..."
     const learnings = [];
-    const slugMatches = text.matchAll(/##\s+([a-z0-9-]+)/g);
-    for (const m of slugMatches) {
-      const slug = m[1];
-      // Try to find title after slug
-      const afterSlug = text.slice(m.index + m[0].length, m.index + m[0].length + 200);
-      const titleMatch = afterSlug.match(/\*\*(.+?)\*\*/)
-        || afterSlug.match(/^\s*(.+?)\n/);
-      learnings.push({
-        slug,
-        title: titleMatch ? titleMatch[1].trim() : slug.replace(/-/g, ' '),
-      });
+
+    // Primary format: "- **Title** [slug-name] (score:...)"
+    const primaryMatches = text.matchAll(/[-•]\s+\*\*(.+?)\*\*\s+\[([a-z0-9-]+)\]/g);
+    for (const m of primaryMatches) {
+      learnings.push({ slug: m[2], title: m[1] });
     }
     if (learnings.length) return learnings;
 
-    // Alternative format: "- **title** (slug)" or "slug: title"
-    const altMatches = text.matchAll(/[\-•]\s+\*\*(.+?)\*\*.*?\(([a-z0-9-]+)\)/g);
-    for (const m of altMatches) {
-      learnings.push({ slug: m[2], title: m[1] });
+    // Fallback: "- **Title** (score:... | ...)"
+    // Derive slug from title via simple slugification
+    const fallbackMatches = text.matchAll(/[-•]\s+\*\*(.+?)\*\*\s*\(/g);
+    for (const m of fallbackMatches) {
+      const title = m[1].trim();
+      const slug = title.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 60);
+      if (slug) learnings.push({ slug, title });
     }
     return learnings;
   }
