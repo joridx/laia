@@ -101,7 +101,10 @@ async function sendFeedback(turnMessages, responseText) {
         response: cleaned,
       });
       dedupedSlugs.forEach(s => globalUsed.add(s));
-    } catch { /* feedback is best-effort */ }
+    } catch (e) {
+      // Feedback is best-effort; log in debug mode via environment
+      if (process.env.DEBUG) console.error('[feedback]', call.query, e.message);
+    }
   }
 }
 
@@ -453,8 +456,10 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
         turnMessages: result.turnMessages,
       });
 
-      // P15.2: Implicit relevance feedback — fire-and-forget
-      sendFeedback(result.turnMessages, text).catch(() => {});
+      // P15.2: Implicit relevance feedback — fire-and-forget with minimal logging
+      sendFeedback(result.turnMessages, text).catch(e => {
+        if (config.verbose) console.error('[feedback]', e.message);
+      });
 
       // Update router stickiness based on tools actually used
       if (config.model === 'auto' && result.turnMessages) {
