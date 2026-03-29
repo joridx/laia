@@ -24,8 +24,47 @@ import { createPasteStream, SENTINEL_RE } from './paste.js';
 import { loadProfile, listProfiles } from './profiles.js';
 import { normalizeEffort } from './config.js';
 
-// --- Slash command list for autocomplete ---
-const BUILTIN_COMMANDS = ['/help', '/model', '/clear', '/compact', '/save', '/load', '/sessions', '/attach', '/detach', '/attached', '/swarm', '/autocommit', '/undo', '/tokens', '/plan', '/execute', '/effort', '/fork', '/agents', '/skills', '/exit', '/quit'];
+// --- Slash command metadata for autocomplete + help ---
+const COMMAND_META = {
+  // 📦 Session
+  '/save':       { desc: 'Save session',                  cat: 'session',  subs: [] },
+  '/load':       { desc: 'Restore session',                cat: 'session',  subs: ['autosave'] },
+  '/sessions':   { desc: 'List saved sessions',            cat: 'session',  subs: [] },
+  '/fork':       { desc: 'Fork current session',           cat: 'session',  subs: [] },
+  '/clear':      { desc: 'Clear history',                  cat: 'session',  subs: [] },
+  '/compact':    { desc: 'Compact history',                cat: 'session',  subs: [] },
+  // 🔧 Config
+  '/model':      { desc: 'Change model',                   cat: 'config',   subs: ['auto'] },
+  '/effort':     { desc: 'Set reasoning effort',           cat: 'config',   subs: ['low', 'medium', 'high', 'max'] },
+  '/plan':       { desc: 'Read-only mode (no writes)',     cat: 'config',   subs: [] },
+  '/execute':    { desc: 'Back to normal mode',            cat: 'config',   subs: [] },
+  '/tokens':     { desc: 'Token usage & context stats',    cat: 'config',   subs: [] },
+  // 📎 Files
+  '/attach':     { desc: 'Attach file to context',         cat: 'files',    subs: [] },
+  '/detach':     { desc: 'Detach file from context',       cat: 'files',    subs: ['all'] },
+  '/attached':   { desc: 'List attached files',            cat: 'files',    subs: [] },
+  // 🤖 Agents
+  '/agents':     { desc: 'Agent profiles',                 cat: 'agents',   subs: ['show', 'validate', 'create'] },
+  '/swarm':      { desc: 'Toggle swarm mode',              cat: 'agents',   subs: [] },
+  // 📦 Skills
+  '/skills':     { desc: 'List all skills',                cat: 'skills',   subs: ['show'] },
+  // ⚙️ System
+  '/help':       { desc: 'Show this help',                 cat: 'system',   subs: [] },
+  '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
+  '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
+  '/exit':       { desc: 'Exit Claudia',                   cat: 'system',   subs: [] },
+  '/quit':       { desc: 'Exit Claudia',                   cat: 'system',   subs: [] },
+};
+const BUILTIN_COMMANDS = Object.keys(COMMAND_META);
+
+const CATEGORY_LABELS = {
+  session: '📦 Session',
+  config:  '🔧 Config',
+  files:   '📎 Files',
+  agents:  '🤖 Agents',
+  skills:  '🎯 Skills',
+  system:  '⚙️  System',
+};
 
 // --- Human-readable token count (e.g. 1234 → "1.2k", 1234567 → "1.2M") ---
 function formatTokenCount(n) {
@@ -219,8 +258,41 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   // Session-wide token accumulator
   const sessionTokens = { turns: 0, totalIn: 0, totalOut: 0 };
 
-  // Build full command list for tab completion
-  const allCommands = [...BUILTIN_COMMANDS, ...[...fileCommands.keys()].map(k => `/${k}`)];
+  // Build full command list for tab completion (builtins + file skills, deduped)
+  const allCommands = [
+    ...BUILTIN_COMMANDS,
+    ...[...fileCommands.keys()]
+      .filter(k => !COMMAND_META[`/${k}`])  // skip skills that shadow builtins
+      .map(k => `/${k}`)
+  ];
+
+  // Build description map: builtins have COMMAND_META, skills have .description
+  function getCommandDesc(cmd) {
+    if (COMMAND_META[cmd]) return COMMAND_META[cmd].desc;
+    const skill = fileCommands.get(cmd.slice(1));
+    if (skill?.description) return skill.description.slice(0, 40);
+    return '';
+  }
+
+  // Show command descriptions as a formatted hint block via stderr
+  // This is a side-channel: readline sees clean tokens, user sees descriptions
+  let _hintDebounce = null;
+  function _showCommandHints(cmds) {
+    // Debounce: only show once per Tab press (readline may call completer multiple times)
+    if (_hintDebounce) return;
+    _hintDebounce = setTimeout(() => { _hintDebounce = null; }, 100);
+    _hintDebounce.unref?.();  // don't block process exit
+
+    const DIM = '\x1b[2m';
+    const R = '\x1b[0m';
+    const B = '\x1b[1m';
+    const lines = cmds.slice(0, 20).map(c => {
+      const d = getCommandDesc(c);
+      return d ? `  ${B}${c}${R}${' '.repeat(Math.max(1, 18 - c.length))}${DIM}${d}${R}` : `  ${B}${c}${R}`;
+    });
+    if (cmds.length > 20) lines.push(`  ${DIM}... and ${cmds.length - 20} more${R}`);
+    stderr.write('\n' + lines.join('\n') + '\n');
+  }
 
   // Suggestion state
   let suggestions = [];
@@ -228,8 +300,38 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
 
   function completer(line) {
     if (line.startsWith('/')) {
-      const hits = allCommands.filter(c => c.startsWith(line));
-      return [hits.length ? hits : allCommands, line];
+      // Check if we're completing a subcommand (e.g. "/effort m")
+      const spaceIdx = line.indexOf(' ');
+      if (spaceIdx !== -1) {
+        const cmd = line.slice(0, spaceIdx);
+        const partial = line.slice(spaceIdx + 1).toLowerCase();
+        const meta = COMMAND_META[cmd];
+        if (meta?.subs?.length) {
+          const subHits = meta.subs
+            .filter(s => s.startsWith(partial))
+            .map(s => `${cmd} ${s}`);
+          return [subHits.length ? subHits : meta.subs.map(s => `${cmd} ${s}`), line];
+        }
+        return [[], line];
+      }
+
+      // First-level: fuzzy match commands
+      // Priority: startsWith > includes > show all
+      const exact = allCommands.filter(c => c.startsWith(line));
+      if (exact.length) {
+        // Show descriptions as a side-channel (stderr), return clean tokens
+        if (exact.length > 1) _showCommandHints(exact);
+        return [exact, line];
+      }
+      // Fuzzy: contains
+      const fuzzy = allCommands.filter(c => c.includes(line.slice(1)));
+      if (fuzzy.length) {
+        _showCommandHints(fuzzy);
+        return [fuzzy, line];
+      }
+      // No match — show all
+      _showCommandHints(allCommands);
+      return [allCommands, line];
     }
     // Tab with empty line cycles suggestions
     if (!line && suggestions.length) {
@@ -525,19 +627,47 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
   const args = spaceIdx === -1 ? '' : input.slice(spaceIdx + 1).trim();
 
   switch (name) {
-    case 'help':
-      console.log('Built-in commands: /help /model /clear /compact /save /load /sessions /attach /detach /attached /swarm /autocommit /undo /tokens /plan /execute /exit');
-      console.log('Session: /save [name], /load [name|number], /sessions');
-      console.log('Attach: /attach <path|glob>, /detach <path|name|number|all>, /attached');
-      console.log('Undo: /undo — revert files changed in last turn (up to 10 turns)');
-      console.log('Tokens: /tokens — show session token usage and context window stats');
-      console.log('Plan: /plan — read-only mode (no write/edit/bash), /execute — back to normal');
-      console.log('Effort: /effort <low|medium|high|max> — set reasoning effort, /effort — show current');
-      console.log('Agents: /agents — list profiles, /agents show|validate|create <name>');
-      console.log('Skills: /skills — list all skills (v3 + legacy), /skills show <name>');
-      console.log('File commands: ' + [...fileCommands.keys()].map(k => `/${k}`).join(', '));
-      console.log('\nTip: Tab to autocomplete commands. After a response, Tab to cycle suggestions.');
+    case 'help': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const C = '\x1b[36m';
+      const G = '\x1b[32m';
+
+      // Group builtins by category
+      const groups = {};
+      for (const [cmd, meta] of Object.entries(COMMAND_META)) {
+        if (cmd === '/quit') continue; // alias, skip
+        const cat = meta.cat;
+        if (!groups[cat]) groups[cat] = [];
+        const subs = meta.subs.length ? ` ${DIM}<${meta.subs.join('|')}>${R}` : '';
+        groups[cat].push(`  ${B}${cmd}${R}${subs}${' '.repeat(Math.max(1, 22 - cmd.length - (subs ? meta.subs.join('|').length + 3 : 0)))}${DIM}${meta.desc}${R}`);
+      }
+
+      stderr.write('\n');
+      for (const [cat, label] of Object.entries(CATEGORY_LABELS)) {
+        if (!groups[cat]) continue;
+        stderr.write(`${C}${label}${R}\n`);
+        for (const line of groups[cat]) stderr.write(line + '\n');
+        stderr.write('\n');
+      }
+
+      // File commands (skills)
+      const skillNames = [...fileCommands.keys()];
+      if (skillNames.length) {
+        stderr.write(`${C}\ud83c\udfaf Skills (${skillNames.length})${R}\n`);
+        const cols = stderr.columns || process.stdout.columns || 80;
+        const perRow = Math.max(1, Math.floor(cols / 22));
+        for (let i = 0; i < skillNames.length; i += perRow) {
+          const row = skillNames.slice(i, i + perRow).map(k => `  ${G}/${k}${R}`);
+          stderr.write(row.join('') + '\n');
+        }
+        stderr.write('\n');
+      }
+
+      stderr.write(`${DIM}Tip: Tab to autocomplete commands + subcommands. After a response, Tab to cycle suggestions.${R}\n`);
       return true;
+    }
 
     case 'model':
       await handleModelCommand(args, config);
