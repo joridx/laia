@@ -387,13 +387,15 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
       const spinnerChars = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
       function startSpinner() {
         if (spinnerTimer) return;
+        // Write spinner on its own line to avoid overwriting user input
+        stderr.write('\n');
         spinnerTimer = setInterval(() => {
           const ch = spinnerChars[spinnerFrame++ % spinnerChars.length];
           stderr.write(`\r\x1b[36m${ch}\x1b[0m`);
         }, 80);
       }
       function stopSpinner() {
-        if (spinnerTimer) { clearInterval(spinnerTimer); spinnerTimer = null; stderr.write('\r\x1b[0K'); }
+        if (spinnerTimer) { clearInterval(spinnerTimer); spinnerTimer = null; stderr.write('\r\x1b[0K\x1b[1A\x1b[0K'); }
       }
       stopSpinnerRef = stopSpinner;  // expose to Esc handler
       // Prepend attached files to input for LLM context
@@ -940,13 +942,14 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           const spinChars = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
           function startSpin() {
             if (spinnerTimer2) return;
+            stderr.write('\n');
             spinnerTimer2 = setInterval(() => {
               const ch = spinChars[spinnerFrame2++ % spinChars.length];
               stderr.write(`\r\x1b[36m${ch}\x1b[0m`);
             }, 80);
           }
           function stopSpin() {
-            if (spinnerTimer2) { clearInterval(spinnerTimer2); spinnerTimer2 = null; stderr.write('\r\x1b[0K'); }
+            if (spinnerTimer2) { clearInterval(spinnerTimer2); spinnerTimer2 = null; stderr.write('\r\x1b[0K\x1b[1A\x1b[0K'); }
           }
           const result = await runTurn({
             input: expanded, config, logger, history: context.getHistory(),
