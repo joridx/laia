@@ -2,7 +2,7 @@
 
 **Date**: 2026-03-18
 **Status**: Implemented (2026-03-19)
-**Branch**: `feature/api-agnostic-v2` (claudia + claude_local_brain)
+**Branch**: `feature/api-agnostic-v2` (claudia + claude-local-brain)
 **Scope**: Claudia (`src/`) + Brain (`mcp-server/`)
 
 ## Problem
@@ -60,7 +60,7 @@ C:/claude/  (or ~/claude/ on Linux)
 │   └── src/
 │       └── ...                   ← imports from '@claude/providers'
 │
-└── claude_local_brain/
+└── claude-local-brain/
     └── mcp-server/
         ├── package.json          ← adds "@claude/providers": "file:../../claudia/packages/providers"
         └── ...                   ← imports from '@claude/providers'
@@ -92,7 +92,7 @@ C:/claude/  (or ~/claude/ on Linux)
 Brain may run standalone (e.g., Claude Code MCP server without Claudia installed). The import must degrade gracefully:
 
 ```js
-// claude_local_brain/mcp-server/llm.js
+// claude-local-brain/mcp-server/llm.js
 let providers;
 try {
   providers = await import('@claude/providers');

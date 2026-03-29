@@ -436,7 +436,7 @@ This exposes a single `agent` tool over stdio that accepts prompts and returns r
 
 ## Brain MCP Server
 
-A separate MCP server (`claude_local_brain/`) provides persistent memory:
+A separate MCP server (`claude-local-brain/`) provides persistent memory:
 
 ```json
 {

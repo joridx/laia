@@ -171,7 +171,7 @@ Brain also respects `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. — same env var
 {
   "claude-brain": {
     "command": "node",
-    "args": ["<homedir>/claude/claude_local_brain/mcp-server/index.js"],
+    "args": ["<homedir>/claude/claude-local-brain/mcp-server/index.js"],
     "env": {
       "CLAUDE_BRAIN_PATH": "<homedir>/claude/claude-brain-data",
       "BRAIN_LLM_MODEL": "gpt-5-mini",
