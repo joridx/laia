@@ -6,7 +6,7 @@ import { createContext } from './context.js';
 import { loadFileCommands, expandCommand, listSkills, loadSkill } from './skills.js';
 import { getCopilotToken, getProviderToken } from './auth.js';
 import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@claude/providers';
-import { startBrain, stopBrain } from './brain/client.js';
+import { startBrain, stopBrain, brainFeedback } from './brain/client.js';
 import { setReadlineInterface } from './permissions.js';
 import { renderMarkdown } from './render.js';
 import { loadMemoryFiles } from './memory-files.js';
@@ -15,8 +15,11 @@ import { saveSession, autoSave, loadAutoSave, loadSession, listSessions, deleteA
 import { createAttachManager } from './attach.js';
 import { createAutoCommitter } from './git-commit.js';
 import { createUndoStack } from './undo.js';
-import { resolve as resolvePath } from 'path';
+import { resolve as resolvePath, dirname, join } from 'path';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { emitKeypressEvents } from 'readline';
+import { createPasteStream, SENTINEL_RE } from './paste.js';
 
 import { loadProfile, listProfiles } from './profiles.js';
 import { normalizeEffort } from './config.js';
@@ -32,6 +35,130 @@ function formatTokenCount(n) {
 }
 
 // --- Heuristic follow-up suggestions based on assistant response ---
+
+// --- P15.2: Post-turn implicit relevance feedback ---
+const FEEDBACK_MIN_RESPONSE = 50;
+async function sendFeedback(turnMessages, responseText) {
+  if (!turnMessages || !responseText) return;
+
+  // Clean response: strip code blocks, markdown links, table borders
+  const cleaned = responseText.slice(0, 2000);
+  if (cleaned.length < FEEDBACK_MIN_RESPONSE) return;
+
+  // Find all brain_search tool calls in the turn
+  const searchCalls = [];
+  for (let i = 0; i < turnMessages.length; i++) {
+    const msg = turnMessages[i];
+    if (!msg.tool_calls) continue;
+    for (const tc of msg.tool_calls) {
+      const fn = tc.function;
+      if (!fn || fn.name !== 'brain_search') continue;
+      // The result is in the next message(s) with matching tool_call_id
+      const resultMsg = turnMessages.find(m => m.role === 'tool' && m.tool_call_id === tc.id);
+      if (!resultMsg?.content) continue;
+      try {
+        const args = JSON.parse(fn.arguments || '{}');
+        const result = JSON.parse(resultMsg.content);
+        searchCalls.push({ query: args.query, result });
+      } catch { /* skip malformed */ }
+    }
+  }
+  if (!searchCalls.length) return;
+
+  const isMulti = searchCalls.length > 1;
+  const globalUsed = new Set();
+
+  for (const call of searchCalls) {
+    // Extract learnings from result (handle various formats)
+    const learnings = extractLearningsFromResult(call.result);
+    if (!learnings.length) continue;
+
+    const slugs = learnings.map(l => l.slug);
+    const titles = learnings.map(l => l.title);
+    const explorationSlugs = learnings.filter(l => l._exploration).map(l => l.slug);
+
+    // Quick check: does this search have any "used" results?
+    // For multi-search turns, skip if no usage (avoid cross-contamination)
+    if (isMulti) {
+      const hasUsage = slugs.some(s => {
+        if (globalUsed.has(s)) return false;
+        const title = titles[slugs.indexOf(s)] || s.replace(/-/g, ' ');
+        return cleaned.toLowerCase().includes(s) || cleaned.toLowerCase().includes(title.toLowerCase());
+      });
+      if (!hasUsage) continue;
+    }
+
+    // Filter out already-counted slugs (max 1 hit per learning per turn)
+    const dedupedSlugs = slugs.filter(s => !globalUsed.has(s));
+    const dedupedTitles = dedupedSlugs.map(s => titles[slugs.indexOf(s)]);
+
+    try {
+      await brainFeedback({
+        query: call.query,
+        result_slugs: dedupedSlugs,
+        result_titles: dedupedTitles,
+        exploration_slugs: explorationSlugs.filter(s => dedupedSlugs.includes(s)),
+        response: cleaned,
+      });
+      // Only add actually sent slugs that were used — not all, to avoid suppressing
+      // appearances/misses in subsequent same-turn searches
+      dedupedSlugs.forEach(s => globalUsed.add(s));
+    } catch (e) {
+      // Feedback is best-effort; log in debug mode via environment
+      if (process.env.DEBUG) console.error('[feedback]', call.query, e.message);
+    }
+  }
+}
+
+// Extract learning slugs/titles from brain_search result (handles string or object)
+function extractLearningsFromResult(result) {
+  // result might be a string or already parsed
+  let data = result;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch { return []; }
+  }
+  if (!data) return [];
+
+  // Format: { result: "..." } or { query, result } from brain tool wrapper
+  const text = data.result || data;
+  if (typeof text === 'string') {
+    const learnings = [];
+
+    // Primary format: "- **Title** [slug-name] (score:...)"
+    const primaryMatches = text.matchAll(/[-•]\s+\*\*(.+?)\*\*\s+\[([a-z0-9-]+)\]/g);
+    for (const m of primaryMatches) {
+      learnings.push({ slug: m[2], title: m[1] });
+    }
+    if (learnings.length) return learnings;
+
+    // Fallback: "- **Title** (score:... | ...)"
+    // Derive slug from title via simple slugification
+    const fallbackMatches = text.matchAll(/[-•]\s+\*\*(.+?)\*\*\s*\(/g);
+    for (const m of fallbackMatches) {
+      const title = m[1].trim();
+      const slug = title.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 60);
+      if (slug) learnings.push({ slug, title });
+    }
+    return learnings;
+  }
+
+  // Object format with learnings array
+  if (Array.isArray(data.learnings)) {
+    return data.learnings.map(l => ({
+      slug: l.slug || '',
+      title: l.title || l.headline || '',
+      _exploration: l._exploration || false,
+    }));
+  }
+  return [];
+}
+
 function suggestFollowUps(text) {
   if (!text) return [];
   const s = [];
@@ -66,13 +193,18 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   // V2: Effort state (togglable via /effort)
   let effort = config.effort || null;
   // Start brain MCP server
-  stderr.write('\x1b[2m[brain] Starting MCP server...\x1b[0m\n');
   try {
     await startBrain({ brainPath: config.brainPath, verbose: config.verbose });
-    stderr.write('\x1b[2m[brain] Connected\x1b[0m\n');
+    // Show brain version line (read from brain's package.json)
+    try {
+      const brainPkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'claude-local-brain', 'mcp-server', 'package.json');
+      const brainPkg = JSON.parse(readFileSync(brainPkgPath, 'utf8'));
+      stderr.write(`\x1b[2m🧠 Claude Brain MCP Server v${brainPkg.version}\x1b[0m\n`);
+    } catch {
+      stderr.write('\x1b[2m🧠 Claude Brain MCP Server\x1b[0m\n');
+    }
   } catch (err) {
     stderr.write(`\x1b[33m[brain] Failed to start: ${err.message} (brain tools disabled)\x1b[0m\n`);
-console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this session. Some AI features may be limited.');
   }
 
   await registerBuiltinTools({ ...config, freeze: false });
@@ -107,8 +239,11 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     return [[], line];
   }
 
+  // Bracketed paste: intercept paste markers, replace \n with sentinel
+  const { stream: pasteStream, enable: enablePaste, disable: disablePaste } = createPasteStream(stdin, stdout);
+
   const rl = readline.createInterface({
-    input: stdin,
+    input: pasteStream,
     output: stdout,
     completer,
     prompt: planMode ? '\x1b[33m[PLAN]\x1b[0m \x1b[1mclaudia>\x1b[0m ' : '\x1b[1mclaudia>\x1b[0m ',
@@ -187,16 +322,21 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     }
   }
   if (stdin.isTTY) {
-    emitKeypressEvents(stdin, rl);
-    stdin.on('keypress', onEscKeypress);
+    emitKeypressEvents(pasteStream, rl);
+    pasteStream.on('keypress', onEscKeypress);
   }
 
-  printBanner(config, planMode);
+  await animateCatBanner(config, planMode);
+  enablePaste();
+  process.on('exit', disablePaste);
+  process.on('SIGINT', disablePaste);
+  process.on('SIGTERM', disablePaste);
   rl.prompt();
 
   rl.on('close', async () => {
-    // Clean up keypress listener
-    if (stdin.isTTY) stdin.off('keypress', onEscKeypress);
+    // Clean up keypress listener + paste mode
+    if (stdin.isTTY) pasteStream.off('keypress', onEscKeypress);
+    disablePaste();
     // Auto-save on exit if there are turns
     if (context.turnCount() > 0) {
       try {
@@ -209,7 +349,8 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
   });
 
   for await (const line of rl) {
-    let input = line.trim();
+    // Restore real newlines from paste sentinel, then trim
+    let input = line.replace(SENTINEL_RE, '\n').trim();
 
     // If empty input + suggestion selected → use suggestion
     if (!input && selectedSuggestion >= 0 && suggestions[selectedSuggestion]) {
@@ -246,13 +387,15 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
       const spinnerChars = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
       function startSpinner() {
         if (spinnerTimer) return;
+        // Write spinner on its own line to avoid overwriting user input
+        stderr.write('\n');
         spinnerTimer = setInterval(() => {
           const ch = spinnerChars[spinnerFrame++ % spinnerChars.length];
           stderr.write(`\r\x1b[36m${ch}\x1b[0m`);
         }, 80);
       }
       function stopSpinner() {
-        if (spinnerTimer) { clearInterval(spinnerTimer); spinnerTimer = null; stderr.write('\r\x1b[0K'); }
+        if (spinnerTimer) { clearInterval(spinnerTimer); spinnerTimer = null; stderr.write('\r\x1b[0K\x1b[1A\x1b[0K'); }
       }
       stopSpinnerRef = stopSpinner;  // expose to Esc handler
       // Prepend attached files to input for LLM context
@@ -318,6 +461,11 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
         turnMessages: result.turnMessages,
       });
 
+      // P15.2: Implicit relevance feedback — fire-and-forget with minimal logging
+      sendFeedback(result.turnMessages, text).catch(e => {
+        if (config.verbose) console.error('[feedback]', e.message);
+      });
+
       // Update router stickiness based on tools actually used
       if (config.model === 'auto' && result.turnMessages) {
         const toolNames = result.turnMessages
@@ -353,7 +501,7 @@ console.log('\x1b[33m[WARNING]\x1b[0m Brain features are disabled for this sessi
     } catch (err) {
       const isAbort = err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || turnAbort?.signal?.aborted;
       if (isAbort) {
-        stopSpinner();
+        if (stopSpinnerRef) stopSpinnerRef();
         // Don't log abort as error — user intentionally interrupted
       } else {
         // Structured error reporting
@@ -794,13 +942,14 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
           const spinChars = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
           function startSpin() {
             if (spinnerTimer2) return;
+            stderr.write('\n');
             spinnerTimer2 = setInterval(() => {
               const ch = spinChars[spinnerFrame2++ % spinChars.length];
               stderr.write(`\r\x1b[36m${ch}\x1b[0m`);
             }, 80);
           }
           function stopSpin() {
-            if (spinnerTimer2) { clearInterval(spinnerTimer2); spinnerTimer2 = null; stderr.write('\r\x1b[0K'); }
+            if (spinnerTimer2) { clearInterval(spinnerTimer2); spinnerTimer2 = null; stderr.write('\r\x1b[0K\x1b[1A\x1b[0K'); }
           }
           const result = await runTurn({
             input: expanded, config, logger, history: context.getHistory(),
@@ -918,25 +1067,82 @@ async function askYesNo(rl) {
   });
 }
 
-function printBanner(config, planMode) {
-  const W = 29; // inner width of box
-  const C = '\x1b[1m\x1b[36m', R = '\x1b[0m';
-  const visLen = (s) => s.replace(/\x1b\[[0-9;]*m/g, '').length;
-  const pad = (s) => s + ' '.repeat(Math.max(0, W - visLen(s)));
+// --- Version (read from package.json) ---
+const __dirname_repl = dirname(fileURLToPath(import.meta.url));
+const PKG_VERSION = JSON.parse(readFileSync(join(__dirname_repl, '..', 'package.json'), 'utf8')).version;
+
+// --- Cat logo animation ---
+const CAT_POSES = [
+  // Pose 0: Neutral (default)
+  { l1: ' /\\_/\\', l2: '( ◦.◦ )', l3: '  >‿<' },
+  // Pose 1: Blink left
+  { l1: ' /\\_/\\', l2: '( -.◦ )', l3: '  >‿<' },
+  // Pose 2: Happy
+  { l1: ' /\\_/\\', l2: '( ^.^ )', l3: '  >‿<' },
+  // Pose 3: Blink right
+  { l1: ' /\\_/\\', l2: '( ◦.- )', l3: '  >‿<' },
+  // Pose 4: Working
+  { l1: ' /\\_/\\', l2: '( ◦_◦ )', l3: '  >‿<' },
+  // Pose 5: Sleeping
+  { l1: ' /\\_/\\', l2: '( -.- )', l3: '  >‿<' },
+];
+
+// Animate the cat logo at startup (quick blink sequence then settle)
+async function animateCatBanner(config, planMode) {
+  const R = '\x1b[0m';
+  const CAT = '\x1b[38;2;167;139;250m';   // Violet #A78BFA
+  const CATB = '\x1b[1m\x1b[38;2;167;139;250m'; // Bold violet
+  const DIM = '\x1b[2m';
+
   const modelLabel = config.model === 'auto' ? 'auto (routing)' : config.model;
-  const modeLabel = planMode ? '\x1b[33m[PLAN]\x1b[0m' : '';
-  console.log(`
-${C}  ┌${'─'.repeat(W)}┐${R}
-${C}  │${R}${pad(`  ${C}claudia${R} v0.1.0${modeLabel ? ' ' + modeLabel : ''}`)}${C}│${R}
-${C}  │${R}${pad(`  model: ${modelLabel}`)}${C}│${R}
-${C}  │${R}${pad('  /help for commands')}${C}│${R}
-${C}  └${'─'.repeat(W)}┘${R}
-`);
+  const modeLabel = planMode ? ' \x1b[33m[PLAN]\x1b[0m' : '';
+  const cwd = config.workspaceRoot?.replace(process.env.HOME, '~') || '.';
+
+  const renderFrame = (pose) => {
+    const p = CAT_POSES[pose] || CAT_POSES[0];
+    return [
+      `${CAT}${p.l1}${R}   ${CATB}Claudia${R} v${PKG_VERSION}${modeLabel}`,
+      `${CAT}${p.l2}${R}   ${DIM}${modelLabel}${R}`,
+      `${CAT}${p.l3}${R}    ${DIM}${cwd}${R}`,
+    ];
+  };
+
+  // Animation sequence: neutral → blink → neutral → happy
+  const sequence = [0, 0, 1, 0, 3, 0, 2];
+  const delays =   [200, 150, 80, 150, 80, 150, 0];
+
+  // Check if terminal supports cursor movement
+  const canAnimate = stderr.isTTY && !process.env.CI;
+
+  if (canAnimate) {
+    // Print initial frame
+    const lines = renderFrame(sequence[0]);
+    stderr.write('\n');
+    for (const line of lines) stderr.write(line + '\n');
+    stderr.write('\n');
+
+    // Animate through poses
+    for (let i = 1; i < sequence.length; i++) {
+      await new Promise(r => setTimeout(r, delays[i - 1]));
+      const frame = renderFrame(sequence[i]);
+      // Move cursor up 4 lines (3 lines + 1 blank) and rewrite
+      stderr.write(`\x1b[4A`);
+      for (const line of frame) stderr.write('\x1b[2K' + line + '\n');
+      stderr.write('\x1b[2K\n');
+    }
+  } else {
+    // No animation — just print the happy pose
+    const lines = renderFrame(2);
+    stderr.write('\n');
+    for (const line of lines) stderr.write(line + '\n');
+    stderr.write('\n');
+  }
+
   // Show loaded CLAUDE.md files
   const memFiles = loadMemoryFiles({ workspaceRoot: config.workspaceRoot });
   if (memFiles.length) {
     for (const f of memFiles) {
-      process.stderr.write(`\x1b[2m  📋 ${f.level}: ${f.path}\x1b[0m\n`);
+      stderr.write(`\x1b[2m  📋 ${f.level}: ${f.path}\x1b[0m\n`);
     }
   }
 }

@@ -76,6 +76,16 @@ export async function registerBuiltinTools(config, registry = defaultRegistry) {
   const { registerGitTools } = await import('./git.js');
   registerGitTools(config, registry);
 
+  // Outlook MCP tools (email, calendar, contacts, drafts)
+  try {
+    const { registerOutlookTools } = await import('./outlook.js');
+    registerOutlookTools(config, registry);
+  } catch (e) {
+    // Non-fatal: outlook-mcp may not be installed
+    if (config.verbose) process.stderr.write(`[tools] Outlook tools skipped: ${e.message}
+`);
+  }
+
   // Swarm: agent tool (optional, only when config.swarm is true)
   if (config.swarm) {
     const { registerAgentTool } = await import('./agent.js');

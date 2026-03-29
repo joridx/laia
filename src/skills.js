@@ -265,6 +265,8 @@ export function expandSkill(skill, args = '') {
 
   // Replace {{user.*}} placeholders with values from ~/.claudia/user.json
   body = replaceUserPlaceholders(body);
+  // Replace {{env.*}} placeholders with env vars / ~/.claudia/env.json
+  body = replaceEnvPlaceholders(body);
 
   return body;
 }
@@ -294,6 +296,8 @@ export function expandCommand(command, args) {
 
   // Replace {{user.*}} placeholders with values from ~/.claudia/user.json
   body = replaceUserPlaceholders(body);
+  // Replace {{env.*}} placeholders with env vars / ~/.claudia/env.json
+  body = replaceEnvPlaceholders(body);
 
   return body;
 }
@@ -313,8 +317,42 @@ function replaceUserPlaceholders(text) {
     }
     return text;
   }
+  // Derived fields (computed from base fields)
+  const derived = {
+    email_encoded: profile.email ? encodeURIComponent(profile.email) : undefined,
+    home_dir: profile.home_dir || process.env.HOME || process.env.USERPROFILE,
+  };
+  const merged = { ...derived, ...profile }; // explicit profile values override derived
   return text.replace(USER_PLACEHOLDER_RE, (match, key) => {
-    return profile[key] !== undefined ? String(profile[key]) : match;
+    return merged[key] !== undefined ? String(merged[key]) : match;
+  });
+}
+
+// --- Environment placeholder replacement ({{env.*}}) ---
+// Resolves from: process.env > ~/.claudia/env.json > leave unresolved
+
+const ENV_PLACEHOLDER_RE = /\{\{env\.([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g;
+
+let _envConfig = undefined;
+
+function loadEnvConfig() {
+  if (_envConfig !== undefined) return _envConfig;
+  try {
+    const envPath = join(homedir(), '.claudia', 'env.json');
+    _envConfig = JSON.parse(readFileSync(envPath, 'utf8'));
+  } catch {
+    _envConfig = null;
+  }
+  return _envConfig;
+}
+
+function replaceEnvPlaceholders(text) {
+  if (!text.includes('{{env.')) return text;
+  const envJson = loadEnvConfig();
+  return text.replace(ENV_PLACEHOLDER_RE, (match, key) => {
+    if (process.env[key] !== undefined) return process.env[key];
+    if (envJson && envJson[key] !== undefined) return String(envJson[key]);
+    return match;
   });
 }
 
