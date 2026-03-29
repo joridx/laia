@@ -112,15 +112,64 @@ export async function runOneShot({ prompt, config, logger, json }) {
 }
 
 export function printStep(step) {
+  const DIM = '\x1b[2m';
+  const R = '\x1b[0m';
+  const CYAN = '\x1b[36m';
+  const GREEN = '\x1b[32m';
+  const RED = '\x1b[31m';
+  const YELLOW = '\x1b[33m';
+
   switch (step.type) {
     case 'reasoning':
-      process.stderr.write(`\x1b[2m${step.summary}\x1b[0m\n`);
+      process.stderr.write(`${DIM}💭 ${step.summary}${R}\n`);
       break;
-    case 'tool_call':
-      process.stderr.write(`\x1b[36m→ ${step.name}(${JSON.stringify(step.args).substring(0, 80)})\x1b[0m\n`);
+    case 'tool_call': {
+      // Build a compact, informative tool call description
+      const name = step.name;
+      const args = step.args || {};
+      let detail = '';
+      switch (name) {
+        case 'read':
+          detail = args.path ? `${args.path}${args.offset ? `:${args.offset}` : ''}${args.limit ? `-${(args.offset||1)+args.limit-1}` : ''}` : '';
+          break;
+        case 'write':
+          detail = args.path || '';
+          break;
+        case 'edit':
+          detail = args.path ? `${args.path} · ${args.edits?.length || '?'} edit${(args.edits?.length||0) !== 1 ? 's' : ''}` : '';
+          break;
+        case 'bash':
+          detail = (args.command || '').slice(0, 60) + ((args.command?.length || 0) > 60 ? '…' : '');
+          break;
+        case 'grep':
+          detail = `"${(args.query || '').slice(0, 30)}"${args.path ? ` in ${args.path}` : ''}`;
+          break;
+        case 'glob':
+          detail = args.pattern || '';
+          break;
+        case 'agent':
+          detail = (args.prompt || '').slice(0, 50) + ((args.prompt?.length || 0) > 50 ? '…' : '');
+          break;
+        default:
+          detail = JSON.stringify(args).substring(0, 60);
+      }
+      process.stderr.write(`${CYAN}⚡ ${name}${R}${detail ? `${DIM}(${detail})${R}` : ''}\n`);
       break;
+    }
     case 'tool_result': {
-      process.stderr.write(`\x1b[32m✓ ${step.name}\x1b[0m\n`);
+      const name = step.name;
+      const hasError = Boolean(step.result?.error) || (step.name === 'bash' && Number(step.result?.exitCode) !== 0);
+      const icon = hasError ? `${YELLOW}⚠` : `${GREEN}✓`;
+      let suffix = '';
+      if (step.name === 'bash' && step.result?.exitCode !== undefined) {
+        suffix = ` ${DIM}exit ${step.result.exitCode}${R}`;
+      } else if ((step.name === 'edit' || step.name === 'write') && step.result?.path) {
+        suffix = ` ${DIM}${step.result.path}${R}`;
+      } else if (step.name === 'agent' && step.result?.text) {
+        const preview = step.result.text.slice(0, 60).replace(/\n/g, ' ');
+        suffix = ` ${DIM}${preview}${(step.result.text.length > 60 ? '…' : '')}${R}`;
+      }
+      process.stderr.write(`${icon} ${name}${R}${suffix}\n`);
       // Show diff preview for edit and write tools (truncate large diffs)
       if ((step.name === 'edit' || step.name === 'write') && step.result?.diff) {
         const MAX_DIFF_LINES = 50;
@@ -128,7 +177,7 @@ export function printStep(step) {
         const truncated = diffLines.length > MAX_DIFF_LINES;
         const display = truncated ? diffLines.slice(0, MAX_DIFF_LINES).join('\n') : step.result.diff;
         process.stderr.write(colorDiff(display) + '\n');
-        if (truncated) process.stderr.write(`\x1b[2m  ... (${diffLines.length - MAX_DIFF_LINES} more lines truncated)\x1b[0m\n`);
+        if (truncated) process.stderr.write(`${DIM}  ... (${diffLines.length - MAX_DIFF_LINES} more lines truncated)${R}\n`);
       }
       break;
     }
@@ -136,7 +185,7 @@ export function printStep(step) {
       process.stdout.write(step.text);
       break;
     case 'error':
-      process.stderr.write(`\x1b[31m✗ ${step.error}\x1b[0m\n`);
+      process.stderr.write(`${RED}✗ ${step.error}${R}\n`);
       break;
   }
 }

@@ -344,19 +344,39 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   // Bracketed paste: intercept paste markers, replace \n with sentinel
   const { stream: pasteStream, enable: enablePaste, disable: disablePaste } = createPasteStream(stdin, stdout);
 
+  // Track the last-used model (auto-router may change it per turn)
+  let lastModel = config.model;
+
+  // Helper to build a rich prompt showing model + context %
+  function buildPrompt() {
+    const parts = [];
+    if (planMode) parts.push('\x1b[33mPLAN\x1b[0m');
+    // Short model label
+    const m = (lastModel || config.model || '').replace(/^claude-/, '');
+    if (m) parts.push(`\x1b[2m${m}\x1b[0m`);
+    // Context %
+    const pct = context.usagePercent();
+    if (pct > 0) {
+      const ctxColor = pct > 80 ? '31;1' : pct > 60 ? '33;1' : '2'; // red bold / yellow bold / dim
+      parts.push(`\x1b[${ctxColor}m${pct}%\x1b[0m`);
+    }
+    const badge = parts.length ? ` \x1b[2m[\x1b[0m${parts.join('\x1b[2m·\x1b[0m')}\x1b[2m]\x1b[0m` : '';
+    return `\x1b[1mclaudia\x1b[0m${badge}\x1b[1m>\x1b[0m `;
+  }
+
   const rl = readline.createInterface({
     input: pasteStream,
     output: stdout,
     completer,
-    prompt: planMode ? '\x1b[33m[PLAN]\x1b[0m \x1b[1mclaudia>\x1b[0m ' : '\x1b[1mclaudia>\x1b[0m ',
+    prompt: buildPrompt(),
   });
 
   // Register readline with permission system so it pauses during prompts
   setReadlineInterface(rl);
 
-  // Helper to update prompt badge when plan mode toggles
+  // Helper to update prompt badge when plan mode toggles or after a turn
   function updatePrompt() {
-    rl.setPrompt(planMode ? '\x1b[33m[PLAN]\x1b[0m \x1b[1mclaudia>\x1b[0m ' : '\x1b[1mclaudia>\x1b[0m ');
+    rl.setPrompt(buildPrompt());
   }
 
   function showSuggestions() {
@@ -467,7 +487,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
     // Slash commands
     if (input.startsWith('/')) {
       const handled = await handleSlashCommand(input, config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, { getPlanMode: () => planMode, setPlanMode: (v) => { planMode = v; updatePrompt(); } }, { getEffort: () => effort, setEffort: (v) => { effort = v; } });
-      if (handled) { rl.prompt(); continue; }
+      if (handled) { updatePrompt(); rl.prompt(); continue; }
     }
 
     // Normal prompt
@@ -478,6 +498,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
       if (config.model === 'auto') {
         const decision = router.route(input);
         effectiveConfig.model = decision.model;
+        lastModel = decision.model;  // update prompt badge
         corporateHint = decision.corporateHint;
         stderr.write(`\x1b[2m[auto → ${decision.model} · ${routeLabel(decision)}]\x1b[0m\n`);
       }
@@ -617,6 +638,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
       stopSpinnerRef = null;
     }
 
+    updatePrompt();  // refresh model + context % in prompt
     rl.prompt();
   }
 }
