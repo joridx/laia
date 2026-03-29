@@ -8,24 +8,19 @@ import { homedir } from 'os';
 import { existsSync } from 'fs';
 
 // Derive paths from home directory (portable across users)
-// Supports both C:\claude\ (custom install) and %USERPROFILE%\claude\ (standard)
 function findBrainServerPath() {
   if (process.env.BRAIN_SERVER_PATH) return process.env.BRAIN_SERVER_PATH;
 
-  // Try both naming conventions: hyphen and underscore
-  const candidates = [
-    join(homedir(), 'claude', 'claude-local-brain', 'mcp-server', 'index.js'),
-    join(homedir(), 'claude', 'claude_local_brain', 'mcp-server', 'index.js'),
-  ];
+  const primary = join(homedir(), 'claude', 'claude-local-brain', 'mcp-server', 'index.js');
+  if (existsSync(primary)) return primary;
+
+  // Windows fallback: C:\claude\ when homedir is different
   if (process.platform === 'win32') {
-    candidates.push('C:\\claude\\claude-local-brain\\mcp-server\\index.js');
-    candidates.push('C:\\claude\\claude_local_brain\\mcp-server\\index.js');
+    const winAlt = 'C:\\claude\\claude-local-brain\\mcp-server\\index.js';
+    if (existsSync(winAlt)) return winAlt;
   }
 
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return candidates[0]; // fallback (will error at spawn time with a clear path)
+  return primary; // fallback (will error at spawn time with a clear path)
 }
 
 function findBrainDataPath() {
