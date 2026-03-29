@@ -490,7 +490,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
     });
   }
 
-  await animateCatBanner(config, planMode);
+  await animateCatBanner(config, planMode, fileCommands);
   enablePaste();
   process.on('exit', disablePaste);
   process.on('SIGINT', disablePaste);
@@ -1282,7 +1282,7 @@ const CAT_POSES = [
 ];
 
 // Animate the cat logo at startup (quick blink sequence then settle)
-async function animateCatBanner(config, planMode) {
+async function animateCatBanner(config, planMode, fileCommands) {
   const R = '\x1b[0m';
   const CAT = '\x1b[38;2;167;139;250m';   // Violet #A78BFA
   const CATB = '\x1b[1m\x1b[38;2;167;139;250m'; // Bold violet
@@ -1338,5 +1338,19 @@ async function animateCatBanner(config, planMode) {
     for (const f of memFiles) {
       stderr.write(`\x1b[2m  📋 ${f.level}: ${f.path}\x1b[0m\n`);
     }
+  }
+
+  // P8: Show skill tips
+  const skillNames = fileCommands ? [...fileCommands.keys()] : [];
+  if (skillNames.length >= 2) {
+    // Pick 3 random skills, rotating based on current minute
+    const seed = new Date().getMinutes();
+    const shuffled = skillNames.slice().sort((a, b) => {
+      const ha = ((seed * 31 + a.charCodeAt(0)) * 37) & 0xffff;
+      const hb = ((seed * 31 + b.charCodeAt(0)) * 37) & 0xffff;
+      return ha - hb;
+    });
+    const tips = shuffled.slice(0, 3).map(s => `/${s}`);
+    stderr.write(`\x1b[2m  💡 ${tips.join(' · ')} · /help\x1b[0m\n`);
   }
 }
