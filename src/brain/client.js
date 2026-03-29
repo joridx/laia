@@ -7,8 +7,8 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 // Derive paths from home directory (portable across users)
-const BRAIN_SERVER_PATH = process.env.BRAIN_SERVER_PATH || join(homedir(), 'claude', 'claude_local_brain', 'mcp-server', 'index.js');
-const DEFAULT_BRAIN_DATA = join(homedir(), 'claude', 'claude-brain-data');
+const BRAIN_SERVER_PATH = process.env.BRAIN_SERVER_PATH || 'C:/claude/claude_local_brain/mcp-server/index.js';
+const DEFAULT_BRAIN_DATA = process.env.CLAUDE_BRAIN_PATH || 'C:/claude/claude-brain-data';
 
 let client = null;
 let transport = null;
