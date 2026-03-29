@@ -20,6 +20,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { emitKeypressEvents } from 'readline';
 import { createPasteStream, SENTINEL_RE } from './paste.js';
+import { showCommandPicker } from './command-picker.js';
 
 import { loadProfile, listProfiles } from './profiles.js';
 import { normalizeEffort } from './config.js';
@@ -297,8 +298,11 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   // Suggestion state
   let suggestions = [];
   let selectedSuggestion = -1;
+  let pickerActive = false;  // P1: suppress completer when picker is showing
 
   function completer(line) {
+    // When the interactive picker is open, don't let readline display completions
+    if (pickerActive) return [[], line];
     if (line.startsWith('/')) {
       // Check if we're completing a subcommand (e.g. "/effort m")
       const spaceIdx = line.indexOf(' ');
@@ -446,6 +450,44 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   if (stdin.isTTY) {
     emitKeypressEvents(pasteStream, rl);
     pasteStream.on('keypress', onEscKeypress);
+
+    // P1: Interactive command picker — intercept Tab when line starts with "/"
+    pasteStream.on('keypress', async (_ch, key) => {
+      if (pickerActive) return;
+      if (key && key.name === 'tab' && rl.line && rl.line.startsWith('/')) {
+        pickerActive = true;
+        try {
+          const currentFilter = rl.line.slice(1);  // strip leading "/"
+
+          // Build items list from allCommands + metadata
+          const pickerItems = allCommands.map(cmd => {
+            const meta = COMMAND_META[cmd];
+            const skill = !meta ? fileCommands.get(cmd.slice(1)) : null;
+            return {
+              name: cmd,
+              desc: meta?.desc || skill?.description?.slice(0, 50) || '',
+              cat: meta?.cat || 'skills',
+            };
+          });
+
+          const picked = await showCommandPicker({
+            items: pickerItems,
+            filter: currentFilter,
+            rl,
+            stdin,
+            stderr,
+          });
+
+          if (picked) {
+            // Replace current line with the picked command
+            rl.write(null, { ctrl: true, name: 'u' });  // clear line
+            rl.write(picked + ' ');  // insert picked command + space for args
+          }
+        } finally {
+          pickerActive = false;
+        }
+      }
+    });
   }
 
   await animateCatBanner(config, planMode);
