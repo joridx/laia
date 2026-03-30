@@ -58,35 +58,43 @@ claudia
 
 ## Architecture
 
+<p align="center">
+  <img src="docs/architecture.svg" alt="Claudia Architecture Diagram" width="900">
+</p>
+
 ```
-bin/claudia.js          Entry point (CLI args, mode dispatch)
+bin/claudia.js            Entry point (CLI args, mode dispatch)
 │
-├── src/repl.js         Interactive REPL (readline, spinner, tab-complete)
-├── src/agent.js        One-shot mode (single prompt → result)
-├── src/mcp-server.js   MCP server mode (expose agent tool via stdio)
+├── src/repl.js           Interactive REPL (readline, spinner, tab-complete)
+├── src/agent.js          One-shot mode (single prompt → result)
+├── src/mcp-server.js     MCP server mode (expose agent tool via stdio)
 │
-├── src/llm.js          LLM client (SSE streaming, /responses + /chat/completions)
-├── src/router.js       Per-turn model auto-router (corporate/coding/quick)
-├── src/config.js       Configuration loader
-├── src/context.js      Context window management + auto-compaction
+├── src/llm.js            LLM client (SSE streaming, /responses + /chat/completions)
+├── src/router.js         Per-turn model auto-router (corporate/coding/quick)
+├── src/config.js         Configuration loader
+├── src/context.js        Context window management + auto-compaction
 ├── src/system-prompt.js  System prompt builder (5-level CLAUDE.md hierarchy)
+├── src/auth.js           Multi-provider token resolution
+├── src/command-picker.js Interactive command picker UX
 │
-├── src/tools/          Built-in tools (14 total)
-│   ├── read.js         File reading
-│   ├── write.js        File creation/overwrite
-│   ├── edit.js         Search/replace with fuzzy matching
-│   ├── bash.js         Shell execution (Git Bash)
-│   ├── glob.js         File pattern matching
-│   ├── grep.js         Text search
-│   ├── git.js          Git operations (diff, status, log)
-│   ├── brain.js        Memory tools (search, remember, context)
-│   ├── command.js      Skill discovery and execution
-│   ├── outlook.js      Outlook email/calendar (13 tools via MCP)
-│   ├── agent.js        Spawn worker agents (swarm mode)
-│   └── index.js        Registry + bootstrap
+├── src/tools/            Built-in tools (13 files)
+│   ├── read.js           File reading
+│   ├── write.js          File creation/overwrite
+│   ├── edit.js           Search/replace with fuzzy matching
+│   ├── bash.js           Shell execution (Git Bash)
+│   ├── bash-compact.js   Compact bash output formatter
+│   ├── glob.js           File pattern matching
+│   ├── grep.js           Text search
+│   ├── git.js            Git operations (diff, status, log)
+│   ├── brain.js          Memory tools (search, remember, context)
+│   ├── command.js        Skill discovery and execution
+│   ├── outlook.js        Outlook email/calendar (13 tools via MCP)
+│   ├── agent.js          Spawn worker agents (swarm mode)
+│   └── index.js          Registry + bootstrap
 │
 ├── src/brain/client.js    Brain MCP client (lazy init)
 ├── src/outlook/client.js  Outlook MCP client (lazy init)
+├── src/commands/loader.js Slash-command loader
 ├── src/skills.js          Skill loader (V3: directories + legacy flat files)
 ├── src/profiles.js        Agent profile loader (YAML)
 ├── src/session.js         Session persistence (save/load/fork)
@@ -103,20 +111,21 @@ bin/claudia.js          Entry point (CLI args, mode dispatch)
 ├── src/user-profile.js    User preferences
 │
 └── packages/providers/    @claude/providers (shared package)
-    └── src/providers.js   Multi-provider registry (Copilot, Anthropic, Azure, GenAI Lab)
+    └── src/providers.js   Multi-provider registry (Copilot, Anthropic, Azure, GenAI Lab, Ollama)
 ```
 
 ### Lines of Code
 
 | Component | LOC |
 |-----------|----:|
-| Core (`src/*.js`) | 4,629 |
-| Tools (`src/tools/*.js`) | 1,163 |
-| MCP clients (`src/brain/`, `src/outlook/`) | 214 |
+| Core (`src/*.js`) | 5,289 |
+| Tools (`src/tools/*.js`) | 1,334 |
+| MCP clients (`src/brain/`, `src/outlook/`) | 240 |
+| Commands loader | 63 |
 | Provider package | 301 |
-| Entry point | 80 |
-| **Total source** | **~6,400** |
-| Tests (17 files) | ~700 |
+| Entry point | 73 |
+| **Total source** | **~7,300** |
+| Tests (15 files) | ~700 |
 
 ---
 
@@ -492,7 +501,7 @@ npm test                        # Run all tests
 node --test tests/unit/*.js     # Unit tests only
 ```
 
-17 test files covering: providers, tools (edit, git, permissions, registry), session management, undo, paste, swarm, SSE parsing, memory files, diff, attachments.
+15 test files covering: providers, tools (edit, git, permissions, registry), session management, undo, paste, swarm, SSE parsing, memory files, diff, attachments, LLM signals.
 
 ---
 
@@ -500,15 +509,16 @@ node --test tests/unit/*.js     # Unit tests only
 
 | Metric | Value |
 |--------|------:|
-| Total source LOC | ~6,400 |
-| Total commits | 122 |
-| Test files | 17 |
-| Built-in tools | 14 (+ 13 Outlook) |
+| Total source LOC | ~7,300 |
+| Total commits | 142 |
+| Test files | 15 |
+| Tool files (`src/tools/`) | 13 |
+| Outlook MCP sub-tools | 13 |
 | Corporate skills | 38 |
 | Agent profiles | 3 |
 | External dependencies | 3 (`fast-glob`, `@modelcontextprotocol/sdk`, `yaml`) |
 | Node.js | 24+ (ESM) |
-| Development period | March 15–27, 2026 (12 days) |
+| Development period | March 15–30, 2026 (15 days) |
 
 ---
 
@@ -525,6 +535,8 @@ node --test tests/unit/*.js     # Unit tests only
 | Mar 22 | Plan mode, agent profiles, brain quality, CLI flags, **V2 Complete** (6/6 items in one session) |
 | Mar 22 | Skills V3 loader + migration |
 | Mar 27 | Outlook MCP (13 tools), Dynatrace enrichment (+4 capabilities), Bedrock fallback, provider cleanup |
+| Mar 29 | UX overhaul: interactive command picker, rich tool visualization, dynamic prompt, welcome tips |
+| Mar 30 | Architecture diagram, README audit & update |
 
 ---
 

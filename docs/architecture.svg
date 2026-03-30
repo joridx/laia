@@ -1,0 +1,322 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 700" width="900" height="700" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <!-- Arrow marker -->
+    <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-auto">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#5a6577"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-auto">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#4a7fcb"/>
+    </marker>
+    <!-- Drop shadow filter -->
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.10"/>
+    </filter>
+    <filter id="shadow-lg" x="-3%" y="-3%" width="106%" height="106%">
+      <feDropShadow dx="1.5" dy="1.5" stdDeviation="3" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="700" rx="8" fill="#f8f9fa"/>
+  <!-- Subtle grid pattern -->
+  <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e9ecef" stroke-width="0.5"/>
+  </pattern>
+  <rect width="900" height="700" fill="url(#grid)" rx="8" opacity="0.5"/>
+
+  <!-- Title -->
+  <text x="450" y="32" text-anchor="middle" font-size="20" font-weight="700" fill="#212529" letter-spacing="0.5">Claudia — Architecture</text>
+  <line x1="300" y1="40" x2="600" y2="40" stroke="#dee2e6" stroke-width="1"/>
+
+  <!-- ==================== ROW 1: Entry Point ==================== -->
+  <rect x="355" y="52" width="190" height="36" rx="8" fill="#1a73e8" filter="url(#shadow)"/>
+  <text x="450" y="75" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">bin/claudia.js</text>
+  <text x="450" y="97" text-anchor="middle" font-size="9" fill="#6c757d">CLI Entry Point</text>
+
+  <!-- Vertical line from entry down to split point -->
+  <line x1="450" y1="88" x2="450" y2="108" stroke="#5a6577" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Horizontal rail at split -->
+  <line x1="155" y1="108" x2="745" y2="108" stroke="#5a6577" stroke-width="1.2"/>
+  <!-- Three vertical drops -->
+  <line x1="155" y1="108" x2="155" y2="118" stroke="#5a6577" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="450" y1="108" x2="450" y2="118" stroke="#5a6577" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="745" y1="108" x2="745" y2="118" stroke="#5a6577" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+  <!-- ==================== ROW 2: Three Modes ==================== -->
+  <!-- REPL -->
+  <rect x="70" y="125" width="170" height="42" rx="8" fill="#4285f4" filter="url(#shadow)"/>
+  <text x="155" y="145" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">repl.js</text>
+  <text x="155" y="159" text-anchor="middle" font-size="8" fill="#c5d8fc">readline · spinner · slash-cmds</text>
+
+  <!-- Agent -->
+  <rect x="365" y="125" width="170" height="42" rx="8" fill="#4285f4" filter="url(#shadow)"/>
+  <text x="450" y="145" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">agent.js</text>
+  <text x="450" y="159" text-anchor="middle" font-size="8" fill="#c5d8fc">One-shot · prompt → result</text>
+
+  <!-- MCP Server -->
+  <rect x="660" y="125" width="170" height="42" rx="8" fill="#4285f4" filter="url(#shadow)"/>
+  <text x="745" y="145" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">mcp-server.js</text>
+  <text x="745" y="159" text-anchor="middle" font-size="8" fill="#c5d8fc">MCP Server · stdio</text>
+
+  <!-- Arrows from modes down to core layer -->
+  <line x1="155" y1="167" x2="155" y2="187" stroke="#5a6577" stroke-width="1.2"/>
+  <line x1="450" y1="167" x2="450" y2="187" stroke="#5a6577" stroke-width="1.2"/>
+  <line x1="745" y1="167" x2="745" y2="187" stroke="#5a6577" stroke-width="1.2"/>
+  <!-- Merge rail -->
+  <line x1="155" y1="187" x2="745" y2="187" stroke="#5a6577" stroke-width="1.2"/>
+  <line x1="450" y1="187" x2="450" y2="197" stroke="#5a6577" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+  <!-- ==================== ROW 3: Core Services ==================== -->
+  <!-- Core group background -->
+  <rect x="22" y="206" width="856" height="150" rx="10" fill="#e8f0fe" stroke="#b4cff4" stroke-width="1" filter="url(#shadow-lg)"/>
+  <text x="38" y="222" font-size="9" font-weight="700" fill="#4a7fcb" text-transform="uppercase" letter-spacing="1">CORE SERVICES</text>
+
+  <!-- Row 1 of core: Primary pipeline -->
+  <rect x="35"  y="230" width="118" height="34" rx="6" fill="#3367d6" filter="url(#shadow)"/>
+  <text x="94"  y="250" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">llm.js</text>
+  <text x="94"  y="259" text-anchor="middle" font-size="7" fill="#a8c7fa">SSE · multi-endpoint</text>
+
+  <rect x="163" y="230" width="118" height="34" rx="6" fill="#3367d6" filter="url(#shadow)"/>
+  <text x="222" y="250" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">router.js</text>
+  <text x="222" y="259" text-anchor="middle" font-size="7" fill="#a8c7fa">model auto-router</text>
+
+  <rect x="291" y="230" width="118" height="34" rx="6" fill="#3367d6" filter="url(#shadow)"/>
+  <text x="350" y="250" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">context.js</text>
+  <text x="350" y="259" text-anchor="middle" font-size="7" fill="#a8c7fa">window · compaction</text>
+
+  <rect x="419" y="230" width="118" height="34" rx="6" fill="#3367d6" filter="url(#shadow)"/>
+  <text x="478" y="250" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">auth.js</text>
+  <text x="478" y="259" text-anchor="middle" font-size="7" fill="#a8c7fa">multi-provider tokens</text>
+
+  <rect x="547" y="230" width="118" height="34" rx="6" fill="#3367d6" filter="url(#shadow)"/>
+  <text x="606" y="250" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">permissions.js</text>
+  <text x="606" y="259" text-anchor="middle" font-size="7" fill="#a8c7fa">3-tier system</text>
+
+  <rect x="675" y="230" width="118" height="34" rx="6" fill="#3367d6" filter="url(#shadow)"/>
+  <text x="734" y="250" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">session.js</text>
+  <text x="734" y="259" text-anchor="middle" font-size="7" fill="#a8c7fa">save · load · fork</text>
+
+  <!-- Connecting arrows between primary pipeline -->
+  <line x1="153" y1="247" x2="163" y2="247" stroke="#5a6577" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="281" y1="247" x2="291" y2="247" stroke="#5a6577" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="409" y1="247" x2="419" y2="247" stroke="#5a6577" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="537" y1="247" x2="547" y2="247" stroke="#5a6577" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="665" y1="247" x2="675" y2="247" stroke="#5a6577" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Row 2 of core: Supporting modules -->
+  <rect x="35"  y="275" width="100" height="30" rx="6" fill="#5c93e0"/>
+  <text x="85"  y="293" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">system-prompt.js</text>
+  <text x="85"  y="301" text-anchor="middle" font-size="6.5" fill="#c5d8fc">5-level CLAUDE.md</text>
+
+  <rect x="143" y="275" width="87" height="30" rx="6" fill="#5c93e0"/>
+  <text x="186" y="293" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">config.js</text>
+
+  <rect x="238" y="275" width="87" height="30" rx="6" fill="#5c93e0"/>
+  <text x="281" y="293" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">swarm.js</text>
+  <text x="281" y="301" text-anchor="middle" font-size="6.5" fill="#c5d8fc">multi-agent</text>
+
+  <rect x="333" y="275" width="95" height="30" rx="6" fill="#5c93e0"/>
+  <text x="380" y="293" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">command-picker.js</text>
+
+  <rect x="436" y="275" width="78" height="30" rx="6" fill="#5c93e0"/>
+  <text x="475" y="293" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">render.js</text>
+
+  <rect x="522" y="275" width="70" height="30" rx="6" fill="#5c93e0"/>
+  <text x="557" y="293" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">diff.js</text>
+
+  <rect x="600" y="275" width="70" height="30" rx="6" fill="#5c93e0"/>
+  <text x="635" y="293" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">undo.js</text>
+
+  <rect x="678" y="275" width="85" height="30" rx="6" fill="#5c93e0"/>
+  <text x="720" y="293" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">git-commit.js</text>
+
+  <!-- Row 3: more supporting -->
+  <rect x="35"  y="315" width="78" height="26" rx="5" fill="#7aa8e8"/>
+  <text x="74"  y="332" text-anchor="middle" font-size="8.5" font-weight="600" fill="#fff">paste.js</text>
+
+  <rect x="121" y="315" width="78" height="26" rx="5" fill="#7aa8e8"/>
+  <text x="160" y="332" text-anchor="middle" font-size="8.5" font-weight="600" fill="#fff">attach.js</text>
+
+  <rect x="207" y="315" width="78" height="26" rx="5" fill="#7aa8e8"/>
+  <text x="246" y="332" text-anchor="middle" font-size="8.5" font-weight="600" fill="#fff">logger.js</text>
+
+  <rect x="293" y="315" width="100" height="26" rx="5" fill="#7aa8e8"/>
+  <text x="343" y="332" text-anchor="middle" font-size="8.5" font-weight="600" fill="#fff">memory-files.js</text>
+
+  <rect x="401" y="315" width="100" height="26" rx="5" fill="#7aa8e8"/>
+  <text x="451" y="332" text-anchor="middle" font-size="8.5" font-weight="600" fill="#fff">user-profile.js</text>
+
+  <rect x="509" y="315" width="85" height="26" rx="5" fill="#7aa8e8"/>
+  <text x="551" y="332" text-anchor="middle" font-size="8.5" font-weight="600" fill="#fff">profiles.js</text>
+
+  <rect x="602" y="315" width="72" height="26" rx="5" fill="#7aa8e8"/>
+  <text x="638" y="332" text-anchor="middle" font-size="8.5" font-weight="600" fill="#fff">skills.js</text>
+
+  <!-- Arrow from core down to tools -->
+  <line x1="450" y1="356" x2="450" y2="374" stroke="#5a6577" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ==================== ROW 4: Tool Registry ==================== -->
+  <rect x="22" y="383" width="856" height="88" rx="10" fill="#e6f4ea" stroke="#a8dab5" stroke-width="1" filter="url(#shadow-lg)"/>
+  <text x="38" y="399" font-size="9" font-weight="700" fill="#2d8a4e" letter-spacing="1">TOOL REGISTRY — 13 TOOL FILES</text>
+
+  <!-- Tool boxes row 1 -->
+  <rect x="35"  y="407" width="68" height="26" rx="5" fill="#34a853" filter="url(#shadow)"/>
+  <text x="69"  y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">read</text>
+
+  <rect x="111" y="407" width="68" height="26" rx="5" fill="#34a853" filter="url(#shadow)"/>
+  <text x="145" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">write</text>
+
+  <rect x="187" y="407" width="68" height="26" rx="5" fill="#34a853" filter="url(#shadow)"/>
+  <text x="221" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">edit</text>
+
+  <rect x="263" y="407" width="68" height="26" rx="5" fill="#34a853" filter="url(#shadow)"/>
+  <text x="297" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">bash</text>
+
+  <rect x="339" y="407" width="90" height="26" rx="5" fill="#34a853" filter="url(#shadow)"/>
+  <text x="384" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">bash-compact</text>
+
+  <rect x="437" y="407" width="68" height="26" rx="5" fill="#34a853" filter="url(#shadow)"/>
+  <text x="471" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">glob</text>
+
+  <rect x="513" y="407" width="68" height="26" rx="5" fill="#34a853" filter="url(#shadow)"/>
+  <text x="547" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">grep</text>
+
+  <rect x="589" y="407" width="90" height="26" rx="5" fill="#2d8a4e" filter="url(#shadow)"/>
+  <text x="634" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">git ×3</text>
+
+  <rect x="687" y="407" width="90" height="26" rx="5" fill="#c97a2a" filter="url(#shadow)"/>
+  <text x="732" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">brain ×3</text>
+
+  <rect x="785" y="407" width="80" height="26" rx="5" fill="#2d8a4e" filter="url(#shadow)"/>
+  <text x="825" y="424" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">command</text>
+
+  <!-- Tool boxes row 2 -->
+  <rect x="35"  y="440" width="100" height="26" rx="5" fill="#7b4bbf" filter="url(#shadow)"/>
+  <text x="85"  y="457" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">outlook ×13</text>
+
+  <rect x="143" y="440" width="78" height="26" rx="5" fill="#2d8a4e" filter="url(#shadow)"/>
+  <text x="182" y="457" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">agent</text>
+
+  <!-- ==================== ROW 5: Bottom layer — 3 sections ==================== -->
+  <!-- Arrows down from tools -->
+  <!-- Left arrow to MCP Servers -->
+  <line x1="155" y1="471" x2="155" y2="495" stroke="#5a6577" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <!-- Center arrow to Providers -->
+  <line x1="450" y1="471" x2="450" y2="495" stroke="#5a6577" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <!-- Right arrow to Skills -->
+  <line x1="750" y1="471" x2="750" y2="495" stroke="#5a6577" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+  <!-- === MCP Servers (bottom left) === -->
+  <rect x="22" y="504" width="270" height="102" rx="10" fill="#f3e8fd" stroke="#c9a8e8" stroke-width="1" filter="url(#shadow-lg)"/>
+  <text x="38" y="520" font-size="9" font-weight="700" fill="#7b4bbf" letter-spacing="1">EXTERNAL MCP SERVERS</text>
+
+  <rect x="35"  y="530" width="244" height="30" rx="6" fill="#9c64d6" filter="url(#shadow)"/>
+  <text x="157" y="548" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">🧠 Brain MCP Server</text>
+  <text x="157" y="557" text-anchor="middle" font-size="7" fill="#e0c8f5">persistent memory · semantic search · decay</text>
+
+  <rect x="35"  y="567" width="244" height="30" rx="6" fill="#9c64d6" filter="url(#shadow)"/>
+  <text x="157" y="585" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">📧 Outlook MCP Server</text>
+  <text x="157" y="594" text-anchor="middle" font-size="7" fill="#e0c8f5">Playwright · email · calendar · 13 tools</text>
+
+  <!-- === Provider Registry (bottom center) === -->
+  <rect x="310" y="504" width="280" height="102" rx="10" fill="#e8f0fe" stroke="#b4cff4" stroke-width="1" filter="url(#shadow-lg)"/>
+  <text x="326" y="520" font-size="9" font-weight="700" fill="#4a7fcb" letter-spacing="1">PROVIDER REGISTRY — @claude/providers</text>
+
+  <rect x="323" y="530" width="120" height="24" rx="5" fill="#1a73e8" filter="url(#shadow)"/>
+  <text x="383" y="546" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">Copilot Business</text>
+  <text x="383" y="558" text-anchor="middle" font-size="7" fill="#8ab4f8">⭐ primary</text>
+
+  <rect x="453" y="530" width="125" height="24" rx="5" fill="#3367d6" filter="url(#shadow)"/>
+  <text x="515" y="546" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">Anthropic Bedrock</text>
+  <text x="515" y="558" text-anchor="middle" font-size="7" fill="#8ab4f8">fallback</text>
+
+  <rect x="323" y="565" width="83" height="24" rx="5" fill="#5c93e0" filter="url(#shadow)"/>
+  <text x="364" y="581" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">Azure OAI</text>
+
+  <rect x="414" y="565" width="83" height="24" rx="5" fill="#5c93e0" filter="url(#shadow)"/>
+  <text x="455" y="581" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">GenAI Lab</text>
+
+  <rect x="505" y="565" width="73" height="24" rx="5" fill="#5c93e0" filter="url(#shadow)"/>
+  <text x="541" y="581" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">Ollama</text>
+
+  <!-- === Skills Layer (bottom right) === -->
+  <rect x="608" y="504" width="270" height="102" rx="10" fill="#fff3e0" stroke="#f5c77e" stroke-width="1" filter="url(#shadow-lg)"/>
+  <text x="624" y="520" font-size="9" font-weight="700" fill="#c97a2a" letter-spacing="1">SKILLS — 38 CORPORATE COMMANDS</text>
+  <text x="624" y="532" font-size="7.5" fill="#a06b27">~/.claude/commands/*.md</text>
+
+  <!-- Skill tags row 1 -->
+  <rect x="621" y="540" width="48" height="18" rx="4" fill="#e8973a"/>
+  <text x="645" y="553" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">Jira</text>
+
+  <rect x="675" y="540" width="72" height="18" rx="4" fill="#e8973a"/>
+  <text x="711" y="553" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">Confluence</text>
+
+  <rect x="753" y="540" width="70" height="18" rx="4" fill="#e8973a"/>
+  <text x="788" y="553" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">Dynatrace</text>
+
+  <rect x="829" y="540" width="40" height="18" rx="4" fill="#e8973a"/>
+  <text x="849" y="553" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">CI</text>
+
+  <!-- Skill tags row 2 -->
+  <rect x="621" y="564" width="56" height="18" rx="4" fill="#d48230"/>
+  <text x="649" y="577" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">Teams</text>
+
+  <rect x="683" y="564" width="56" height="18" rx="4" fill="#d48230"/>
+  <text x="711" y="577" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">GitHub</text>
+
+  <rect x="745" y="564" width="62" height="18" rx="4" fill="#d48230"/>
+  <text x="776" y="577" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">Jenkins</text>
+
+  <rect x="813" y="564" width="56" height="18" rx="4" fill="#d48230"/>
+  <text x="841" y="577" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">Azure</text>
+
+  <!-- Skill tags row 3 -->
+  <rect x="621" y="588" width="68" height="18" rx="4" fill="#c07028"/>
+  <text x="655" y="601" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">Outlook</text>
+
+  <rect x="695" y="588" width="68" height="18" rx="4" fill="#c07028"/>
+  <text x="729" y="601" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">PostgreSQL</text>
+
+  <rect x="769" y="588" width="50" height="18" rx="4" fill="#c07028"/>
+  <text x="794" y="601" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">GIAM</text>
+
+  <rect x="825" y="588" width="44" height="18" rx="4" fill="#c07028"/>
+  <text x="847" y="601" text-anchor="middle" font-size="8" font-weight="600" fill="#fff">+24</text>
+
+  <!-- ==================== Data flow labels ==================== -->
+  <!-- Bidirectional arrows between brain tools and Brain MCP -->
+  <path d="M 732 433 L 732 471" stroke="#9c64d6" stroke-width="1" stroke-dasharray="3,2"/>
+  <path d="M 85 466 L 85 471 L 85 504" stroke="#9c64d6" stroke-width="1.2" marker-end="url(#arrow)" stroke-dasharray="4,2"/>
+
+  <!-- Arrow from llm.js down to providers -->
+  <path d="M 94 264 L 94 274 L 30 274 L 30 480 L 430 480 L 430 504" stroke="#4a7fcb" stroke-width="1.2" stroke-dasharray="4,2" fill="none" marker-end="url(#arrow-blue)"/>
+
+  <!-- Legend -->
+  <rect x="22" y="622" width="856" height="68" rx="8" fill="#fff" stroke="#dee2e6" stroke-width="1"/>
+  <text x="38" y="640" font-size="9" font-weight="700" fill="#495057" letter-spacing="0.5">LEGEND</text>
+
+  <rect x="38"  y="650" width="14" height="14" rx="3" fill="#4285f4"/>
+  <text x="58"  y="661" font-size="8.5" fill="#495057">Core Modules</text>
+
+  <rect x="140" y="650" width="14" height="14" rx="3" fill="#34a853"/>
+  <text x="160" y="661" font-size="8.5" fill="#495057">Tools</text>
+
+  <rect x="205" y="650" width="14" height="14" rx="3" fill="#9c64d6"/>
+  <text x="225" y="661" font-size="8.5" fill="#495057">External MCP</text>
+
+  <rect x="310" y="650" width="14" height="14" rx="3" fill="#1a73e8"/>
+  <text x="330" y="661" font-size="8.5" fill="#495057">Providers</text>
+
+  <rect x="400" y="650" width="14" height="14" rx="3" fill="#e8973a"/>
+  <text x="420" y="661" font-size="8.5" fill="#495057">Skills / Commands</text>
+
+  <line x1="530" y1="657" x2="565" y2="657" stroke="#5a6577" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="572" y="661" font-size="8.5" fill="#495057">Data flow</text>
+
+  <line x1="640" y1="657" x2="675" y2="657" stroke="#9c64d6" stroke-width="1.2" stroke-dasharray="4,2" marker-end="url(#arrow)"/>
+  <text x="682" y="661" font-size="8.5" fill="#495057">MCP / Provider call</text>
+
+  <!-- Version watermark -->
+  <text x="862" y="684" text-anchor="end" font-size="7" fill="#adb5bd">v1.0 — auto-generated</text>
+</svg>
