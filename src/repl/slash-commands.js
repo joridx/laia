@@ -6,7 +6,7 @@ import { stderr } from 'process';
 import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@laia/providers';
 import { getProviderToken } from '../auth.js';
 import { expandCommand, listSkills, loadSkill } from '../skills.js';
-import { stopBrain } from '../brain/client.js';
+import { stopBrain, brainReflectSession } from '../brain/client.js';
 import { normalizeEffort } from '../config.js';
 import { saveSession, autoSave, loadSession, listSessions, forkSession as forkSessionFn } from '../session.js';
 import { loadProfile, listProfiles } from '../profiles.js';
@@ -34,6 +34,7 @@ export const COMMAND_META = {
   '/help':       { desc: 'Show this help',                 cat: 'system',   subs: [] },
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
+  '/reflect':    { desc: 'Reflect on session (brain LLM)',  cat: 'system',   subs: ['auto'] },
   '/exit':       { desc: 'Exit LAIA',                      cat: 'system',   subs: [] },
   '/quit':       { desc: 'Exit LAIA',                      cat: 'system',   subs: [] },
 };
@@ -481,6 +482,46 @@ export async function handleSlashCommand(input, session) {
       const total = attachManager.totalSize();
       const totalTok = attachManager.estimateTokens();
       stderr.write(`\x1b[2m  Total: ${(total / 1024).toFixed(1)}KB, ~${totalTok} tokens\x1b[0m\n`);
+      return true;
+    }
+
+    case 'reflect': {
+      const turns = context.turnCount();
+      if (turns === 0) {
+        stderr.write('\x1b[33mNothing to reflect on (no turns yet)\x1b[0m\n');
+        return true;
+      }
+
+      stderr.write('\x1b[2m[reflect] Building transcript...\x1b[0m\n');
+
+      // Build transcript from messages
+      const messages = context.getMessages();
+      const transcriptLines = [];
+      for (const m of messages) {
+        if (!m.content) continue;
+        const role = m.role === 'user' ? 'USER' : m.role === 'assistant' ? 'ASSISTANT' : m.role.toUpperCase();
+        const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+        transcriptLines.push(`[${role}] ${content.slice(0, 2000)}`);
+      }
+      const transcript = transcriptLines.join('\n\n').slice(0, 24000);
+      const autoSaveFlag = args === 'auto';
+
+      stderr.write(`\x1b[2m[reflect] ${turns} turns, ${transcript.length} chars, auto_save=${autoSaveFlag}\x1b[0m\n`);
+
+      try {
+        const result = await brainReflectSession({
+          transcript,
+          auto_save: autoSaveFlag,
+        });
+        if (result) {
+          stderr.write('\n\x1b[1m🔍 Reflection Results:\x1b[0m\n');
+          stderr.write(result + '\n');
+        } else {
+          stderr.write('\x1b[33mNo reflection results (LLM may not be available)\x1b[0m\n');
+        }
+      } catch (err) {
+        stderr.write(`\x1b[31mReflection failed: ${err.message}\x1b[0m\n`);
+      }
       return true;
     }
 

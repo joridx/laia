@@ -970,6 +970,75 @@ export async function handler({ duplicates, quality } = {}) {
       } catch { /* non-blocking */ }
     }
 
+    // V4 Sprint 4: Evolved Prompt Stats
+    try {
+      // Use env var as signal for which agent, fallback to dir existence
+      let evolvedDir = null;
+      if (process.env.LAIA_BRAIN_PATH) {
+        evolvedDir = path.join(homedir(), ".laia", "evolved");
+      } else if (process.env.CLAUDE_BRAIN_PATH) {
+        evolvedDir = path.join(homedir(), ".claudia", "evolved");
+      } else {
+        const candidates = [
+          path.join(homedir(), ".laia", "evolved"),
+          path.join(homedir(), ".claudia", "evolved"),
+        ];
+        evolvedDir = candidates.find(d => fs.existsSync(d));
+      }
+      if (evolvedDir && fs.existsSync(evolvedDir)) {
+        const versionFile = path.join(evolvedDir, "_version.json");
+        const stableFile = path.join(evolvedDir, "_stable.json");
+        const adaptiveFile = path.join(evolvedDir, "_adaptive.json");
+
+        lines.push(`\n## Evolved Prompt`);
+
+        if (fs.existsSync(versionFile)) {
+          const ver = JSON.parse(fs.readFileSync(versionFile, "utf8"));
+          const age = ver.compiled_at
+            ? Math.floor((Date.now() - new Date(ver.compiled_at).getTime()) / 60000)
+            : null;
+          const ageStr = age !== null
+            ? (age < 60 ? `${age}m ago` : age < 1440 ? `${Math.floor(age / 60)}h ago` : `${Math.floor(age / 1440)}d ago`)
+            : "unknown";
+          lines.push(`- Version: **v${ver.version}** (compiled ${ageStr})`);
+          lines.push(`- Stable: **${ver.stable ?? 0}** entries`);
+          lines.push(`- Adaptive: **${ver.adaptive ?? 0}** entries`);
+          lines.push(`- Total lines: ${ver.totalLines ?? 0}`);
+        } else {
+          lines.push(`- Not yet compiled (run brain_compile_evolved or end a session)`);
+        }
+
+        // Adaptive expiry warnings
+        if (fs.existsSync(adaptiveFile)) {
+          try {
+            const adaptive = JSON.parse(fs.readFileSync(adaptiveFile, "utf8"));
+            const now = Date.now();
+            const WARN_DAYS = 7;
+            let expiringSoon = 0;
+            let expired = 0;
+            for (const [, entry] of Object.entries(adaptive)) {
+              if (entry.expired) { expired++; continue; }
+              if (entry.added_at) {
+                const ageDays = (now - new Date(entry.added_at).getTime()) / 86400000;
+                if (ageDays > 30 - WARN_DAYS) expiringSoon++;
+              }
+            }
+            if (expiringSoon > 0) lines.push(`- ⚠️ ${expiringSoon} adaptive entries expiring within ${WARN_DAYS} days`);
+            if (expired > 0) lines.push(`- Expired: ${expired}`);
+          } catch { /* ignore */ }
+        }
+
+        // Size stats
+        const mdFiles = fs.readdirSync(evolvedDir).filter(f => f.endsWith(".md"));
+        const totalSize = mdFiles.reduce((s, f) => {
+          try { return s + fs.statSync(path.join(evolvedDir, f)).size; } catch { return s; }
+        }, 0);
+        const sizeStr = totalSize >= 1024 ? `${(totalSize / 1024).toFixed(1)}KB` : `${totalSize}B`;
+        lines.push(`- Files: ${mdFiles.length} (${sizeStr} / 16KB max)`);
+        lines.push(`- Dir: ${evolvedDir}`);
+      }
+    } catch { /* non-blocking */ }
+
     lines.push("");
     if (issues.length === 0) {
       lines.push("## Status: ✅ Healthy");
