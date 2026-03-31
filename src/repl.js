@@ -19,11 +19,26 @@ import { createAutoCommitter } from './git-commit.js';
 import { createUndoStack } from './undo.js';
 import { createPlanEngine } from './services/plan-engine.js';
 import { dirname, join } from 'path';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { emitKeypressEvents } from 'readline';
 import { createPasteStream, SENTINEL_RE } from './paste.js';
 import { showCommandPicker } from './command-picker.js';
+
+// Find Git Bash on Windows (reuse same logic as tools/bash.js)
+function findBashShell() {
+  if (process.platform !== 'win32') return null;
+  const candidates = [
+    'C:/Program Files/Git/bin/bash.exe',
+    'C:/Program Files (x86)/Git/bin/bash.exe',
+    process.env.GIT_BASH || '',
+  ];
+  for (const p of candidates) {
+    if (p && existsSync(p)) return p;
+  }
+  return null;
+}
+const BANG_SHELL = findBashShell();
 
 // Extracted modules
 import { executeTurn } from './repl/turn-runner.js';
@@ -456,10 +471,13 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
             encoding: 'utf8',
             timeout: 30000,
             stdio: ['pipe', 'pipe', 'pipe'],
+            shell: BANG_SHELL || true,
           });
           if (output) stdout.write(output);
         } catch (err) {
-          stderr.write(`\x1b[31m${err.stderr || err.message}\x1b[0m\n`);
+          const detail = err.stderr || err.message;
+          stderr.write(`\x1b[31m${detail}\x1b[0m\n`);
+          if (!err.stderr) stderr.write(`\x1b[2m[debug] code=${err.code} status=${err.status} shell=${BANG_SHELL || 'default'}\x1b[0m\n`);
         }
       }
       rl.prompt(); continue;
