@@ -17,7 +17,7 @@ const DEFAULT_CALL_TIMEOUT = 30_000;  // 30s per tool call
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY = 500; // ms
 
-// --- Path discovery (unchanged) ---
+// --- Path discovery ---
 
 function findBrainServerPath() {
   if (process.env.BRAIN_SERVER_PATH) return process.env.BRAIN_SERVER_PATH;
@@ -25,16 +25,40 @@ function findBrainServerPath() {
   if (existsSync(monorepo)) return monorepo;
   const global = join(homedir(), 'laia', 'packages', 'brain', 'index.js');
   if (existsSync(global)) return global;
-  return monorepo;
+  throw new Error(`Brain server not found at ${monorepo} or ${global}. Set BRAIN_SERVER_PATH env var.`);
 }
 
 function findBrainDataPath() {
   if (process.env.LAIA_BRAIN_PATH) return process.env.LAIA_BRAIN_PATH;
-  const homeDefault = join(homedir(), 'laia-data');
-  return homeDefault;
+  return join(homedir(), 'laia-data');
+}
+
+// --- Timeout helper ---
+
+async function withTimeout(promise, ms, label) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // --- Brain connection factory ---
+
+/**
+ * @typedef {Object} BrainConnection
+ * @property {() => Promise<void>} start
+ * @property {() => Promise<void>} stop
+ * @property {(name: string, args?: object, opts?: {timeoutMs?: number}) => Promise<string>} call
+ * @property {boolean} healthy
+ * @property {string} dataPath
+ * @property {string} serverPath
+ */
 
 /**
  * Create a brain connection instance. Not a singleton — caller manages lifecycle.
@@ -50,8 +74,8 @@ export function createBrainConnection({ brainPath, brainServerPath, verbose } = 
 
   let client = null;
   let transport = null;
-  let healthy = true;
-  let reconnectAttempts = 0;
+  let healthy = false;
+  let connectingPromise = null;  // Concurrency guard (#2 fix)
 
   const env = {
     ...process.env,
@@ -77,7 +101,9 @@ export function createBrainConnection({ brainPath, brainServerPath, verbose } = 
 
     client = new Client({ name: 'laia', version: '2.0.0' }, {});
 
-    // Track child process health
+    await client.connect(transport);
+
+    // Track child process health (best-effort — _process is private but standard in StdioClientTransport)
     const childProcess = transport._process || transport.process;
     if (childProcess?.on) {
       childProcess.on('exit', (code) => {
@@ -86,36 +112,48 @@ export function createBrainConnection({ brainPath, brainServerPath, verbose } = 
       });
     }
 
-    await client.connect(transport);
     healthy = true;
-    reconnectAttempts = 0;
     if (verbose) process.stderr.write('[brain] MCP server connected\n');
   }
 
   async function ensureConnected() {
     if (client && healthy) return;
 
-    // Cleanup dead connection
-    if (client) {
-      try { await client.close(); } catch {}
-      client = null;
-      transport = null;
-    }
+    // Concurrency guard: if already reconnecting, wait for that attempt (#2 fix)
+    if (connectingPromise) return connectingPromise;
 
-    // Reconnect with backoff
-    while (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      reconnectAttempts++;
+    connectingPromise = (async () => {
       try {
-        if (verbose) process.stderr.write(`[brain] Reconnecting (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...\n`);
-        await connect();
-        return;
-      } catch (err) {
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-          throw new Error(`Brain reconnect failed after ${MAX_RECONNECT_ATTEMPTS} attempts: ${err.message}`);
+        // Cleanup dead connection
+        if (client) {
+          try { await client.close(); } catch {}
+          client = null;
+          transport = null;
         }
-        await new Promise(r => setTimeout(r, RECONNECT_DELAY * reconnectAttempts));
+
+        // Reconnect with backoff
+        let attempts = 0;  // Local counter — reset per ensureConnected call (#3 fix)
+        while (attempts < MAX_RECONNECT_ATTEMPTS) {
+          attempts++;
+          try {
+            if (verbose) process.stderr.write(`[brain] Reconnecting (attempt ${attempts}/${MAX_RECONNECT_ATTEMPTS})...\n`);
+            await connect();
+            return;
+          } catch (err) {
+            if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+              throw new Error(`Brain reconnect failed after ${MAX_RECONNECT_ATTEMPTS} attempts: ${err.message}`);
+            }
+            await new Promise(r => setTimeout(r, RECONNECT_DELAY * attempts));
+          }
+        }
+        // Should not reach here, but safety net (#3 fix)
+        throw new Error('Brain reconnect exhausted');
+      } finally {
+        connectingPromise = null;
       }
-    }
+    })();
+
+    return connectingPromise;
   }
 
   /**
@@ -129,15 +167,23 @@ export function createBrainConnection({ brainPath, brainServerPath, verbose } = 
   async function call(name, args = {}, { timeoutMs = DEFAULT_CALL_TIMEOUT } = {}) {
     await ensureConnected();
 
-    const callPromise = client.callTool({ name, arguments: args });
-    const timeoutPromise = new Promise((_, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Brain tool '${name}' timed out after ${timeoutMs}ms`)), timeoutMs);
-      timer.unref?.(); // Don't prevent process exit
-    });
-
-    const result = await Promise.race([callPromise, timeoutPromise]);
-    const text = result?.content?.map(c => c.text ?? '').join('') ?? '';
-    return text;
+    try {
+      const result = await withTimeout(
+        client.callTool({ name, arguments: args }),
+        timeoutMs,
+        `Brain tool '${name}'`
+      );
+      const text = result?.content?.map(c => c.text ?? '').join('') ?? '';
+      return text;
+    } catch (err) {
+      // Mark unhealthy on transport errors so next call triggers reconnect (#5 fix)
+      if (err.code === 'EPIPE' || err.code === 'ERR_IPC_CHANNEL_CLOSED' ||
+          err.message?.includes('timed out') || err.message?.includes('closed') ||
+          err.message?.includes('EPIPE')) {
+        healthy = false;
+      }
+      throw err;
+    }
   }
 
   async function disconnect() {
@@ -150,28 +196,26 @@ export function createBrainConnection({ brainPath, brainServerPath, verbose } = 
   }
 
   return {
-    /** Start the brain connection */
     start: connect,
-    /** Stop the brain connection */
     stop: disconnect,
-    /** Call a brain tool (auto-reconnects, with timeout) */
     call,
-    /** Check if brain is connected and healthy */
     get healthy() { return healthy && client !== null; },
-    /** Get data path */
     get dataPath() { return dataPath; },
-    /** Get server path */
     get serverPath() { return serverPath; },
   };
 }
 
 // --- Module-level singleton for backward compatibility ---
-// This will be removed when all callers migrate to createBrainConnection.
 
 let _defaultConnection = null;
 
 export async function startBrain(opts = {}) {
   if (_defaultConnection?.healthy) return _defaultConnection;
+  // If a dead connection exists, clean it up first (#6 TOCTOU fix)
+  if (_defaultConnection && !_defaultConnection.healthy) {
+    await _defaultConnection.stop();
+    _defaultConnection = null;
+  }
   _defaultConnection = createBrainConnection(opts);
   await _defaultConnection.start();
   return _defaultConnection;
@@ -189,10 +233,6 @@ export async function callBrainTool(name, args = {}) {
   return _defaultConnection.call(name, args);
 }
 
-/**
- * Get the current default connection (for health checks, etc).
- * @returns {BrainConnection|null}
- */
 export function getDefaultConnection() {
   return _defaultConnection;
 }
