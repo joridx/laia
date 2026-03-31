@@ -320,6 +320,26 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
     clearSuggestions();
     if (!input) { rl.prompt(); continue; }
 
+    // Bang commands — execute shell directly without LLM roundtrip
+    if (input.startsWith('!')) {
+      const cmd = input.slice(1).trim();
+      if (cmd) {
+        try {
+          const { execSync } = await import('child_process');
+          const output = execSync(cmd, {
+            cwd: process.cwd(),
+            encoding: 'utf8',
+            timeout: 30000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+          if (output) stdout.write(output);
+        } catch (err) {
+          stderr.write(`\x1b[31m${err.stderr || err.message}\x1b[0m\n`);
+        }
+      }
+      rl.prompt(); continue;
+    }
+
     // Slash commands
     if (input.startsWith('/')) {
       const result = await handleSlashCommand(input, session);
