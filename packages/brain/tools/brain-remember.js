@@ -6,7 +6,7 @@
 import { z } from "zod";
 
 import { LEARNINGS_DIR } from "../config.js";
-import { readFile, writeFile } from "../file-io.js";
+import { readFile, writeFile, readJSON } from "../file-io.js";
 import { addTagCooccurrenceRelations, addBridgeGraphEdges } from "../graph.js";
 import {
   recordLearningHitsBySlugs, ensureLearningMeta,
@@ -26,6 +26,7 @@ import {
 import { syncLearningEmbedding } from "../database.js";
 import { updateEmbeddingCacheEntry } from "../search.js";
 import { zCoercedArray, getTagAliasMap } from "./shared.js";
+import { parseLearningFrontmatter } from "../utils.js";
 
 export const name = "brain_remember";
 export const description = "Save knowledge to brain. Single: content+tags+type. Batch: learnings[] array. domain for reference knowledge.";
@@ -304,6 +305,15 @@ export async function handler({ content, tags, type, connects, domain, force = f
     }
   }
 
+  // V4 Golden Suite: Contradiction check vs protected learnings
+  let contradictionWarning = "";
+  if (!force) {
+    const contradicted = checkContradictionForRemember(content, title, cleanTags);
+    if (contradicted) {
+      contradictionWarning = `\n⚠️ May contradict protected learning: "${contradicted.title}" [${contradicted.slug}]`;
+    }
+  }
+
   const related = safeDomain ? "" : generateRelatedSection(slug, cleanTags);
   const fileContent = buildLearningMarkdown(title, type, cleanTags, content, null, mdOpts) + related;
   writeFile(filePath, fileContent);
@@ -362,6 +372,55 @@ export async function handler({ content, tags, type, connects, domain, force = f
 
   const llmWarningS = getBudgetWarning();
   if (llmWarningS) resultText += `\n${llmWarningS}`;
+  if (contradictionWarning) resultText += contradictionWarning;
 
   return { content: [{ type: "text", text: resultText }] };
+}
+
+// ─── Contradiction Check (V4 Golden Suite) ──────────────────────────────────
+
+const NEGATION_WORDS = /\b(don't|dont|never|not|avoid|stop|wrong|incorrect|shouldn't|mustn't|can't|won't|disable|remove|delete)\b/i;
+
+/**
+ * Check if new content contradicts any protected learning.
+ * Returns { slug, title } of first contradicted learning, or null.
+ * Heuristic: requires ≥2 common tags AND negation mismatch.
+ */
+function checkContradictionForRemember(content, title, tags) {
+  const meta = readJSON("learnings-meta.json");
+  if (!meta?.learnings) return null;
+
+  const newText = `${title} ${content}`;
+  const newHasNegation = NEGATION_WORDS.test(newText);
+  const newTags = new Set((tags || []).map(t => t.toLowerCase()));
+
+  for (const [slug, data] of Object.entries(meta.learnings)) {
+    if (!data.protected && data.type !== "principle") continue;
+    if (!data.file) continue;
+
+    try {
+      const fileContent = readFile(data.file);
+      if (!fileContent) continue;
+      const parsed = parseLearningFrontmatter(fileContent);
+      if (!parsed) continue;
+
+      // Check tag overlap (≥2 common tags = same domain)
+      const protectedTags = new Set((parsed.frontmatter.tags || []).map(t => t.toLowerCase()));
+      let commonCount = 0;
+      for (const t of newTags) {
+        if (protectedTags.has(t)) commonCount++;
+      }
+      if (commonCount < 2) continue;
+
+      // Check negation mismatch
+      const protectedHasNegation = NEGATION_WORDS.test(parsed.body || "");
+      if (newHasNegation !== protectedHasNegation) {
+        return { slug, title: data.title || slug };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
 }

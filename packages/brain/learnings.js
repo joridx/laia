@@ -720,11 +720,29 @@ export function computeAllVitalities({ forceRecompute = false, meta: providedMet
     }
   }
 
+  // V4 Auto-promotion thresholds for Golden Suite
+  const AUTO_PROMOTE_HITS = 10;
+  const AUTO_PROMOTE_APPEARANCES = 20;
+
   const result = new Map();
+  const promotions = [];  // Track auto-promoted slugs for meta update
+
   for (const [slug, data] of Object.entries(meta.learnings)) {
     // V4 Golden Suite: protected learnings always have vitality 1.0, zone "active"
     if (data.protected || data.type === "principle") {
       result.set(slug, { vitality: 1.0, zone: "active", accessCount: data.hit_count || 0, inDegree: inDegreeMap.get(slug.toLowerCase()) || 0, pageRank: slugCentrality.get(slug) || 0, protected: true });
+      continue;
+    }
+
+    // V4 Auto-promotion: frequently accessed learnings become protected
+    const hitCount = data.hit_count || 0;
+    const appearances = data.search_appearances || 0;
+    if (hitCount >= AUTO_PROMOTE_HITS && appearances >= AUTO_PROMOTE_APPEARANCES) {
+      data.protected = true;
+      data.promoted_at = new Date().toISOString();
+      data.promoted_reason = `auto:hits=${hitCount},appearances=${appearances}`;
+      promotions.push(slug);
+      result.set(slug, { vitality: 1.0, zone: "active", accessCount: hitCount, inDegree: inDegreeMap.get(slug.toLowerCase()) || 0, pageRank: slugCentrality.get(slug) || 0, protected: true });
       continue;
     }
 
@@ -781,6 +799,12 @@ export function computeAllVitalities({ forceRecompute = false, meta: providedMet
   // Cache the computed result
   _vitalityCache = result;
   _vitalityCacheTime = Date.now();
+
+  // V4: Persist auto-promotions to meta (outside the loop to batch)
+  if (promotions.length > 0) {
+    _writeMeta(meta);
+  }
+
   return result;
 }
 

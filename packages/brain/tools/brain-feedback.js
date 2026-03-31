@@ -50,18 +50,31 @@ export const name = "brain_feedback";
 export const description = "Record implicit relevance feedback after an agent turn. Called by the client with brain_search results and the agent's response.";
 
 export const schema = {
-  query: z.string().describe("The original brain_search query"),
-  result_slugs: z.array(z.string()).describe("Slugs of results returned by brain_search (ordered by rank)"),
+  query: z.string().optional().describe("The original brain_search query"),
+  result_slugs: z.array(z.string()).optional().describe("Slugs of results returned by brain_search (ordered by rank)"),
   exploration_slugs: z.array(z.string()).optional().describe("Slugs of exploration items (excluded from miss penalties)"),
-  response: z.string().describe("The agent's response text (cleaned, max 2000 chars)"),
+  response: z.string().optional().describe("The agent's response text (cleaned, max 2000 chars)"),
   result_titles: z.array(z.string()).optional().describe("Titles of results (for detection)"),
   result_bodies: z.array(z.string()).optional().describe("Body snippets of results (for keyword detection)"),
+  // V4: Procedure outcome tracking
+  procedure_slug: z.string().optional().describe("Slug of a procedure learning to track outcome for"),
+  procedure_outcome: z.enum(["success", "failure", "partial"]).optional().describe("Outcome of a procedure execution"),
 };
 
 export { handler };
 
 async function handler(args) {
-  const { query, result_slugs, exploration_slugs = [], response, result_titles = [], result_bodies = [] } = args;
+  const { query, result_slugs = [], exploration_slugs = [], response, result_titles = [], result_bodies = [], procedure_slug, procedure_outcome } = args;
+
+  // V4: Procedure outcome tracking mode
+  if (procedure_slug && procedure_outcome) {
+    return handleProcedureOutcome(procedure_slug, procedure_outcome);
+  }
+
+  // Original feedback mode — requires query + result_slugs + response
+  if (!query || result_slugs.length === 0 || !response) {
+    return { content: [{ type: "text", text: JSON.stringify({ skipped: true, reason: "missing required fields for feedback (query, result_slugs, response)" }) }] };
+  }
 
   // Skip short responses (likely "ok", "done", acknowledgements)
   const cleaned = cleanResponse(response);
@@ -122,4 +135,34 @@ async function handler(args) {
   };
 
   return { content: [{ type: "text", text: JSON.stringify(summary) }] };
+}
+
+// ─── Procedure Outcome (V4) ─────────────────────────────────────────────────────
+
+import { isDbAvailable, getDb, updateProcedureOutcome } from "../database.js";
+
+async function handleProcedureOutcome(slug, outcome) {
+  if (!isDbAvailable()) {
+    return { content: [{ type: "text", text: JSON.stringify({ error: "database not available" }) }] };
+  }
+
+  try {
+    updateProcedureOutcome(getDb(), slug, outcome);
+
+    // Also update meta hit_count for the procedure
+    const meta = _readMeta();
+    if (meta?.learnings?.[slug]) {
+      meta.learnings[slug].hit_count = (meta.learnings[slug].hit_count || 0) + 1;
+      meta.learnings[slug].last_accessed = new Date().toISOString();
+      meta.learnings[slug].last_outcome = outcome;
+      _writeMeta(meta);
+    }
+
+    const icon = outcome === "success" ? "✅" : outcome === "failure" ? "❌" : "⚠️";
+    return {
+      content: [{ type: "text", text: `${icon} Procedure outcome recorded: ${slug} → ${outcome}` }]
+    };
+  } catch (e) {
+    return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }] };
+  }
 }

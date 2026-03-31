@@ -5,8 +5,12 @@
  */
 
 import { z } from "zod";
-import { getAllLearnings, computeAllVitalities } from "../learnings.js";
-import { readJSON } from "../file-io.js";
+import { computeAllVitalities } from "../learnings.js";
+import { readJSON, readFile } from "../file-io.js";
+import { parseLearningFrontmatter } from "../utils.js";
+import { BRAIN_PATH, LEARNINGS_DIR } from "../config.js";
+import fs from "fs";
+import path from "path";
 
 export const name = "brain_compile_evolved";
 
@@ -24,7 +28,23 @@ export async function handler({ dry_run = false } = {}) {
   }
 
   const vitalityMap = computeAllVitalities();
-  const allLearnings = getAllLearnings();
+
+  // Read learnings directly from filesystem (DB may not be synced)
+  const learningsDir = path.join(BRAIN_PATH, LEARNINGS_DIR);
+  const allLearnings = [];
+  if (fs.existsSync(learningsDir)) {
+    for (const f of fs.readdirSync(learningsDir)) {
+      if (!f.endsWith(".md") || f.startsWith("_")) continue;
+      const content = readFile(`${LEARNINGS_DIR}/${f}`);
+      const parsed = parseLearningFrontmatter(content);
+      if (!parsed) continue;
+      allLearnings.push({
+        slug: f.replace(".md", ""),
+        ...parsed.frontmatter,
+        body: parsed.body,
+      });
+    }
+  }
 
   // Build structured learning list with full metadata
   const learnings = [];

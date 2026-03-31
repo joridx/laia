@@ -6,6 +6,7 @@ import { sanitizeTag } from "../utils.js";
 import { readProjectFile, serializeProject, syncSkillsToData, findSimilarProject } from "../helpers.js";
 import { computeCompositeScore, sanitizeQuality } from "../quality.js";
 import { isDbAvailable, getDb, insertSessionQuality } from "../database.js";
+import { compileEvolvedAfterSession } from "./session-evolved-hook.js";
 
 const name = "brain_log_session";
 const description = "Session end: log summary, learnings, tags, quality scorecard. Auto git-sync.";
@@ -122,10 +123,22 @@ async function handler({ project, summary, learnings = [], tags, quality }) {
     }
   } catch (e) { console.error(`Skills sync failed: ${e.message}`); }
 
+  // V4 Sprint 4: Auto-compile evolved prompt at session end
+  let evolvedReport = "";
+  try {
+    const evolvedResult = await compileEvolvedAfterSession();
+    if (evolvedResult) {
+      evolvedReport = `\n🧠 Evolved prompt v${evolvedResult.version}: ${evolvedResult.stableCount} stable, ${evolvedResult.adaptiveCount} adaptive`;
+      if (evolvedResult.promoted > 0) evolvedReport += ` (🌟 ${evolvedResult.promoted} promoted)`;
+      if (evolvedResult.expired > 0) evolvedReport += ` (🗑️ ${evolvedResult.expired} expired)`;
+    }
+  } catch (e) { console.error(`Evolved compile failed: ${e.message}`); }
+
   const syncResult = performGitPush(`Session ${date}: ${project}`);
   let response = `✓ Session logged to ${filename}`;
   if (qualityScore != null) response += `\n🎯 Quality score: ${qualityScore}/10`;
   if (skillsReport) response += skillsReport;
+  if (evolvedReport) response += evolvedReport;
   if (syncResult.syncReport) response += `\n${syncResult.syncReport}`;
   return { content: [{ type: "text", text: response }] };
 }
