@@ -17,6 +17,7 @@ import * as brainWebSearch from "./brain-web-search.js";
 import * as brainIndexNotes from "./brain-index-notes.js";
 import * as brainFeedback from "./brain-feedback.js";
 import * as brainReflectSession from "./brain-reflect-session.js";
+import * as brainCompileEvolved from "./brain-compile-evolved.js";
 
 /**
  * All tool modules — registered in order matching original index.js.
@@ -37,6 +38,7 @@ export const allTools = [
   brainIndexNotes,
   brainFeedback,
   brainReflectSession,
+  brainCompileEvolved,
 ];
 
 /**
