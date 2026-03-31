@@ -10,6 +10,7 @@ import { z } from "zod";
 import { detectUsedLearnings, recordFeedback, computeRankDelta } from "../feedback.js";
 import { writeFile, readJSON } from "../file-io.js";
 import { readMetaWithDirty } from "../meta-io.js";
+import { isDbAvailable, getDb, updateProcedureOutcome } from "../database.js";
 
 // ─── Meta helpers (same pattern as learnings.js) ────────────────────────────
 
@@ -139,19 +140,22 @@ async function handler(args) {
 
 // ─── Procedure Outcome (V4) ─────────────────────────────────────────────────────
 
-import { isDbAvailable, getDb, updateProcedureOutcome } from "../database.js";
-
 async function handleProcedureOutcome(slug, outcome) {
   if (!isDbAvailable()) {
     return { content: [{ type: "text", text: JSON.stringify({ error: "database not available" }) }] };
+  }
+
+  // Validate slug exists in meta before updating
+  const meta = _readMeta();
+  if (!meta?.learnings?.[slug]) {
+    return { content: [{ type: "text", text: JSON.stringify({ error: `procedure '${slug}' not found` }) }] };
   }
 
   try {
     updateProcedureOutcome(getDb(), slug, outcome);
 
     // Also update meta hit_count for the procedure
-    const meta = _readMeta();
-    if (meta?.learnings?.[slug]) {
+    if (meta.learnings[slug]) {
       meta.learnings[slug].hit_count = (meta.learnings[slug].hit_count || 0) + 1;
       meta.learnings[slug].last_accessed = new Date().toISOString();
       meta.learnings[slug].last_outcome = outcome;

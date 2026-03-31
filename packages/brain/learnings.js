@@ -734,7 +734,10 @@ export function computeAllVitalities({ forceRecompute = false, meta: providedMet
       continue;
     }
 
-    // V4 Auto-promotion: frequently accessed learnings become protected
+    // V4 Auto-promotion: frequently accessed learnings become protected.
+    // This intentionally mutates meta.learnings[slug] — changes are persisted
+    // via _writeMeta() at the end of this function. Only runs during recompute
+    // (cache early-return at top of function bypasses this entirely).
     const hitCount = data.hit_count || 0;
     const appearances = data.search_appearances || 0;
     if (hitCount >= AUTO_PROMOTE_HITS && appearances >= AUTO_PROMOTE_APPEARANCES) {
