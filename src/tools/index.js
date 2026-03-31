@@ -48,6 +48,21 @@ export function getToolSchemas(opts) { return defaultRegistry.getSchemas(opts); 
 export async function executeTool(name, args, callId) { return defaultRegistry.execute(name, args, callId); }
 export function getToolNames() { return defaultRegistry.getNames(); }
 
+// Lazy-load Outlook MCP tools on demand (saves ~1264 tokens when not needed)
+let _outlookLoaded = false;
+export async function ensureOutlookTools(config, registry = defaultRegistry) {
+  if (_outlookLoaded) return;
+  _outlookLoaded = true;
+  try {
+    const { registerOutlookTools } = await import('./outlook.js');
+    registerOutlookTools(config, registry);
+    if (config.verbose) process.stderr.write('[tools] Outlook tools loaded on demand\n');
+  } catch (e) {
+    // Non-fatal: outlook-mcp may not be installed
+    if (config.verbose) process.stderr.write(`[tools] Outlook tools skipped: ${e.message}\n`);
+  }
+}
+
 // Register all built-in tools
 export async function registerBuiltinTools(config, registry = defaultRegistry) {
   const { registerReadTool } = await import('./read.js');
@@ -76,15 +91,8 @@ export async function registerBuiltinTools(config, registry = defaultRegistry) {
   const { registerGitTools } = await import('./git.js');
   registerGitTools(config, registry);
 
-  // Outlook MCP tools (email, calendar, contacts, drafts)
-  try {
-    const { registerOutlookTools } = await import('./outlook.js');
-    registerOutlookTools(config, registry);
-  } catch (e) {
-    // Non-fatal: outlook-mcp may not be installed
-    if (config.verbose) process.stderr.write(`[tools] Outlook tools skipped: ${e.message}
-`);
-  }
+  // Outlook MCP tools: lazy-loaded on demand (saves ~1264 tokens per LLM request)
+  // Call ensureOutlookTools(config, registry) before a turn that needs email/calendar.
 
   // Swarm: agent tool (optional, only when config.swarm is true)
   if (config.swarm) {

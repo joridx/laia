@@ -7,7 +7,7 @@
 
 import readline from 'readline/promises';
 import { stdin, stdout, stderr } from 'process';
-import { registerBuiltinTools } from './tools/index.js';
+import { registerBuiltinTools, ensureOutlookTools } from './tools/index.js';
 import { createContext } from './context.js';
 import { loadFileCommands } from './skills.js';
 import { startBrain, stopBrain } from './brain/client.js';
@@ -394,6 +394,11 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
 
     // Normal prompt — use unified executeTurn
     try {
+      // Lazy-load Outlook tools if input mentions email/calendar keywords
+      if (/\b(outlook|e-?mails?|correus?|inbox|calendar|calendari|drafts?|borrador|unread|schedule|agenda)\b/i.test(typeof input === 'string' ? input : input.text)) {
+        await ensureOutlookTools(config);
+      }
+
       const effectiveConfig = { ...config };
       let corporateHint = null;
       if (config.model === 'auto') {
