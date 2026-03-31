@@ -88,6 +88,22 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 
 ---
 
+## 🧬 V4 — Brain Evolution (planificat 2026-03-31)
+
+> Inspirat en anàlisi de [ghostwright/phantom](https://github.com/ghostwright/phantom).
+> Revisat amb GPT-5.3-Codex (1 ronda). Document complet: `docs/2026-03-31-brain-evolution-plan.md`
+
+| Sprint | Feature | Effort | Status |
+|--------|---------|--------|--------|
+| 1 | **Procedural Memory** — type `procedure`, trigger_intents, steps, outcome tracking | 8h | 🔲 TODO |
+| 1 | **Golden Suite Lite** — `protected: true`, decay immunity, auto-promotion, contradiction detection | 6h | 🔲 TODO |
+| 2 | **Post-Session Reflection** — `brain_reflect_session` tool, confidence-gated auto-save, Codex safeguards | 14h | 🔲 TODO |
+| 3 | **Quality Scorecard** — composite score, sparkline trends, alerts in brain_health | 8h | 🔲 TODO |
+| 4 | **Evolved System Prompt** — `~/.claudia/evolved/`, compiled dual-layer (stable+adaptive), `/evolve` | 16h | 🔲 TODO |
+| Future | **Evaluation Harness** — replay corpus, rubrics, regression detection | 20h+ | 🔲 DEFERRED |
+
+---
+
 ## 📋 Backlog futur
 
 | Feature | Prioritat | Notes |
