@@ -1,44 +1,37 @@
-// MCP stdio client for claude-brain server
+// MCP stdio client for laia-brain server
 // Spawns the brain MCP server as a child process and communicates via JSON-RPC/stdio
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
 
-// Derive paths from home directory (portable across users)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// LAIA ships its own brain — packages/brain/index.js (monorepo)
 function findBrainServerPath() {
   if (process.env.BRAIN_SERVER_PATH) return process.env.BRAIN_SERVER_PATH;
 
-  // Windows: C:\claude\ is the canonical location
-  if (process.platform === 'win32') {
-    const winPrimary = 'C:\\claude\\claude_local_brain\\mcp-server\\index.js';
-    if (existsSync(winPrimary)) return winPrimary;
-    // Also try hyphenated variant
-    const winAlt = 'C:\\claude\\claude-local-brain\\mcp-server\\index.js';
-    if (existsSync(winAlt)) return winAlt;
-  }
+  // 1. Monorepo: <laia-root>/packages/brain/index.js
+  const monorepo = join(__dirname, '..', '..', 'packages', 'brain', 'index.js');
+  if (existsSync(monorepo)) return monorepo;
 
-  // Unix/Mac: ~/claude/
-  const homePrimary = join(homedir(), 'claude', 'claude_local_brain', 'mcp-server', 'index.js');
-  if (existsSync(homePrimary)) return homePrimary;
-  const homeAlt = join(homedir(), 'claude', 'claude-local-brain', 'mcp-server', 'index.js');
-  if (existsSync(homeAlt)) return homeAlt;
+  // 2. Installed globally or via npm link
+  const global = join(homedir(), 'laia', 'packages', 'brain', 'index.js');
+  if (existsSync(global)) return global;
 
-  return homePrimary; // fallback (will error at spawn time with a clear path)
+  return monorepo; // fallback (will error at spawn time with a clear path)
 }
 
 function findBrainDataPath() {
-  if (process.env.CLAUDE_BRAIN_PATH) return process.env.CLAUDE_BRAIN_PATH;
+  if (process.env.LAIA_BRAIN_PATH) return process.env.LAIA_BRAIN_PATH;
 
-  // Windows: C:\claude\ is the canonical location
-  if (process.platform === 'win32') {
-    const winPath = 'C:\\claude\\claude-brain-data';
-    if (existsSync(winPath)) return winPath;
-  }
+  // Default: ~/laia-data
+  const homeDefault = join(homedir(), 'laia-data');
+  if (existsSync(homeDefault)) return homeDefault;
 
-  const homeDefault = join(homedir(), 'claude', 'claude-brain-data');
   return homeDefault;
 }
 
@@ -53,7 +46,7 @@ export async function startBrain({ brainPath, brainServerPath, verbose } = {}) {
 
   const env = {
     ...process.env,
-    CLAUDE_BRAIN_PATH: dataPath,
+    LAIA_BRAIN_PATH: dataPath,
     BRAIN_LLM_FALLBACK: process.env.BRAIN_LLM_FALLBACK || 'bedrock:haiku',
     BRAIN_LLM_FALLBACK_DISTILL: process.env.BRAIN_LLM_FALLBACK_DISTILL || 'bedrock:haiku',
     BRAIN_QUIET: '1',  // suppress banner/noise when spawned as child
@@ -74,7 +67,7 @@ export async function startBrain({ brainPath, brainServerPath, verbose } = {}) {
     });
   }
 
-  client = new Client({ name: 'claudia', version: '0.1.0' }, {});
+  client = new Client({ name: 'laia', version: '0.1.0' }, {});
   await client.connect(transport);
 
   if (verbose) process.stderr.write('[brain] MCP server connected\n');
@@ -97,7 +90,7 @@ export async function callBrainTool(name, args = {}) {
   return text;
 }
 
-// Convenience wrappers for the 4 brain tools claudia needs
+// Convenience wrappers for the brain tools laia needs
 export async function brainSearch(query, opts = {}) {
   return callBrainTool('brain_search', { query, ...opts });
 }

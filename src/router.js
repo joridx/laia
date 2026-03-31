@@ -1,4 +1,4 @@
-// Per-turn model auto-router for claudia
+// Per-turn model auto-router for laia
 // Priority: explicit override > corporate keyword > coding keyword > tie > quick > sticky > default
 // Based on gpt-5.3-codex design recommendation.
 

@@ -1,4 +1,4 @@
-// Brain tools — interface to claude-brain via MCP
+// Brain tools — interface to laia-brain via MCP
 // These tools let the LLM search and store memories
 
 import { brainSearch, brainRemember, brainGetContext } from '../brain/client.js';

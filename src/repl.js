@@ -53,8 +53,8 @@ const COMMAND_META = {
   '/help':       { desc: 'Show this help',                 cat: 'system',   subs: [] },
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
-  '/exit':       { desc: 'Exit Claudia',                   cat: 'system',   subs: [] },
-  '/quit':       { desc: 'Exit Claudia',                   cat: 'system',   subs: [] },
+  '/exit':       { desc: 'Exit LAIA',                   cat: 'system',   subs: [] },
+  '/quit':       { desc: 'Exit LAIA',                   cat: 'system',   subs: [] },
 };
 const BUILTIN_COMMANDS = Object.keys(COMMAND_META);
 
@@ -237,11 +237,11 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
     await startBrain({ brainPath: config.brainPath, verbose: config.verbose });
     // Show brain version line (read from brain's package.json)
     try {
-      const brainPkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'claude-local-brain', 'mcp-server', 'package.json');
+      const brainPkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'packages', 'brain', 'package.json');
       const brainPkg = JSON.parse(readFileSync(brainPkgPath, 'utf8'));
-      stderr.write(`\x1b[2m🧠 Claude Brain MCP Server v${brainPkg.version}\x1b[0m\n`);
+      stderr.write(`\x1b[2m🧠 LAIA Brain MCP Server v${brainPkg.version}\x1b[0m\n`);
     } catch {
-      stderr.write('\x1b[2m🧠 Claude Brain MCP Server\x1b[0m\n');
+      stderr.write('\x1b[2m🧠 LAIA Brain MCP Server\x1b[0m\n');
     }
   } catch (err) {
     stderr.write(`\x1b[33m[brain] Failed to start: ${err.message} (brain tools disabled)\x1b[0m\n`);
@@ -365,7 +365,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
       parts.push(`\x1b[${ctxColor}m${pct}%\x1b[0m`);
     }
     const badge = parts.length ? ` \x1b[2m[\x1b[0m${parts.join('\x1b[2m·\x1b[0m')}\x1b[2m]\x1b[0m` : '';
-    return `\x1b[1mclaudia\x1b[0m${badge}\x1b[1m>\x1b[0m `;
+    return `\x1b[1mlaia\x1b[0m${badge}\x1b[1m>\x1b[0m `;
   }
 
   const rl = readline.createInterface({
@@ -970,7 +970,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
       if (sub === 'validate') {
         const profiles = listProfiles();
         if (profiles.length === 0) {
-          stderr.write('No profiles found in ~/.claudia/agents/\n');
+          stderr.write('No profiles found in ~/.laia/agents/\n');
           return true;
         }
         let valid = 0, invalid = 0;
@@ -994,7 +994,7 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
         const { existsSync: exists, writeFileSync: writeFs, mkdirSync: mkDir } = await import('fs');
         const { join: joinPath } = await import('path');
         const { homedir: home } = await import('os');
-        const dir = joinPath(home(), '.claudia', 'agents');
+        const dir = joinPath(home(), '.laia', 'agents');
         mkDir(dir, { recursive: true });
         const filePath = joinPath(dir, `${safeName}.yml`);
         if (exists(filePath)) {
@@ -1025,10 +1025,10 @@ async function handleSlashCommand(input, config, logger, context, fileCommands, 
         // Default: list all profiles
         const profiles = listProfiles();
         if (profiles.length === 0) {
-          stderr.write('No profiles found. Create one at ~/.claudia/agents/<name>.yml\n');
+          stderr.write('No profiles found. Create one at ~/.laia/agents/<name>.yml\n');
           return true;
         }
-        stderr.write('\n👤 Agent Profiles (~/.claudia/agents/)\n\n');
+        stderr.write('\n👤 Agent Profiles (~/.laia/agents/)\n\n');
         const maxName = Math.max(6, ...profiles.map(p => p.name.length));
         stderr.write(`  ${'Name'.padEnd(maxName)}  Model              Description\n`);
         stderr.write(`  ${''.padEnd(maxName, '─')}  ${''.padEnd(18, '─')}  ${''.padEnd(30, '─')}\n`);
@@ -1295,7 +1295,7 @@ async function animateCatBanner(config, planMode, fileCommands) {
   const renderFrame = (pose) => {
     const p = CAT_POSES[pose] || CAT_POSES[0];
     return [
-      `${CAT}${p.l1}${R}   ${CATB}Claudia${R} v${PKG_VERSION}${modeLabel}`,
+      `${CAT}${p.l1}${R}   ${CATB}LAIA${R} v${PKG_VERSION}${modeLabel}`,
       `${CAT}${p.l2}${R}   ${DIM}${modelLabel}${R}`,
       `${CAT}${p.l3}${R}    ${DIM}${cwd}${R}`,
     ];
@@ -1332,7 +1332,7 @@ async function animateCatBanner(config, planMode, fileCommands) {
     stderr.write('\n');
   }
 
-  // Show loaded CLAUDE.md files
+  // Show loaded LAIA.md files
   const memFiles = loadMemoryFiles({ workspaceRoot: config.workspaceRoot });
   if (memFiles.length) {
     for (const f of memFiles) {

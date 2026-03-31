@@ -1,0 +1,137 @@
+{
+  "$schema": "./llm-config.schema.json",
+  "$comment": "LLM provider routing. Copilot primary, Bedrock fallback, GenAI Lab last resort (auto-skipped if CDP not running).",
+
+  "providers": {
+    "copilot": {
+      "enabled": true,
+      "model": "gpt-4o-mini",
+      "modelHeavy": "gpt-5.3-codex",
+      "timeouts": {
+        "default": 8000,
+        "rerank": 8000,
+        "expand": 6000,
+        "autotags": 6000,
+        "duplicate": 6000,
+        "summarize": 8000,
+        "distill": 45000,
+        "compact": 45000,
+        "assess": 6000
+      }
+    },
+    "bedrock": {
+      "enabled": true,
+      "model": "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "region": "eu-central-1",
+      "accountId": "471464546381",
+      "awsProfile": "ClaudeCode",
+      "timeouts": {
+        "default": 20000,
+        "rerank": 15000,
+        "expand": 10000,
+        "autotags": 10000,
+        "duplicate": 10000,
+        "summarize": 20000,
+        "distill": 45000,
+        "compact": 20000,
+        "assess": 10000
+      }
+    },
+    "genailab": {
+      "enabled": true,
+      "agent": "default",
+      "$comment": "Last resort. Sonnet 4.5 / GPT-4o via SSO. Requires Edge CDP on port 9224. Auto-skipped if CDP not running.",
+      "timeouts": {
+        "default": 15000,
+        "rerank": 15000,
+        "expand": 10000,
+        "autotags": 10000,
+        "duplicate": 10000,
+        "summarize": 15000,
+        "distill": 30000,
+        "compact": 20000,
+        "assess": 10000
+      }
+    }
+  },
+
+  "tasks": {
+    "rerank": {
+      "enabled": true,
+      "maxTokens": 512,
+      "temperature": 0,
+      "budgetCost": 2,
+      "providerChain": ["copilot", "bedrock", "genailab"],
+      "description": "Reorder search results — needs strong reasoning"
+    },
+    "expand": {
+      "enabled": true,
+      "maxTokens": 200,
+      "temperature": 0.2,
+      "budgetCost": 1,
+      "providerChain": ["copilot", "bedrock", "genailab"],
+      "description": "Generate related search terms"
+    },
+    "autotags": {
+      "enabled": true,
+      "maxTokens": 200,
+      "temperature": 0.1,
+      "budgetCost": 1,
+      "providerChain": ["copilot", "bedrock", "genailab"],
+      "description": "Suggest tags for new learnings"
+    },
+    "duplicate": {
+      "enabled": true,
+      "maxTokens": 100,
+      "temperature": 0,
+      "budgetCost": 1,
+      "providerChain": ["copilot", "bedrock", "genailab"],
+      "description": "Detect duplicate learnings"
+    },
+    "summarize": {
+      "enabled": false,
+      "maxTokens": 500,
+      "temperature": 0.1,
+      "budgetCost": 2,
+      "providerChain": ["copilot", "bedrock", "genailab"],
+      "description": "DISABLED: redundant with scored results"
+    },
+    "distill": {
+      "enabled": true,
+      "maxTokens": 2000,
+      "temperature": 0.3,
+      "budgetCost": 4,
+      "providerChain": ["copilot", "bedrock", "genailab"],
+      "description": "Draft principles from learning clusters"
+    },
+    "compact": {
+      "enabled": true,
+      "maxTokens": 1500,
+      "temperature": 0.1,
+      "budgetCost": 3,
+      "providerChain": ["copilot", "bedrock", "genailab"],
+      "description": "Compact/merge similar learnings"
+    },
+    "assess": {
+      "enabled": true,
+      "maxTokens": 100,
+      "temperature": 0.1,
+      "budgetCost": 0.5,
+      "providerChain": ["copilot", "bedrock", "genailab"],
+      "description": "Assess learning quality score"
+    }
+  },
+
+  "circuitBreaker": {
+    "maxConsecutiveErrors": 3,
+    "cooldownMs": 300000,
+    "halfOpenRetry": true
+  },
+
+  "budget": {
+    "sessionLimit": 1000,
+    "warningThreshold": 0.8
+  },
+
+  "defaultProviderChain": ["copilot", "bedrock", "genailab"]
+}

@@ -1,5 +1,5 @@
 // run_command tool — lets the LLM discover and execute file-based commands
-// Commands are .md files from ~/.claude/commands/ and ~/.claudia/commands/
+// Commands are .md files from ~/.laia/commands/
 
 import { loadFileCommands, expandCommand } from '../commands/loader.js';
 import { defaultRegistry } from './index.js';

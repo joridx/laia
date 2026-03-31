@@ -1,4 +1,4 @@
-// Load slash commands from ~/.claude/commands/*.md and ~/.claudia/commands/*.md
+// Load slash commands from ~/.laia/commands/*.md
 // Each .md file becomes a command named after the filename (without extension).
 // The file content is the prompt template. {{args}} / $ARGUMENTS is replaced with user arguments.
 // Optional YAML frontmatter for description/tags.

@@ -1,6 +1,6 @@
 # @claude/providers
 
-Shared multi-provider LLM routing package for **Claudia** (CLI agent) and **Brain** (MCP server).
+Shared multi-provider LLM routing package for **LAIA** (CLI agent) and **Brain** (MCP server).
 
 Transport-agnostic: resolves *what* to call (URL, headers, auth), not *how* (fetch vs curl).
 
@@ -45,7 +45,7 @@ Resolves a model string to `{ providerId, model }`.
 1. Explicit prefix: `"openai:gpt-5"` → `{ providerId: "openai", model: "gpt-5" }`
 2. Pattern match on model name (see table below)
 3. Availability guard: if detected provider has no credentials → fallback to default
-4. Default provider (`CLAUDIA_DEFAULT_PROVIDER` env var, or `"copilot"`)
+4. Default provider (`LAIA_DEFAULT_PROVIDER` env var, or `"copilot"`)
 
 **Auto-detection patterns:**
 

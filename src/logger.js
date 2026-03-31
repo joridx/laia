@@ -2,8 +2,8 @@ import { appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-const LOG_DIR = join(homedir(), '.claudia', 'logs');
-const TOOL_LOG_DIR = join(homedir(), '.claudia', 'logs', 'tool-stats');
+const LOG_DIR = join(homedir(), '.laia', 'logs');
+const TOOL_LOG_DIR = join(homedir(), '.laia', 'logs', 'tool-stats');
 
 export function createLogger(config) {
   const sessionId = new Date().toISOString().replace(/[:.]/g, '-');

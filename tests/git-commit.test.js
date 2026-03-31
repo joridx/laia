@@ -12,7 +12,7 @@ function git(args, cwd) {
 }
 
 function makeTestRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'claudia-git-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'laia-git-test-'));
   git(['init'], dir);
   git(['config', 'user.email', 'test@test.com'], dir);
   git(['config', 'user.name', 'Test'], dir);
@@ -26,7 +26,7 @@ function makeTestRepo() {
 describe('makeCommitMessage', () => {
   it('uses first meaningful line from agent text', () => {
     const msg = makeCommitMessage('## Fix the parser bug\nMore details here', ['src/parser.js']);
-    assert.equal(msg, 'claudia: Fix the parser bug');
+    assert.equal(msg, 'laia: Fix the parser bug');
   });
 
   it('truncates long lines', () => {
@@ -38,12 +38,12 @@ describe('makeCommitMessage', () => {
 
   it('falls back to file list when no agent text', () => {
     const msg = makeCommitMessage('', ['src/foo.js', 'src/bar.js']);
-    assert.equal(msg, 'claudia: update foo.js, bar.js');
+    assert.equal(msg, 'laia: update foo.js, bar.js');
   });
 
   it('falls back to file list when text is too short', () => {
     const msg = makeCommitMessage('ok', ['a.js']);
-    assert.equal(msg, 'claudia: update a.js');
+    assert.equal(msg, 'laia: update a.js');
   });
 });
 
@@ -56,7 +56,7 @@ describe('isGitRepo', () => {
   });
 
   it('returns false for a non-git directory', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'claudia-nogit-'));
+    const dir = mkdtempSync(join(tmpdir(), 'laia-nogit-'));
     try {
       assert.equal(isGitRepo(dir), false);
     } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -92,12 +92,12 @@ describe('createAutoCommitter', () => {
 
     assert.ok(result);
     assert.ok(result.hash);
-    assert.ok(result.message.startsWith('claudia: '));
+    assert.ok(result.message.startsWith('laia: '));
     assert.ok(result.files.some(f => f.includes('new.js')));
 
     // Verify git log
     const log = git(['log', '--oneline', '-1'], dir);
-    assert.ok(log.includes('claudia: '));
+    assert.ok(log.includes('laia: '));
   });
 
   it('returns null when disabled', () => {
@@ -112,7 +112,7 @@ describe('createAutoCommitter', () => {
   });
 
   it('returns null when not a git repo', () => {
-    const noGit = mkdtempSync(join(tmpdir(), 'claudia-nogit-'));
+    const noGit = mkdtempSync(join(tmpdir(), 'laia-nogit-'));
     try {
       const c = createAutoCommitter({ cwd: noGit });
       c.enabled = true;

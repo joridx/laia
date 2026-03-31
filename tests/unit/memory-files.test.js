@@ -8,13 +8,13 @@ import { randomBytes } from 'crypto';
 
 import { loadMemoryFiles, buildMemoryContext } from '../../src/memory-files.js';
 
-const TMP = join(tmpdir(), `claudia_mem_test_${randomBytes(4).toString('hex')}`);
+const TMP = join(tmpdir(), `laia_mem_test_${randomBytes(4).toString('hex')}`);
 const FAKE_HOME = join(TMP, 'home');
 const FAKE_WS = join(TMP, 'workspace');
 
 function setup() {
   mkdirSync(join(FAKE_HOME, '.claude'), { recursive: true });
-  mkdirSync(join(FAKE_HOME, '.claudia'), { recursive: true });
+  mkdirSync(join(FAKE_HOME, '.laia'), { recursive: true });
   mkdirSync(join(FAKE_WS, '.claude'), { recursive: true });
 }
 
@@ -38,10 +38,10 @@ describe('buildMemoryContext', () => {
   });
 
   it('formats single file correctly', () => {
-    const files = [{ path: '/home/.claude/CLAUDE.md', level: 'user', content: '# Rules\nBe concise.' }];
+    const files = [{ path: '/home/.laia/LAIA.md', level: 'user', content: '# Rules\nBe concise.' }];
     const result = buildMemoryContext(files);
-    assert.ok(result.includes('[CLAUDE.md — user]'));
-    assert.ok(result.includes('/home/.claude/CLAUDE.md'));
+    assert.ok(result.includes('[LAIA.md — user]'));
+    assert.ok(result.includes('/home/.laia/LAIA.md'));
     assert.ok(result.includes('# Rules'));
     assert.ok(result.includes('Be concise.'));
   });
@@ -53,9 +53,9 @@ describe('buildMemoryContext', () => {
       { path: '/c', level: 'managed', content: 'Corporate rules' },
     ];
     const result = buildMemoryContext(files);
-    assert.ok(result.includes('[CLAUDE.md — user]'));
-    assert.ok(result.includes('[CLAUDE.md — project]'));
-    assert.ok(result.includes('[CLAUDE.md — managed]'));
+    assert.ok(result.includes('[LAIA.md — user]'));
+    assert.ok(result.includes('[LAIA.md — project]'));
+    assert.ok(result.includes('[LAIA.md — managed]'));
     assert.ok(result.includes('---'));
     assert.ok(result.includes('User rules'));
     assert.ok(result.includes('Project rules'));
@@ -73,30 +73,30 @@ describe('loadMemoryFiles', () => {
   it('returns empty array when no workspace and no home files', () => {
     // loadMemoryFiles checks real home dir — but workspace-only test
     const files = loadMemoryFiles({ workspaceRoot: join(TMP, 'nonexistent') });
-    // May pick up real ~/.claude/CLAUDE.md — just check it returns an array
+    // May pick up real ~/.laia/LAIA.md — just check it returns an array
     assert.ok(Array.isArray(files));
   });
 
-  it('loads project CLAUDE.md from workspace root', () => {
-    writeFileSync(join(FAKE_WS, 'CLAUDE.md'), '# Project Rules\nNo console.log');
+  it('loads project LAIA.md from workspace root', () => {
+    writeFileSync(join(FAKE_WS, 'LAIA.md'), '# Project Rules\nNo console.log');
     const files = loadMemoryFiles({ workspaceRoot: FAKE_WS });
     const projFile = files.find(f => f.level === 'project' && f.path.includes(FAKE_WS));
-    assert.ok(projFile, 'should find project CLAUDE.md');
+    assert.ok(projFile, 'should find project LAIA.md');
     assert.ok(projFile.content.includes('No console.log'));
   });
 
-  it('loads project .claude/CLAUDE.md from workspace', () => {
-    writeFileSync(join(FAKE_WS, '.claude', 'CLAUDE.md'), '# Inner project rules');
+  it('loads project .laia/LAIA.md from workspace', () => {
+    writeFileSync(join(FAKE_WS, '.claude', 'LAIA.md'), '# Inner project rules');
     const files = loadMemoryFiles({ workspaceRoot: FAKE_WS });
     const inner = files.find(f => f.level === 'project' && f.path.includes('.claude'));
-    assert.ok(inner, 'should find .claude/CLAUDE.md');
+    assert.ok(inner, 'should find .laia/LAIA.md');
     assert.ok(inner.content.includes('Inner project rules'));
   });
 
   it('skips empty files', () => {
     const emptyWs = join(TMP, 'empty_ws');
     mkdirSync(emptyWs, { recursive: true });
-    writeFileSync(join(emptyWs, 'CLAUDE.md'), '   \n  \n  ');
+    writeFileSync(join(emptyWs, 'LAIA.md'), '   \n  \n  ');
     const files = loadMemoryFiles({ workspaceRoot: emptyWs });
     const emptyFile = files.find(f => f.path.includes(emptyWs));
     assert.equal(emptyFile, undefined, 'should skip whitespace-only files');

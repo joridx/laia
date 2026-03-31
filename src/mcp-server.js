@@ -1,6 +1,6 @@
 // MCP server mode — exposes 'agent' tool via stdio JSON-RPC transport
-// Usage: node bin/claudia.js --mcp
-// Claude Code: claude mcp add claudia -- node /path/to/bin/claudia.js --mcp
+// Usage: node bin/laia.js --mcp
+// Claude Code: claude mcp add laia -- node /path/to/bin/laia.js --mcp
 //
 // CRITICAL: nothing may write to process.stdout except MCP protocol frames.
 // All internal logs, worker output, and debug info → process.stderr.
@@ -96,7 +96,7 @@ export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }
   const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
 
   const server = new Server(
-    { name: 'claudia', version: pkg.version ?? '0.0.0' },
+    { name: 'laia', version: pkg.version ?? '0.0.0' },
     { capabilities: { tools: {} } }
   );
 
@@ -136,7 +136,7 @@ export async function startMcpServer({ config, logger, stdoutPolicy = 'strict' }
 
   const transport = new StdioServerTransport(process.stdin, mcpStdout);
   await server.connect(transport);
-  process.stderr.write('[claudia MCP server] running on stdio\n');
+  process.stderr.write('[laia MCP server] running on stdio\n');
 
   let shuttingDown = false;
   const shutdown = async () => {

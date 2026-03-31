@@ -1,5 +1,5 @@
 // GenAI Lab LLM client adapter
-// Wraps genai_lab_chat.py as a compatible LLM client for Claudia's agent loop.
+// Wraps genai_lab_chat.py as a compatible LLM client for LAIA's agent loop.
 // Each "turn" serializes the full messages array into a single prompt,
 // calls the Python script via stdin, and parses the response back into
 // chat/completions format.
@@ -10,7 +10,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 const SCRIPT_PATH = process.env.GENAILAB_SCRIPT
-  || join(homedir(), '.claude', 'genai_lab_chat.py');
+  || join(homedir(), '.laia', 'genai_lab_chat.py');
 const PYTHON = process.env.BRAIN_GENAILAB_PYTHON || 'python3';
 const TIMEOUT_MS = 90_000;
 
@@ -24,7 +24,7 @@ const GENAI_AGENTS = new Set([
 ]);
 
 /**
- * Create a GenAI Lab LLM client compatible with Claudia's agent loop.
+ * Create a GenAI Lab LLM client compatible with LAIA's agent loop.
  * Implements the same interface as createLLMClient: { apiCall, streamingApiCall, model, providerId, provider }
  *
  * @param {object} options

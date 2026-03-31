@@ -46,12 +46,13 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 |-----------|-----------|
 | Runtime | Node.js 24+ (ESM) |
 | LLM Providers | GitHub Copilot, Anthropic, OpenAI, Ollama, GenAI Lab |
-| Brain/Memory | MCP server (`claude-brain`) — SQLite FTS + embeddings 384d + knowledge graph |
+| Brain/Memory | **`packages/brain/`** — MCP server integrat, SQLite FTS + embeddings 384d + knowledge graph |
+| Brain Data | **`joridx/laia-data`** — repo independent (`~/laia-data/`) |
 | Tools | 14 built-in (read, write, edit, bash, glob, grep, brain×3, run_command, git×3, agent) |
 | Skills | 36 (.md-based, compatible Claude Code) |
-| Tests | 155 cases, 11 files |
-| LOC | ~4400 (src/) |
-| Dependencies | Minimal: `fast-glob`, `@modelcontextprotocol/sdk`, `yaml` |
+| Tests | 155 cases, 11 files + 9500 LOC brain tests |
+| LOC | ~4400 (src/) + ~13200 (packages/brain/) |
+| Dependencies | Minimal: `fast-glob`, `@modelcontextprotocol/sdk`, `yaml`, `@huggingface/transformers`, `zod` |
 
 ---
 

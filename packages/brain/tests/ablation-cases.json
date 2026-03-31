@@ -1,0 +1,491 @@
+[
+  {
+    "name": "Jenkins connection and auth",
+    "query": "jenkins API token authentication",
+    "expectedSlugs": [
+      "connexio-a-jenkins-allianz-epac-toolchain",
+      "jenkins-usar-object-id-entra-id-com-a-usuari-api",
+      "jenkins-token-auto-renewal-jenkinstokenpy-update-secrets"
+    ],
+    "k": 10,
+    "minRecall": 0.66
+  },
+  {
+    "name": "Dynatrace logs DQL",
+    "query": "dynatrace DQL logs query",
+    "expectedSlugs": [
+      "dynatrace-dql-logs-via-playwright-setup-complet",
+      "dynatrace-logs-require-storagelogsread-permission"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Binary engine COBOL Parquet",
+    "query": "binary engine COBOL parquet conversion",
+    "expectedSlugs": [
+      "binary-engine-estructura-de-paths-al-container"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Teams MCP messaging",
+    "query": "teams send message MCP",
+    "expectedSlugs": [
+      "teamssendmessage-usar-conversationid-no-chatid",
+      "teams-mcp-eliminat-en-favor-del-skill-teams"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Git merge conflicts brain data",
+    "query": "git merge conflict JSON brain-data",
+    "expectedSlugs": [
+      "brain-data-json-merge-conflicts-resolution-patterns-and-pitf"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "SQLite corruption recovery",
+    "query": "SQLite corruption self-healing database",
+    "expectedSlugs": [
+      "sqlite-two-layer-self-healing-for-corruption",
+      "sqlite-corruption-error-messages-from-better-sqlite3"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Confluence page update",
+    "query": "confluence update page content",
+    "expectedSlugs": [
+      "confluence-update-via-curl-amb-payload-json-extern",
+      "confluence-use-ensureasciitrue-encodingutf-8-for-payload-jso"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Data Vault hashing",
+    "query": "data vault hash key computation",
+    "expectedSlugs": [
+      "hashing-in-data-vault-20-resum-complet",
+      "computing-hash-keys-pipeline-practic"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Jira ticket creation",
+    "query": "jira create ticket REST API IBLRDM",
+    "expectedSlugs": [
+      "jira-iblrdm-crear-tickets-via-quickcreateissuejspa-no-rest-a",
+      "jira-iblrdmiblidm-no-es-poden-crear-tickets-via-rest-apinnel"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Copilot API models",
+    "query": "copilot business API models GPT",
+    "expectedSlugs": [
+      "copilot-business-api-access-to-32-models-via-oauth-token-exc",
+      "copilot-api-endpoint-routing-codex-models-use-responses-othe"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Brain path configuration warning",
+    "query": "BRAIN_PATH MCP configuration env var",
+    "expectedSlugs": [
+      "brainpath-mcp-no-es-recarrega-mid-session"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Python Windows path issues",
+    "query": "python windows python3 command not found",
+    "expectedSlugs": [
+      "entorns-de-treball-multi-pc"
+    ],
+    "k": 20,
+    "minRecall": 0
+  },
+  {
+    "name": "Secrets management encryption",
+    "query": "secrets encryption AES openssl credentials",
+    "expectedSlugs": [
+      "gestio-de-credencials-amb-fitxers-env"
+    ],
+    "k": 15,
+    "minRecall": 1
+  },
+  {
+    "name": "MCP tool consolidation diet",
+    "query": "MCP tool diet consolidation reduce",
+    "expectedSlugs": [
+      "p56-mcp-tool-diet-consolidar-tools-redueix-token-tax-fixa-pe",
+      "fusionar-tools-mcp-afegir-parametre-opcional-vs-tool-nou"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Short query: jenkins token",
+    "query": "jenkins token API",
+    "expectedSlugs": [
+      "connexio-a-jenkins-allianz-epac-toolchain",
+      "jenkins-usar-object-id-entra-id-com-a-usuari-api"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Short query: sqlite",
+    "query": "sqlite",
+    "expectedSlugs": [
+      "sqlite-two-layer-self-healing-for-corruption",
+      "sqlite-corruption-error-messages-from-better-sqlite3"
+    ],
+    "k": 10,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Ambiguous: token (multi-domain)",
+    "query": "token expired renew",
+    "expectedSlugs": [
+      "jenkins-token-auto-renewal-jenkinstokenpy-update-secrets"
+    ],
+    "k": 15,
+    "minRecall": 1
+  },
+  {
+    "name": "Catalan query: merge conflicts",
+    "query": "resoldre merge conflicts brain",
+    "expectedSlugs": [
+      "brain-data-json-merge-conflicts-resolution-patterns-and-pitf"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Docker containers networking",
+    "query": "docker container networking volumes",
+    "expectedSlugs": [
+      "docker-complete-reference-guide-containers-networking-storag"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Docker UTC timezone issue",
+    "query": "docker container UTC time localdate",
+    "expectedSlugs": [
+      "binary-engine-localdatenow-usa-utc-dins-del-contenidor-docke"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Send email from Claude Code",
+    "query": "enviar email outlook claude code win32com",
+    "expectedSlugs": [
+      "enviar-emails-via-outlook-com-des-de-claude-code"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Outlook inbox bulk cleanup",
+    "query": "outlook inbox cleanup bulk delete triage",
+    "expectedSlugs": [
+      "outlook-com-bulk-cleanup-3-pass-strategy-for-inbox-triage"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "ServiceNow catalog item problems",
+    "query": "servicenow catalog item AMC admin rights",
+    "expectedSlugs": [
+      "catalog-item-amc-gen2-admin-rights-te-problemes-amb-seleccio"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "AZBoost login cookies",
+    "query": "azboost login cookies playwright navigation",
+    "expectedSlugs": [
+      "azboost-login-captura-cookies-massa-aviat-cal-navegar-a-navp"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "CI builds failed binary engine",
+    "query": "CI build failed binary engine main branch",
+    "expectedSlugs": [
+      "3-binary-engine-ci-builds-failed-on-main-2026-03-20"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Synapse CI/CD GitHub Actions",
+    "query": "synapse CI CD multi environment github actions",
+    "expectedSlugs": [
+      "cicd-per-synapse-multi-entorn-amb-github-actions"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "BM25 rescue mechanism",
+    "query": "BM25 rescue search pipeline gate",
+    "expectedSlugs": [
+      "bm25-rescue-mechanism-per-search-pipelines-amb-gates"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "FTS5 query sanitization",
+    "query": "FTS5 match syntax sanitize query",
+    "expectedSlugs": [
+      "fts5-match-syntax-sempre-sanititzar-queries-dusuari"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "ONNX embeddings local",
+    "query": "embeddings ONNX MiniLM local brain",
+    "expectedSlugs": [
+      "memory-ts-embeddings-minilm-requereixen-80mb-onnx"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Ollama workers fallback",
+    "query": "ollama workers automatic fallback brain",
+    "expectedSlugs": [
+      "claudia-workers-usen-ollama-automaticament-via-brain-tools"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "API agnostic providers",
+    "query": "api agnostic providers package claude copilot ollama",
+    "expectedSlugs": [
+      "api-agnostic-providers-package-implemented-and-integrated-in"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Claudia swarm parallelism",
+    "query": "claudia swarm parallel workers native",
+    "expectedSlugs": [
+      "claudia-cli-swarm-natiu-per-parallelisme-no-mcpclaudiaagent"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Claudia ANSI box drawing",
+    "query": "ANSI padding box drawing banner claudia",
+    "expectedSlugs": [
+      "ansi-aware-padding-for-box-drawing-banners"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Path traversal file-io guard",
+    "query": "path traversal assertSafePath file-io security",
+    "expectedSlugs": [
+      "assertsafepath-guard-per-file-io-amb-paths-relatius"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Chrome cookies antivirus",
+    "query": "chrome cookies database antivirus python access",
+    "expectedSlugs": [
+      "chrome-cookies-db-antivirus-salta-si-saccedeix-des-de-python"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Brain distill timeout",
+    "query": "brain distill generate timeout silent failure",
+    "expectedSlugs": [
+      "braindistill-generate-fallava-silenciosament-per-timeout-cop"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "DB2 ccancelglobal validation",
+    "query": "ccancelglobal DB2 validated dev agent",
+    "expectedSlugs": [
+      "ccancelglobal-validated-in-db2-dev-2026-03-16"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "DB2 ccancelglobal edge case",
+    "query": "ccancelglobal cap 100 edge case empty agents",
+    "expectedSlugs": [
+      "ccancelglobal-cap-at-100-edge-case-for-agents-with-near-empt"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Synapse ADP triggers database",
+    "query": "ADP triggers stop database off synapse",
+    "expectedSlugs": [
+      "adp-triggers-can-stop-when-database-is-off"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Agent traspassos Synapse table",
+    "query": "agentestraspasos synapse TDPCOREIM table",
+    "expectedSlugs": [
+      "agentestraspasos-table-synapse-tdpcoreim"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Actuarial platform pipeline internals",
+    "query": "actuarial platform pipeline internals aitana",
+    "expectedSlugs": [
+      "aitana-fabuel-investiga-internals-actuarialplatform-pipeline"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "BI posicion grafica project",
+    "query": "BI AZT ADP posicion grafica project overview",
+    "expectedSlugs": [
+      "bi-azt-adp-posicion-grafica-project-overview"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "PPM resource assignments missing",
+    "query": "resource assignments ServiceNow PPM no existeixen",
+    "expectedSlugs": [
+      "a-16-mar-2026-segueixen-sense-existir-resource-assignments-r"
+    ],
+    "k": 15,
+    "minRecall": 0
+  },
+  {
+    "name": "Access public GitHub repos",
+    "query": "accedir repos github publics access",
+    "expectedSlugs": [
+      "accedir-a-repos-github-publics"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Credentials env files management",
+    "query": "credencials fitxers env gestió secrets",
+    "expectedSlugs": [
+      "gestio-de-credencials-amb-fitxers-env"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "GenAI Lab Linux cross-platform",
+    "query": "genai lab linux setup cross platform fallback",
+    "expectedSlugs": [
+      "genai-lab-linux-setup-cross-platform-paths-fallback-config-d"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "SQLite additive migration pattern",
+    "query": "sqlite additive migration CREATE TABLE IF NOT EXISTS accumulated",
+    "expectedSlugs": [
+      "additive-sqlite-migration-for-accumulated-state"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Teams AI Claude channels",
+    "query": "teams channels AI claude allianz",
+    "expectedSlugs": [
+      "canals-teams-sobre-aiclaude-a-allianz"
+    ],
+    "k": 10,
+    "minRecall": 1
+  },
+  {
+    "name": "Fuzzy: timeout on LLM operations",
+    "query": "LLM call takes too long hangs timeout",
+    "expectedSlugs": [
+      "braindistill-generate-fallava-silenciosament-per-timeout-cop"
+    ],
+    "k": 15,
+    "minRecall": 0.5
+  },
+  {
+    "name": "Paraphrase: reduce tool count",
+    "query": "too many tools reduce overhead consolidate MCP",
+    "expectedSlugs": [
+      "p56-mcp-tool-diet-consolidar-tools-redueix-token-tax-fixa-pe"
+    ],
+    "k": 15,
+    "minRecall": 0
+  },
+  {
+    "name": "Synonym: send mail programmatically",
+    "query": "send mail programmatically windows automation outlook",
+    "expectedSlugs": [
+      "enviar-emails-via-outlook-com-des-de-claude-code"
+    ],
+    "k": 15,
+    "minRecall": 0
+  },
+  {
+    "name": "Catalan: com enviar correus",
+    "query": "com enviar correus electrònics des de codi",
+    "expectedSlugs": [
+      "enviar-emails-via-outlook-com-des-de-claude-code"
+    ],
+    "k": 15,
+    "minRecall": 0
+  },
+  {
+    "name": "Mixed lang: Jenkins auth allianz toolchain",
+    "query": "jenkins connexió autenticació allianz toolchain",
+    "expectedSlugs": [
+      "connexio-a-jenkins-allianz-epac-toolchain"
+    ],
+    "k": 10,
+    "minRecall": 1
+  }
+]

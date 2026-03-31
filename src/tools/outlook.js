@@ -1,5 +1,5 @@
-// Outlook MCP tools — registered in Claudia's tool registry
-// Exposes all 13 outlook-mcp tools as native Claudia tools
+// Outlook MCP tools — registered in LAIA's tool registry
+// Exposes all 13 outlook-mcp tools as native LAIA tools
 
 import { defaultRegistry } from './index.js';
 import {

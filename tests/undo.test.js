@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import { createUndoStack } from '../src/undo.js';
 
 function makeTmpDir() {
-  return mkdtempSync(join(tmpdir(), 'claudia-undo-test-'));
+  return mkdtempSync(join(tmpdir(), 'laia-undo-test-'));
 }
 
 describe('createUndoStack', () => {
@@ -206,7 +206,7 @@ describe('createUndoStack', () => {
   });
 
   it('refuses files outside workspace root', () => {
-    const outsideFile = join(tmpdir(), 'claudia-undo-outside-' + Date.now() + '.txt');
+    const outsideFile = join(tmpdir(), 'laia-undo-outside-' + Date.now() + '.txt');
     try {
       writeFileSync(outsideFile, 'outside');
 

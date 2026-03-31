@@ -1,5 +1,9 @@
 node_modules/
 .claude/
+.laia/
+
+# Brain embedding models (118MB, auto-downloaded)
+packages/brain/node_modules/
 *.log
 .env
 

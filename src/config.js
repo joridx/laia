@@ -7,10 +7,9 @@ const DEFAULTS = {
   maxTurns: 8,
   contextThreshold: 0.8,
   workspaceRoot: process.cwd(),
-  brainPath: process.env.CLAUDE_BRAIN_PATH || join(homedir(), 'claude', 'claude-brain-data'),
+  brainPath: process.env.LAIA_BRAIN_PATH || join(homedir(), 'laia-data'),
   commandDirs: [
-    join(homedir(), '.claude', 'commands'),
-    join(homedir(), '.claudia', 'commands'),
+    join(homedir(), '.laia', 'commands'),
   ],
   verbose: false,
 };
@@ -26,12 +25,12 @@ export function normalizeEffort(input) {
 
 export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, planMode, effort, genai } = {}) {
   let fileConfig = {};
-  const configPath = join(homedir(), '.claudia', 'config.json');
+  const configPath = join(homedir(), '.laia', 'config.json');
   try {
     fileConfig = JSON.parse(readFileSync(configPath, 'utf8'));
   } catch {}
 
-  const envModel = process.env.CLAUDIA_MODEL;
+  const envModel = process.env.LAIA_MODEL;
 
   return {
     ...DEFAULTS,

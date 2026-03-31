@@ -10,16 +10,21 @@ import { existsSync } from 'fs';
 function findOutlookServerPath() {
   if (process.env.OUTLOOK_MCP_PATH) return process.env.OUTLOOK_MCP_PATH;
 
-  const primary = join(homedir(), 'claude', 'claude-local-brain', 'mcp-servers', 'outlook-mcp', 'src', 'index.js');
-  if (existsSync(primary)) return primary;
+  // Look inside laia repo packages/ first
+  const repoPath = join(new URL('..', import.meta.url).pathname, '..', 'packages', 'outlook-mcp', 'src', 'index.js');
+  if (existsSync(repoPath)) return repoPath;
 
-  // Windows fallback: C:\claude\ when homedir is different
+  // Fallback: standalone path under home
+  const homePath = join(homedir(), 'laia-data', 'mcp-servers', 'outlook-mcp', 'src', 'index.js');
+  if (existsSync(homePath)) return homePath;
+
+  // Windows fallback
   if (process.platform === 'win32') {
-    const winAlt = 'C:\\claude\\claude-local-brain\\mcp-servers\\outlook-mcp\\src\\index.js';
+    const winAlt = 'C:\\laia\\packages\\outlook-mcp\\src\\index.js';
     if (existsSync(winAlt)) return winAlt;
   }
 
-  return primary;
+  return repoPath;
 }
 
 let client = null;
@@ -39,7 +44,7 @@ export async function startOutlook({ serverPath, verbose } = {}) {
     env: { ...process.env },
   });
 
-  client = new Client({ name: 'claudia-outlook', version: '1.0.0' }, {});
+  client = new Client({ name: 'laia-outlook', version: '1.0.0' }, {});
   await client.connect(transport);
 
   if (verbose) process.stderr.write('[outlook-mcp] Connected\n');

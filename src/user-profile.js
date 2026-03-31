@@ -1,8 +1,8 @@
-// User profile loader — reads ~/.claudia/user.json
+// User profile loader — reads ~/.laia/user.json
 // Provides per-user identity data (email, employee ID, etc.)
 // Used by skills.js to replace {{user.*}} placeholders in skill templates.
 //
-// File format (~/.claudia/user.json):
+// File format (~/.laia/user.json):
 // {
 //   "email": "name.surname@company.com",
 //   "jira_key": "name.surname",
@@ -20,7 +20,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-const USER_PROFILE_PATH = join(homedir(), '.claudia', 'user.json');
+const USER_PROFILE_PATH = join(homedir(), '.laia', 'user.json');
 
 let _cache = null;
 let _cacheTs = 0;
@@ -29,7 +29,7 @@ const CACHE_TTL_MS = 30000; // Reload every 30s max
 const REQUIRED_FIELDS = ['email'];
 
 /**
- * Load user profile from ~/.claudia/user.json.
+ * Load user profile from ~/.laia/user.json.
  * Returns the parsed object or null if not found.
  * Results are cached for 30 seconds.
  */

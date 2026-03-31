@@ -1,4 +1,4 @@
-// Agent profiles — load and validate YAML profiles from ~/.claudia/agents/
+// Agent profiles — load and validate YAML profiles from ~/.laia/agents/
 // V2a: user-level only. Project-level profiles deferred to V3.
 
 import { readFileSync, readdirSync, existsSync } from 'fs';
@@ -6,7 +6,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { parse as parseYaml } from 'yaml';
 
-const PROFILES_DIR = join(homedir(), '.claudia', 'agents');
+const PROFILES_DIR = join(homedir(), '.laia', 'agents');
 
 const VALID_FIELDS = new Set([
   'name', 'description', 'model',

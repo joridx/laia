@@ -34,7 +34,7 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
     if (profileName) {
       try {
         profile = loadProfile(profileName);
-        if (!profile) return { success: false, error: `Profile '${profileName}' not found in ~/.claudia/agents/`, workerId: 'blocked' };
+        if (!profile) return { success: false, error: `Profile '${profileName}' not found in ~/.laia/agents/`, workerId: 'blocked' };
       } catch (e) {
         return { success: false, error: e.message, workerId: 'blocked' };
       }
@@ -197,7 +197,7 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
       type: 'object',
       properties: {
         prompt: { type: 'string', description: 'Task description and instructions for the worker' },
-        profile: { type: 'string', description: 'Named agent profile from ~/.claudia/agents/<name>.yml (overrides model, tools, timeout, prompt)' },
+        profile: { type: 'string', description: 'Named agent profile from ~/.laia/agents/<name>.yml (overrides model, tools, timeout, prompt)' },
         files: {
           type: 'array',
           items: { type: 'string' },

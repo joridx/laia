@@ -1,12 +1,12 @@
 // Session persistence — save/load conversation context between REPL sessions
-// No external dependencies. Stores sessions as versioned JSON in ~/.claudia/sessions/
+// No external dependencies. Stores sessions as versioned JSON in ~/.laia/sessions/
 
 import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, existsSync, unlinkSync } from 'fs';
 import { join, sep } from 'path';
 import { homedir, tmpdir } from 'os';
 import { randomBytes } from 'crypto';
 
-const SESSIONS_DIR = join(homedir(), '.claudia', 'sessions');
+const SESSIONS_DIR = join(homedir(), '.laia', 'sessions');
 const AUTOSAVE_FILE = '_autosave.json';
 const VERSION = 1;
 const MAX_SESSION_NAME_LEN = 64;
@@ -27,7 +27,7 @@ function sanitizeName(name) {
 
 // Atomic write: write to temp file then rename (avoids corruption on crash)
 function atomicWrite(filepath, data) {
-  const tmp = join(tmpdir(), `claudia_session_${randomBytes(6).toString('hex')}.tmp`);
+  const tmp = join(tmpdir(), `laia_session_${randomBytes(6).toString('hex')}.tmp`);
   writeFileSync(tmp, JSON.stringify(data, null, 2));
   renameSync(tmp, filepath);
 }

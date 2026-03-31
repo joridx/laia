@@ -9,7 +9,7 @@ import { randomBytes } from 'crypto';
 import { createAttachManager, isBinary, MAX_FILE_SIZE, MAX_IMAGE_SIZE, MAX_TOTAL_SIZE, MAX_FILES, TOKENS_PER_IMAGE, IMAGE_MIME } from '../../src/attach.js';
 
 // Create a temp workspace for tests
-const WORKSPACE = join(tmpdir(), `claudia_attach_test_${randomBytes(4).toString('hex')}`);
+const WORKSPACE = join(tmpdir(), `laia_attach_test_${randomBytes(4).toString('hex')}`);
 
 // Minimal valid PNG (1x1 transparent pixel)
 const VALID_PNG = Buffer.from(

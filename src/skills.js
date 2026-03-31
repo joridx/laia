@@ -1,8 +1,7 @@
 // Skills discovery and loading — V3
 // Sources (priority order):
-//   1. ~/.claudia/skills/*/SKILL.md  (V3 skills with directory)
-//   2. ~/.claude/commands/*.md        (legacy flat files, auto-wrapped)
-//   3. ~/.claudia/commands/*.md       (legacy flat files, auto-wrapped)
+//   1. ~/.laia/skills/*/SKILL.md  (V3 skills with directory)
+//   2. ~/.laia/commands/*.md        (legacy flat files, auto-wrapped)
 //
 // Replaces commands/loader.js as the canonical skill source.
 
@@ -11,10 +10,9 @@ import { join, basename, resolve, relative, sep } from 'path';
 import { homedir } from 'os';
 import { loadUserProfile } from './user-profile.js';
 
-const SKILLS_DIR = join(homedir(), '.claude', 'skills');
+const SKILLS_DIR = join(homedir(), '.laia', 'skills');
 const LEGACY_DIRS = [
-  join(homedir(), '.claude', 'commands'),
-  join(homedir(), '.claudia', 'commands'),
+  join(homedir(), '.laia', 'commands'),
 ];
 
 // --- Frontmatter v1 schema ---
@@ -149,7 +147,7 @@ export function discoverSkills({ force = false } = {}) {
   const map = new Map();
   const shadowed = [];
 
-  // 1. V3 skills: ~/.claudia/skills/*/SKILL.md
+  // 1. V3 skills: ~/.laia/skills/*/SKILL.md
   if (existsSync(SKILLS_DIR)) {
     try {
       for (const entry of readdirSync(SKILLS_DIR)) {
@@ -166,7 +164,7 @@ export function discoverSkills({ force = false } = {}) {
     } catch {}
   }
 
-  // 2+3. Legacy: ~/.claude/commands/*.md + ~/.claudia/commands/*.md
+  // 2. Legacy: ~/.laia/commands/*.md
   for (const dir of LEGACY_DIRS) {
     try {
       for (const file of readdirSync(dir).filter(f => f.endsWith('.md'))) {
@@ -263,9 +261,9 @@ export function expandSkill(skill, args = '') {
     body = resolveRefsInText(body, skill.skillDir);
   }
 
-  // Replace {{user.*}} placeholders with values from ~/.claudia/user.json
+  // Replace {{user.*}} placeholders with values from ~/.laia/user.json
   body = replaceUserPlaceholders(body);
-  // Replace {{env.*}} placeholders with env vars / ~/.claudia/env.json
+  // Replace {{env.*}} placeholders with env vars / ~/.laia/env.json
   body = replaceEnvPlaceholders(body);
 
   return body;
@@ -294,9 +292,9 @@ export function expandCommand(command, args) {
     .replace(/\{\{args\}\}/g, args)
     .replace(/\$ARGUMENTS/g, args);
 
-  // Replace {{user.*}} placeholders with values from ~/.claudia/user.json
+  // Replace {{user.*}} placeholders with values from ~/.laia/user.json
   body = replaceUserPlaceholders(body);
-  // Replace {{env.*}} placeholders with env vars / ~/.claudia/env.json
+  // Replace {{env.*}} placeholders with env vars / ~/.laia/env.json
   body = replaceEnvPlaceholders(body);
 
   return body;
@@ -312,7 +310,7 @@ function replaceUserPlaceholders(text) {
   if (!profile) {
     // Warn once if user.json is missing and placeholders are present
     if (!replaceUserPlaceholders._warned) {
-      console.error('⚠ user.json not found at ~/.claudia/user.json — {{user.*}} placeholders will not be replaced.');
+      console.error('⚠ user.json not found at ~/.laia/user.json — {{user.*}} placeholders will not be replaced.');
       replaceUserPlaceholders._warned = true;
     }
     return text;
@@ -329,7 +327,7 @@ function replaceUserPlaceholders(text) {
 }
 
 // --- Environment placeholder replacement ({{env.*}}) ---
-// Resolves from: process.env > ~/.claudia/env.json > leave unresolved
+// Resolves from: process.env > ~/.laia/env.json > leave unresolved
 
 const ENV_PLACEHOLDER_RE = /\{\{env\.([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g;
 
@@ -338,7 +336,7 @@ let _envConfig = undefined;
 function loadEnvConfig() {
   if (_envConfig !== undefined) return _envConfig;
   try {
-    const envPath = join(homedir(), '.claudia', 'env.json');
+    const envPath = join(homedir(), '.laia', 'env.json');
     _envConfig = JSON.parse(readFileSync(envPath, 'utf8'));
   } catch {
     _envConfig = null;

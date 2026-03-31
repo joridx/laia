@@ -9,7 +9,7 @@ import { getToolSchemas, executeTool } from '../../src/tools/index.js';
 import { registerGitTools } from '../../src/tools/git.js';
 
 function createTempRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'claudia-git-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'laia-git-test-'));
   execSync('git init', { cwd: dir, stdio: 'ignore' });
   execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'ignore' });
   execSync('git config user.name "Test"', { cwd: dir, stdio: 'ignore' });
@@ -116,7 +116,7 @@ describe('git_status', () => {
   });
 
   it('returns error for non-git dir', async () => {
-    const nonGitDir = mkdtempSync(join(tmpdir(), 'claudia-nogit-'));
+    const nonGitDir = mkdtempSync(join(tmpdir(), 'laia-nogit-'));
     registerGitTools({ workspaceRoot: nonGitDir });
     const result = await executeTool('git_status', {});
     assert.ok(result.error);

@@ -1,0 +1,31 @@
+{
+  "name": "laia-brain",
+  "version": "2.51.0",
+  "description": "MCP Server for LAIA's Local Brain - Persistent Memory System",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "laia-brain": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node tests/run.js"
+  },
+  "keywords": [
+    "mcp",
+    "laia",
+    "memory",
+    "brain"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@claude/providers": "file:../providers",
+    "@huggingface/transformers": "^3.8.1",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "zod": "^4.3.6"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.6.2"
+  }
+}

@@ -3,7 +3,7 @@
 
 import { execFileSync } from 'child_process';
 
-const COMMIT_PREFIX = 'claudia: ';
+const COMMIT_PREFIX = 'laia: ';
 const MAX_BODY_LEN = 120;
 
 function git(args, cwd) {

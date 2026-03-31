@@ -1,5 +1,5 @@
 // @claude/providers — Multi-provider registry for LLM API routing
-// Shared between Claudia (CLI agent) and Brain (MCP server)
+// Shared between LAIA (CLI agent) and Brain (MCP server)
 // Transport-agnostic: resolves WHAT to call, not HOW (fetch vs curl)
 
 import { existsSync, readFileSync } from 'fs';
@@ -92,7 +92,7 @@ export const PROVIDERS = {
  * @returns {{ providerId: string, model: string }}
  */
 export function detectProvider(model, { defaultProvider } = {}) {
-  const fallback = defaultProvider || process.env.CLAUDIA_DEFAULT_PROVIDER || 'copilot';
+  const fallback = defaultProvider || process.env.LAIA_DEFAULT_PROVIDER || 'copilot';
 
   if (typeof model !== 'string' || !model.trim()) {
     return { providerId: fallback, model: model || '' };

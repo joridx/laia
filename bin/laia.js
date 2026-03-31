@@ -30,12 +30,12 @@ function parseArgv(argv) {
 const args = parseArgv(process.argv);
 
 if (args.help) {
-  console.log(`claudia - CLI coding agent (Copilot Business)
+  console.log(`laia - Local AI Agent with evolving memory
 
 Usage:
-  claudia                   Interactive REPL
-  claudia -p "prompt"       One-shot mode
-  claudia "prompt"          One-shot mode (positional)
+  laia                     Interactive REPL
+  laia -p "prompt"       One-shot mode
+  laia "prompt"          One-shot mode (positional)
 
 Options:
   -p, --prompt <text>   One-shot prompt

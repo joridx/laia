@@ -1,4 +1,4 @@
-// Bracketed Paste Transform for Claudia REPL
+// Bracketed Paste Transform for LAIA REPL
 //
 // Intercepts VT100 bracketed paste markers (\x1b[200~ / \x1b[201~)
 // and replaces newlines inside paste regions with a PUA sentinel,

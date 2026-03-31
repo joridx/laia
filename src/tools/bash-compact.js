@@ -16,7 +16,7 @@ const MAX_COMPACT_BYTES = 20 * 1024; // secondary hard cap on compacted result
 const ERROR_PATTERN = /\b(?:error|fail(?:ed|ure)?|warn(?:ing)?|exception|panic|fatal|segfault|abort(?:ed)?)\b|ENOENT|EACCES|denied|refused|Cannot find|not found|undefined is not|TypeError|SyntaxError|RangeError|ReferenceError/i;
 
 // Directory for raw output persistence
-const RAW_DIR = join(tmpdir(), 'claudia-bash-raw');
+const RAW_DIR = join(tmpdir(), 'laia-bash-raw');
 
 // Cleanup: remove files older than 24 hours on first use
 let cleanupDone = false;

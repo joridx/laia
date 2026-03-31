@@ -1,4 +1,4 @@
-// Interactive command picker for Claudia CLI
+// Interactive command picker for LAIA CLI
 // Shows a navigable dropdown when user types "/" and presses Tab
 // Uses raw mode stdin with ANSI escapes — no external dependencies
 //

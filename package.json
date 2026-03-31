@@ -1,16 +1,16 @@
 {
-  "name": "claudia",
-  "version": "1.1.0",
-  "description": "CLI coding agent powered by GitHub Copilot Business API",
+  "name": "laia",
+  "version": "2.0.0",
+  "description": "LAIA — Local AI Agent with evolving memory",
   "type": "module",
   "bin": {
-    "claudia": "./bin/claudia.js"
+    "laia": "./bin/laia.js"
   },
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "start": "node bin/claudia.js",
+    "start": "node bin/laia.js",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "dependencies": {

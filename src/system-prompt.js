@@ -1,6 +1,4 @@
 import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
-import { homedir } from 'os';
-import { join } from 'path';
 
 export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHint, planMode = false }) {
   const now = new Date().toISOString();
@@ -17,14 +15,14 @@ export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHi
     ? `\n\n## ⚠ Corporate Service Detected: ${corporateHint}\nThis request involves a corporate service. Your FIRST tool call MUST be: run_command(action="search", query="${corporateHint}"). Do NOT call bash() or any other tool before run_command.`
     : '';
 
-  return `${memoryPrefix}You are **Claudia**, an autonomous CLI coding agent. You are NOT Claude Code.
+  return `${memoryPrefix}You are **LAIA**, an autonomous CLI coding agent. You are NOT Claude Code.
 
 ## Identity
-- **Name:** Claudia (custom CLI agent built by the user)
-- **Runtime:** Claudia CLI (Node.js, source at ${join(homedir(), 'claude', 'claudia')})
+- **Name:** LAIA (custom CLI agent built by the user)
+- **Runtime:** LAIA CLI (Node.js, source at ${workspaceRoot})
 - **NOT:** Claude Code, Claude Desktop, or any Anthropic product
-- **Key difference:** You run skills via run_command, spawn workers via bash("claudia -p ..."), and use local brain tools. Claude Code uses mcp__claudia__agent — you do NOT have that tool.
-- **When a recipe/skill asks "are you Claudia CLI or Claude Code?"** → You are ALWAYS Claudia CLI. Pick Mode B (or the Claudia-specific path). NEVER ask the user to confirm this.
+- **Key difference:** You run skills via run_command, spawn workers via bash("laia -p ..."), and use local brain tools. Claude Code uses mcp__laia__agent — you do NOT have that tool.
+- **When a recipe/skill asks "are you LAIA CLI or Claude Code?"** → You are ALWAYS LAIA CLI. Pick Mode B (or the LAIA-specific path). NEVER ask the user to confirm this.
 
 Current date/time: ${now}
 Workspace root: ${workspaceRoot}
@@ -82,12 +80,12 @@ NEVER produce explanatory text before the first tool call on a corporate service
 ## Multi-model Review
 
 You can get a second opinion from another model by calling bash:
-\`node bin/claudia.js --model <model> -p "<prompt>"\`
+\`node bin/laia.js --model <model> -p "<prompt>"\`
 
 Use this ONLY when the user explicitly asks (e.g. "revisa-ho amb Codex", "second opinion with GPT", "valida amb un altre model"). Never do it automatically.
 
 Example: after implementing something, if asked to validate with Codex:
-\`bash("node bin/claudia.js --model gpt-5.3-codex -p \\"Review this code: ...\\"")\`
+\`bash("node bin/laia.js --model gpt-5.3-codex -p \\"Review this code: ...\\"")\`
 
 ## Core Rules
 
@@ -123,7 +121,7 @@ Workspace root: ${workspaceRoot}`;
 
   const roleSection = customPrompt
     ? `## Role\n\n${customPrompt}`
-    : 'You are a focused worker agent spawned by Claudia CLI.';
+    : 'You are a focused worker agent spawned by LAIA CLI.';
 
   // V2b: Agent memory hint
   const agentMemoryHint = profileName

@@ -122,8 +122,8 @@ describe('@claude/providers — detectProvider', () => {
     assert.equal(r.providerId, 'ollama');
   });
 
-  it('respects CLAUDIA_DEFAULT_PROVIDER env', () => {
-    withEnv({ CLAUDIA_DEFAULT_PROVIDER: 'ollama' }, () => {
+  it('respects LAIA_DEFAULT_PROVIDER env', () => {
+    withEnv({ LAIA_DEFAULT_PROVIDER: 'ollama' }, () => {
       const r = detectProvider('some-random-model');
       assert.equal(r.providerId, 'ollama');
     });
@@ -155,11 +155,11 @@ describe('@claude/providers — detectProvider', () => {
   });
 
   it('cascades fallback when default provider unavailable', () => {
-    withEnv({ OPENAI_API_KEY: undefined, CLAUDIA_DEFAULT_PROVIDER: 'openai', ANTHROPIC_API_KEY: 'test' }, () => {
+    withEnv({ OPENAI_API_KEY: undefined, LAIA_DEFAULT_PROVIDER: 'openai', ANTHROPIC_API_KEY: 'test' }, () => {
       // claude model → anthropic detected → available → returns anthropic
       assert.equal(detectProvider('claude-opus-4.6').providerId, 'anthropic');
     });
-    withEnv({ OPENAI_API_KEY: undefined, CLAUDIA_DEFAULT_PROVIDER: 'openai', ANTHROPIC_API_KEY: undefined }, () => {
+    withEnv({ OPENAI_API_KEY: undefined, LAIA_DEFAULT_PROVIDER: 'openai', ANTHROPIC_API_KEY: undefined }, () => {
       // claude model → anthropic detected → unavailable → fallback openai → unavailable → cascade to copilot
       const r = detectProvider('claude-opus-4.6');
       assert.equal(r.providerId, 'copilot');
