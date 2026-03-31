@@ -61,7 +61,7 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
       const durationMs = Date.now() - t0;
       // Log tool output stats for context consumption analysis (lightweight: use .length on known string fields)
       const bytesOut = (result.stdout?.length || 0) + (result.stderr?.length || 0) + (result.error ? 100 : 0);
-      const bytesIn = JSON.stringify(args).length;
+      const bytesIn = JSON.stringify(args ?? {}).length;
       logger.logToolStats?.({ tool: name, bytesIn, bytesOut, truncated: !!result.rawFile, rawFile: result.rawFile, exitCode: result.exitCode, durationMs });
       return result;
     },
@@ -90,6 +90,7 @@ export async function runOneShot({ prompt, config, logger, json }) {
 
   try {
     let streamed = false;
+    logger.startTurn?.();
     const result = await runTurn({
       input: prompt,
       config,

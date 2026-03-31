@@ -18,6 +18,7 @@ import { execFile, execFileSync, execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
+import { llmInfo, llmWarn, llmError } from "./brain-logger.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -33,9 +34,9 @@ function getLlmConfig() {
   try {
     const raw = fs.readFileSync(LLM_CONFIG_PATH, "utf8");
     _llmConfig = JSON.parse(raw);
-    if (process.env.BRAIN_QUIET !== '1') console.error(`LLM: loaded config from ${LLM_CONFIG_PATH}`);
+    llmInfo('config_load', { detail: LLM_CONFIG_PATH });
   } catch (e) {
-    console.error(`LLM: llm-config.json not found or invalid (${e.message}), using defaults`);
+    llmWarn('config_load', { error: e.message, detail: 'using defaults' });
     _llmConfig = { providers: {}, tasks: {}, circuitBreaker: {}, budget: {}, providerChain: ["copilot", "bedrock"] };
   }
   return _llmConfig;
@@ -270,7 +271,7 @@ async function isGenAiLabHealthy(scriptPath) {
     ], { timeout: 3000 });
     _genaiLabHealthy = stdout.includes('"Browser"');
     if (!_genaiLabHealthy) {
-      console.error(`LLM: GenAI Lab CDP not active on port ${cdpPort} — skipping`);
+      llmWarn('provider_skip', { provider: 'genailab', detail: `CDP not active on port ${cdpPort}` });
     }
   } catch {
     _genaiLabHealthy = false;
@@ -283,7 +284,7 @@ async function isGenAiLabHealthy(scriptPath) {
 function _callGenAiLab(messages, config) {
   const { agent, scriptPath, task } = config;
   if (!scriptPath || !fs.existsSync(scriptPath)) {
-    console.error(`LLM genailab: script not found: ${scriptPath}`);
+    llmError('provider_error', { provider: 'genailab', error: `script not found: ${scriptPath}` });
     return null;
   }
 
@@ -307,29 +308,29 @@ function _callGenAiLab(messages, config) {
 
     const text = (stdout || "").trim();
     if (!text) {
-      console.error("LLM genailab: empty response");
+      llmWarn('provider_error', { provider: 'genailab', error: 'empty response' });
       return null;
     }
 
     // Auth failure detection
     const lower = text.toLowerCase();
     if (lower.includes("not authenticated") || lower.includes("access denied") || lower.includes("unauthorized")) {
-      console.error("LLM genailab: authentication failure — open GenAI Lab in Edge to refresh SSO");
+      llmError('auth_failure', { provider: 'genailab', detail: 'open GenAI Lab in Edge to refresh SSO' });
       return null;
     }
 
     clearErrorStreak();
-    console.error(`LLM genailab:${agent}: success (${text.length} chars)`);
+    llmInfo('llm_success', { provider: 'genailab', model: agent, chars: text.length });
     return { content: text, usage: null, provider: "genailab" };
   } catch (e) {
     const msg = (e.message || "").slice(0, 200);
     const stderr = e.stderr ? String(e.stderr).slice(0, 200) : "";
     if (e.killed || /timed out|SIGTERM/i.test(msg)) {
-      console.error(`LLM genailab: timeout after ${TIMEOUT_MS}ms`);
+      llmError('timeout', { provider: 'genailab', latencyMs: TIMEOUT_MS });
     } else if (stderr.includes("not authenticated") || stderr.includes("RuntimeError")) {
-      console.error(`LLM genailab: auth failure — ${stderr}`);
+      llmError('auth_failure', { provider: 'genailab', error: stderr });
     } else {
-      console.error(`LLM genailab: subprocess failed — ${msg}`);
+      llmError('provider_error', { provider: 'genailab', error: msg });
     }
     return null;
   }
@@ -391,7 +392,7 @@ function canSpend(units) {
     if (budget.disabledUntil && Date.now() >= budget.disabledUntil) {
       budget.disabled = false;
       budget.consecutiveErrors = 0;
-      console.error("LLM: circuit breaker half-open — allowing retry");
+      llmInfo('circuit_breaker', { detail: 'half-open — allowing retry' });
     } else if (hasAlternativeProviders()) {
       // Circuit breaker blocks primary (copilot), but alternative providers in chain.
       // Allow reserve() so callLlm can route to bedrock/genailab.
@@ -424,7 +425,7 @@ function recordError() {
   if (budget.consecutiveErrors >= maxErrors) {
     budget.disabled = true;
     budget.disabledUntil = Date.now() + cooldown;
-    console.error(`LLM: circuit breaker — disabled for ${cooldown/1000}s after ${maxErrors} consecutive errors`);
+    llmWarn('circuit_breaker', { detail: `disabled for ${cooldown/1000}s after ${maxErrors} consecutive errors` });
   }
 }
 
@@ -492,7 +493,7 @@ async function refreshCopilotToken() {
 
     return _copilotToken;
   } catch (e) {
-    console.error(`LLM: token refresh failed: ${(e.message || "").slice(0, 100)}`);
+    llmError('auth_failure', { provider: 'copilot', error: (e.message || "").slice(0, 100) });
     return null;
   }
 }
@@ -561,12 +562,12 @@ async function _callBedrock(messages, { maxTokens = 1024, temperature = 0.3, fal
     try {
       response = JSON.parse(responseText);
     } catch {
-      console.error(`LLM bedrock: JSON parse failed: ${(responseText || '').slice(0, 200)}`);
+      llmError('parse_error', { provider: 'bedrock', error: (responseText || '').slice(0, 200) });
       return null;
     }
 
     if (response.error) {
-      console.error(`LLM bedrock: API error: ${(response.error.message || JSON.stringify(response.error)).slice(0, 150)}`);
+      llmError('api_error', { provider: 'bedrock', error: (response.error.message || JSON.stringify(response.error)).slice(0, 150) });
       return null;
     }
 
@@ -575,23 +576,23 @@ async function _callBedrock(messages, { maxTokens = 1024, temperature = 0.3, fal
     const usage = response.usage || null;
 
     if (!content) {
-      console.error('LLM bedrock: empty content in response');
+      llmWarn('provider_error', { provider: 'bedrock', error: 'empty content in response' });
       return null;
     }
 
     clearErrorStreak();
-    console.error(`LLM bedrock:${model}: success (${content.length} chars)`);
+    llmInfo('llm_success', { provider: 'bedrock', model, chars: content.length });
     return { content, usage, provider: 'bedrock' };
   } catch (e) {
     const msg = (e.message || '').slice(0, 200);
     const stderr = (e.stderr || '').toString().slice(0, 200);
     if (/ExpiredToken|NoCredentials|InvalidIdentityToken/i.test(msg + stderr)) {
-      console.error('LLM bedrock: AWS credentials expired — run: aws sso login --profile LAIA');
+      llmError('auth_failure', { provider: 'bedrock', detail: 'AWS credentials expired — run: aws sso login --profile LAIA' });
     } else if (e.killed || /timed out|SIGTERM/i.test(msg)) {
       const actualTimeout = getTimeout("bedrock", task || (maxTokens > 1000 ? "distill" : "default"));
-      console.error(`LLM bedrock: timeout after ${Math.round(actualTimeout / 1000)}s`);
+      llmError('timeout', { provider: 'bedrock', latencyMs: actualTimeout });
     } else {
-      console.error(`LLM bedrock: call failed: ${msg}${stderr ? ' | ' + stderr : ''}`);
+      llmError('provider_error', { provider: 'bedrock', error: msg + (stderr ? ' | ' + stderr : '') });
     }
     return null;
   }
@@ -611,14 +612,14 @@ async function _callFallback(messages, { maxTokens, temperature, fallback, task 
   if (provider === "ollama") {
     const healthy = await isOllamaHealthy(baseUrl);
     if (!healthy) {
-      console.error("LLM ollama: not reachable");
+      llmWarn('provider_skip', { provider: 'ollama', detail: 'not reachable' });
       return null;
     }
   }
 
   // OpenAI: require API key
   if (provider === "openai" && !apiKey) {
-    console.error("LLM openai: configured but no API key");
+    llmWarn('provider_skip', { provider: 'openai', detail: 'no API key' });
     return null;
   }
 
@@ -627,7 +628,7 @@ async function _callFallback(messages, { maxTokens, temperature, fallback, task 
     const scriptPath = fallback.scriptPath || path.join(process.env.HOME || process.env.USERPROFILE || "", ".laia", "genai_lab_chat.py");
     const healthy = await isGenAiLabHealthy(scriptPath);
     if (!healthy) {
-      console.error("LLM: GenAI Lab not healthy (CDP/Edge not running) — skipping");
+      llmWarn('provider_skip', { provider: 'genailab', detail: 'CDP/Edge not running' });
       return null;
     }
     return _callGenAiLab(messages, { ...fallback, task });
@@ -697,12 +698,12 @@ async function _callFallback(messages, { maxTokens, temperature, fallback, task 
     try {
       response = JSON.parse(stdout);
     } catch {
-      console.error(`LLM ${provider}: JSON parse failed: ${(stdout || "").slice(0, 200)}`);
+      llmError('parse_error', { provider, error: (stdout || "").slice(0, 200) });
       return null;
     }
 
     if (response.error) {
-      console.error(`LLM ${provider}: API error: ${(response.error.message || JSON.stringify(response.error)).slice(0, 150)}`);
+      llmError('api_error', { provider, error: (response.error.message || JSON.stringify(response.error)).slice(0, 150) });
       return null;
     }
 
@@ -711,16 +712,16 @@ async function _callFallback(messages, { maxTokens, temperature, fallback, task 
     const usage = response.usage || null;
 
     if (!content) {
-      console.error(`LLM ${provider}: empty content in response`);
+      llmWarn('provider_error', { provider, error: 'empty content in response' });
       return null;
     }
 
     // Fallback succeeded — clear primary error streak too
     clearErrorStreak();
-    console.error(`LLM ${provider}:${model}: success`);
+    llmInfo('llm_success', { provider, model });
     return { content, usage, provider };
   } catch (e) {
-    console.error(`LLM ${provider}: call failed: ${(e.message || "").slice(0, 150)}`);
+    llmError('provider_error', { provider, error: (e.message || "").slice(0, 150) });
     return null;
   }
 }
@@ -836,9 +837,9 @@ async function callLlm(messages, { maxTokens = 1024, temperature = 0.1, model = 
         }
       }
       if (result) return result;
-      console.error(`LLM: ${provider} failed for task=${task || "default"}, trying next in chain...`);
+      llmWarn('chain_fallback', { provider, task: task || "default" });
     } catch (e) {
-      console.error(`LLM: ${provider} error for task=${task || "default"}: ${e.message}`);
+      llmError('chain_error', { provider, task: task || "default", error: e.message });
     }
   }
 
@@ -962,13 +963,13 @@ async function _callCopilot(messages, { maxTokens, temperature, model, task }) {
     try {
       response = JSON.parse(stdout);
     } catch (parseErr) {
-      console.error(`LLM: JSON parse failed, raw response: ${(stdout || "").trim().slice(0, 300)}`);
+      llmError('parse_error', { provider: 'copilot', error: (stdout || "").trim().slice(0, 300) });
       recordError();
       return null;
     }
 
     if (response.error) {
-      console.error(`LLM: API error: ${(response.error.message || JSON.stringify(response.error)).slice(0, 100)}`);
+      llmError('api_error', { provider: 'copilot', error: (response.error.message || JSON.stringify(response.error)).slice(0, 100) });
       if (response.error.code === 401 || response.error.status === 401) {
         _copilotToken = null;
         _tokenExpiresAt = 0;
@@ -994,16 +995,16 @@ async function _callCopilot(messages, { maxTokens, temperature, model, task }) {
     if (!content) { recordError(); return null; }
 
     clearErrorStreak();
-    console.error(`LLM copilot:${selectedModel}: success (${content.length} chars, task=${task || "default"})`);
+    llmInfo('llm_success', { provider: 'copilot', model: selectedModel, chars: content.length, task: task || "default" });
     return { content, usage };
   } catch (e) {
     if (e.killed || e.signal) {
-      console.error(`LLM: Copilot timed out (model=${selectedModel}, timeout=${Math.round(curlTimeout/1000)}s, signal=${e.signal || "SIGTERM"}, task=${task || "default"})`);
+      llmError('timeout', { provider: 'copilot', model: selectedModel, latencyMs: curlTimeout, task: task || "default", detail: `signal=${e.signal || "SIGTERM"}` });
     } else {
       const code = e.code ?? e.status ?? "?";
       const stderr = (e.stderr || "").trim().slice(0, 300);
       const stdout = (e.stdout || "").trim().slice(0, 200);
-      console.error(`LLM: call failed [exit:${code}]${stderr ? ` stderr: ${stderr}` : ""}${stdout ? ` stdout: ${stdout}` : ""}`);
+      llmError('provider_error', { provider: 'copilot', error: `exit:${code}`, detail: (stderr || stdout || "").slice(0, 200) });
     }
     recordError();
     return null;
@@ -1154,7 +1155,7 @@ export async function llmRerank(query, candidates) {
     setCache(cacheKey, filtered);
     return filtered;
   } catch {
-    console.error("LLM: rerank JSON parse failed");
+    llmWarn('parse_error', { task: 'rerank', error: 'JSON parse failed' });
     return null;
   }
 }
@@ -1192,7 +1193,7 @@ export async function llmExpandQuery(query) {
     setCache(cacheKey, clean);
     return clean;
   } catch {
-    console.error("LLM: expand JSON parse failed");
+    llmWarn('parse_error', { task: 'expand', error: 'JSON parse failed' });
     return null;
   }
 }
@@ -1241,7 +1242,7 @@ export async function llmAutoTags(title, content, existingTags = [], aliasMap = 
     }
     return clean.length > 0 ? clean : null;
   } catch {
-    console.error("LLM: autotags JSON parse failed");
+    llmWarn('parse_error', { task: 'autotags', error: 'JSON parse failed' });
     return null;
   }
 }
@@ -1323,9 +1324,9 @@ IMPORTANT: Return exactly ONE JSON object. Do NOT return an array of objects. Sy
       }
     }
     if (!parsed.title || !parsed.content) {
-      console.error(`LLM: distill parsed but missing fields (title: ${!!parsed.title}, content: ${!!parsed.content}, keys: ${Object.keys(parsed).join(',')})`);
+      llmWarn('parse_error', { task: 'distill', error: `missing fields (title: ${!!parsed.title}, content: ${!!parsed.content})`, detail: Object.keys(parsed).join(',') });
       // Retry with simplified prompt if parsing failed
-      console.error(`LLM: distill retrying with simplified prompt...`);
+      llmInfo('retry', { task: 'distill', detail: 'retrying with simplified prompt' });
       const retryResult = await callLlm([{
         role: "user",
         content: `Summarize these ${learnings.length} notes into one reference document.
@@ -1362,7 +1363,7 @@ The content field must contain the full markdown synthesis.`
       sources: learnings.map(l => l.slug)
     };
   } catch {
-    console.error("LLM: distill JSON parse failed");
+    llmWarn('parse_error', { task: 'distill', error: 'JSON parse failed' });
     return null;
   }
 }
@@ -1500,7 +1501,7 @@ Rules:
     setCache(cacheKey, value);
     return value;
   } catch {
-    console.error("LLM: duplicate check JSON parse failed");
+    llmWarn('parse_error', { task: 'duplicate', error: 'JSON parse failed' });
     refund(COSTS.duplicate);
     return null;
   }

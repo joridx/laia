@@ -55,9 +55,12 @@ export async function executeTurn({
   const spinner = createSpinner();
   let streamBuf = '';
 
+  // Generate a unique turnId for trace correlation
+  const turnId = logger.startTurn?.() ?? null;
+
   // --- Pre-turn hook (V4: scorecard start, procedural memory lookup) ---
   if (hooks.preTurn) {
-    try { await hooks.preTurn({ input, config }); } catch {}
+    try { await hooks.preTurn({ input, config, turnId }); } catch {}
   }
 
   // Prepare context
@@ -85,7 +88,7 @@ export async function executeTurn({
           }
           printStep(step);
           // Additional step handler
-          if (hooks.onStep) hooks.onStep(step);
+          if (hooks.onStep) try { hooks.onStep(step); } catch {}
         }
       },
     });
