@@ -622,11 +622,11 @@ export function syncLearning(db, slug, content, meta) {
     protected: (fm.protected || metaEntry.protected) ? 1 : 0,
     trigger_intents_json: fm.trigger_intents ? JSON.stringify(fm.trigger_intents) : (metaEntry.trigger_intents_json || null),
     preconditions_json: fm.preconditions ? JSON.stringify(fm.preconditions) : (metaEntry.preconditions_json || null),
-    step_count: fm.steps || metaEntry.step_count || 0,
-    used_count: fm.used_count || metaEntry.used_count || 0,
-    success_count: fm.success_count || metaEntry.success_count || 0,
-    last_outcome: fm.last_outcome || metaEntry.last_outcome || null,
-    last_used: fm.last_used || metaEntry.last_used || null,
+    step_count: typeof fm.steps === 'number' ? fm.steps : (parseInt(fm.steps, 10) || metaEntry.step_count || 0),
+    used_count: metaEntry.used_count ?? fm.used_count ?? 0,
+    success_count: metaEntry.success_count ?? fm.success_count ?? 0,
+    last_outcome: fm.last_outcome ?? metaEntry.last_outcome ?? null,
+    last_used: fm.last_used ?? metaEntry.last_used ?? null,
   };
 
   db.prepare(_upsertLearning).run(params);
@@ -702,13 +702,15 @@ export function syncLearningMeta(db, slug, meta) {
     protected: meta.protected ? 1 : 0,
     trigger_intents_json: meta.trigger_intents ? JSON.stringify(meta.trigger_intents) : (meta.trigger_intents_json || null),
     preconditions_json: meta.preconditions ? JSON.stringify(meta.preconditions) : (meta.preconditions_json || null),
-    step_count: meta.step_count || 0,
-    used_count: meta.used_count || 0,
-    success_count: meta.success_count || 0,
-    last_outcome: meta.last_outcome || null,
-    last_used: meta.last_used || null,
+    step_count: meta.step_count ?? 0,
+    used_count: meta.used_count ?? 0,
+    success_count: meta.success_count ?? 0,
+    last_outcome: meta.last_outcome ?? null,
+    last_used: meta.last_used ?? null,
   });
 }
+
+const VALID_OUTCOMES = new Set(["success", "failure", "partial"]);
 
 /**
  * Update procedure outcome counters in SQLite.
@@ -716,16 +718,19 @@ export function syncLearningMeta(db, slug, meta) {
  * @param {string} outcome - "success" | "failure" | "partial"
  */
 export function updateProcedureOutcome(db, slug, outcome) {
+  if (!VALID_OUTCOMES.has(outcome)) {
+    throw new Error(`Invalid procedure outcome: '${outcome}'. Valid: success, failure, partial`);
+  }
   const now = new Date().toISOString();
   const successInc = outcome === "success" ? 1 : 0;
   db.prepare(`
     UPDATE learnings SET
       used_count = used_count + 1,
-      success_count = success_count + ${successInc},
+      success_count = success_count + @successInc,
       last_outcome = @outcome,
       last_used = @now
     WHERE slug = @slug
-  `).run({ slug, outcome, now });
+  `).run({ slug, outcome, now, successInc });
 }
 
 export function syncLearningsBatch(db, items) {

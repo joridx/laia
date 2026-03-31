@@ -775,7 +775,7 @@ export function computeAllVitalities({ forceRecompute = false, meta: providedMet
     vitality = Math.max(0, Math.min(1, vitality));
     const zone = classifyVitalityZone(vitality, data.archived);
 
-    result.set(slug, { vitality, zone, accessCount, inDegree: inDegreeMap.get(slug.toLowerCase()) || 0, pageRank: centrality });
+    result.set(slug, { vitality, zone, accessCount, inDegree: inDegreeMap.get(slug.toLowerCase()) || 0, pageRank: centrality, protected: false });
   }
 
   // Cache the computed result
