@@ -17,6 +17,7 @@ export function loadMemoryFiles({ workspaceRoot } = {}) {
     // Project-level
     ...(workspaceRoot ? [
       { path: join(workspaceRoot, 'LAIA.md'), level: 'project' },
+      { path: join(workspaceRoot, '.laia', 'LAIA.md'), level: 'project' },
     ] : []),
     // Managed policy (highest priority — corporate, immutable by agent)
     { path: join(HOME, '.laia', 'LAIA-managed.md'), level: 'managed' },

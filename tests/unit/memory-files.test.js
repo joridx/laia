@@ -86,9 +86,10 @@ describe('loadMemoryFiles', () => {
   });
 
   it('loads project .laia/LAIA.md from workspace', () => {
-    writeFileSync(join(FAKE_WS, '.claude', 'LAIA.md'), '# Inner project rules');
+    mkdirSync(join(FAKE_WS, '.laia'), { recursive: true });
+    writeFileSync(join(FAKE_WS, '.laia', 'LAIA.md'), '# Inner project rules');
     const files = loadMemoryFiles({ workspaceRoot: FAKE_WS });
-    const inner = files.find(f => f.level === 'project' && f.path.includes('.claude'));
+    const inner = files.find(f => f.level === 'project' && f.path.includes('.laia'));
     assert.ok(inner, 'should find .laia/LAIA.md');
     assert.ok(inner.content.includes('Inner project rules'));
   });
