@@ -10,9 +10,10 @@
 // score = 10
 // if !task_completed: score -= 4
 // if rework_required: score -= 2
-// score -= min(user_corrections * 0.5, 2)
-// score -= min(tool_errors * 0.3, 1.5)
+// score -= min(max(0, user_corrections) * 0.5, 2)
+// score -= min(max(0, tool_errors) * 0.3, 1.5)
 // if satisfaction == "low": score -= 1
+// if satisfaction == "medium": score -= 0.5
 // Floor at 1, cap at 10
 
 const VALID_SATISFACTION = new Set(["high", "medium", "low"]);
@@ -30,10 +31,10 @@ export function computeCompositeScore(quality) {
   if (quality.task_completed === false) score -= 4;
   if (quality.rework_required === true) score -= 2;
 
-  const corrections = Number(quality.user_corrections) || 0;
+  const corrections = Math.max(0, Number(quality.user_corrections) || 0);
   score -= Math.min(corrections * 0.5, 2);
 
-  const toolErrors = Number(quality.tool_errors) || 0;
+  const toolErrors = Math.max(0, Number(quality.tool_errors) || 0);
   score -= Math.min(toolErrors * 0.3, 1.5);
 
   const satisfaction = String(quality.satisfaction || "").toLowerCase();

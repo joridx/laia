@@ -1403,28 +1403,23 @@ function ensureEmbeddingsTable(db) {
  * Called from getDb() to handle DBs that were already at schema v4 before Sprint 3.
  */
 function ensureSessionQualityTable(db) {
-  const exists = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='session_quality'"
-  ).get();
-  if (!exists) {
-    db.exec(`
-      CREATE TABLE session_quality (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_date TEXT NOT NULL,
-        project TEXT,
-        score REAL NOT NULL,
-        task_completed INTEGER,
-        rework_required INTEGER,
-        user_corrections INTEGER DEFAULT 0,
-        tool_errors INTEGER DEFAULT 0,
-        tools_used INTEGER DEFAULT 0,
-        turns INTEGER DEFAULT 0,
-        satisfaction TEXT,
-        session_file TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_sq_date ON session_quality(session_date);
-    `);
-  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session_quality (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_date TEXT NOT NULL,
+      project TEXT,
+      score REAL NOT NULL,
+      task_completed INTEGER,
+      rework_required INTEGER,
+      user_corrections INTEGER DEFAULT 0,
+      tool_errors INTEGER DEFAULT 0,
+      tools_used INTEGER DEFAULT 0,
+      turns INTEGER DEFAULT 0,
+      satisfaction TEXT,
+      session_file TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sq_date ON session_quality(session_date);
+  `);
 }
 
 /** Save a single learning embedding. */

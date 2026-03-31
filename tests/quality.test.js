@@ -69,6 +69,18 @@ describe("computeCompositeScore", () => {
     // 10 - 4 - 2 - 2 - 1.5 - 1 = -0.5 → clamped to 1
     assert.equal(score, 1);
   });
+
+  it("clamps negative user_corrections to 0 (no score boost)", () => {
+    assert.equal(computeCompositeScore({ user_corrections: -100 }), 10);
+  });
+
+  it("clamps negative tool_errors to 0 (no score boost)", () => {
+    assert.equal(computeCompositeScore({ tool_errors: -50 }), 10);
+  });
+
+  it("handles non-numeric string fields gracefully", () => {
+    assert.equal(computeCompositeScore({ user_corrections: "abc", tool_errors: "xyz" }), 10);
+  });
 });
 
 describe("sanitizeQuality", () => {
