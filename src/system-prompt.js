@@ -6,16 +6,20 @@
 // V4 features (evolved prompt, procedural memory) add new section functions.
 
 import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
-import { existsSync, readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
 // --- Individual sections ---
 
 function memorySection({ workspaceRoot }) {
-  const memFiles = loadMemoryFiles({ workspaceRoot });
-  const ctx = buildMemoryContext(memFiles);
-  return ctx || null;
+  try {
+    const memFiles = loadMemoryFiles({ workspaceRoot });
+    const ctx = buildMemoryContext(memFiles);
+    return ctx || null;
+  } catch {
+    return null;
+  }
 }
 
 function identitySection({ workspaceRoot, model, brainPath }) {
@@ -146,11 +150,14 @@ This request involves a corporate service. Your FIRST tool call MUST be: run_com
  * Returns null if directory doesn't exist or is empty.
  * Each .md file becomes a section with its filename as heading.
  */
-function evolvedSection() {
+const MAX_EVOLVED_FILE_SIZE = 32 * 1024; // 32 KB per file
+
+function evolvedSection(/* opts */) {
   const evolvedDir = join(homedir(), '.laia', 'evolved');
   if (!existsSync(evolvedDir)) return null;
 
   try {
+    const resolvedBase = realpathSync(evolvedDir);
     const files = readdirSync(evolvedDir)
       .filter(f => f.endsWith('.md'))
       .sort();
@@ -158,9 +165,22 @@ function evolvedSection() {
 
     const sections = [];
     for (const file of files) {
-      const content = readFileSync(join(evolvedDir, file), 'utf8').trim();
+      const filePath = join(evolvedDir, file);
+
+      // Security: reject symlinks that escape evolvedDir
+      try {
+        const resolved = realpathSync(filePath);
+        if (!resolved.startsWith(resolvedBase + '/') && resolved !== resolvedBase) continue;
+      } catch { continue; }
+
+      // Size guard: skip files larger than 32KB
+      try {
+        const stat = statSync(filePath);
+        if (stat.size > MAX_EVOLVED_FILE_SIZE) continue;
+      } catch { continue; }
+
+      const content = readFileSync(filePath, 'utf8').trim();
       if (!content) continue;
-      // Use filename (without .md) as section name if file doesn't start with #
       if (content.startsWith('#')) {
         sections.push(content);
       } else {
@@ -187,7 +207,7 @@ function evolvedSection() {
  * @returns {string}
  */
 export function buildSystemPrompt(opts) {
-  const sections = [
+  return [
     memorySection(opts),
     identitySection(opts),
     toolsSection(opts),
@@ -198,9 +218,7 @@ export function buildSystemPrompt(opts) {
     corporateHintSection(opts),
     planModeSection(opts),
     evolvedSection(opts),
-  ].filter(Boolean);
-
-  return sections.join('\n\n');
+  ].filter(Boolean).map(s => s.trim()).join('\n\n');
 }
 
 // --- Worker prompt (unchanged, self-contained) ---

@@ -3,7 +3,8 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 // ─── Legacy migration ────────────────────────────────────────────────────────
-// Called ONCE from bin/laia.js at startup. No side effects at import time.
+// Called ONCE from bin/laia.js at startup, BEFORE loadConfig().
+// No side effects at import time.
 
 export function migrateLegacyConfig() {
   if (process.env.CLAUDE_BRAIN_PATH && !process.env.LAIA_BRAIN_PATH) {
@@ -25,12 +26,13 @@ export function migrateLegacyConfig() {
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
+// DEFAULTS with static values only — brainPath computed at loadConfig() time
+// to ensure migrateLegacyConfig() has run first (#12 Codex review fix)
 const DEFAULTS = {
   model: 'claude-opus-4.6',
   maxTurns: 8,
   contextThreshold: 0.8,
   workspaceRoot: process.cwd(),
-  brainPath: process.env.LAIA_BRAIN_PATH || join(homedir(), 'laia-data'),
   commandDirs: [
     join(homedir(), '.laia', 'commands'),
   ],
@@ -52,10 +54,13 @@ export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, pl
     fileConfig = JSON.parse(readFileSync(configPath, 'utf8'));
   } catch {}
 
+  // Compute brainPath at call time — after migrateLegacyConfig() has run
+  const brainPath = process.env.LAIA_BRAIN_PATH || join(homedir(), 'laia-data');
   const envModel = process.env.LAIA_MODEL;
 
   return {
     ...DEFAULTS,
+    brainPath,
     ...fileConfig,
     ...(envModel ? { model: envModel } : {}),
     ...(modelOverride ? { model: modelOverride } : {}),

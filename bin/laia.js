@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import { loadConfig, migrateLegacyConfig } from '../src/config.js';
 
-// Run legacy migration once at startup (no side effects at import time)
+// Run legacy migration FIRST — before any module reads process.env at import time.
+// Note: ES import declarations are hoisted, but config.js has no import-time env reads
+// (we removed them in refactor #4). Dynamic imports below are an extra safety layer.
 migrateLegacyConfig();
-import { runRepl } from '../src/repl.js';
-import { runOneShot } from '../src/agent.js';
-import { createLogger } from '../src/logger.js';
 
 function parseArgv(argv) {
   const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false, plan: false, genai: null, effort: null, fork: null };
@@ -65,6 +64,8 @@ if (args.version) {
   process.exit(0);
 }
 
+// Dynamic imports — loaded AFTER migrateLegacyConfig() has run
+const { createLogger } = await import('../src/logger.js');
 const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm, autoCommit: args.autoCommit, planMode: args.plan, effort: args.effort, genai: args.genai });
 const logger = createLogger(config);
 
@@ -72,7 +73,9 @@ if (args.mcp) {
   const { startMcpServer } = await import('../src/mcp-server.js');
   await startMcpServer({ config, logger, stdoutPolicy: args.mcpStdoutPolicy });
 } else if (args.prompt) {
+  const { runOneShot } = await import('../src/agent.js');
   await runOneShot({ prompt: args.prompt, config, logger, json: args.json });
 } else {
+  const { runRepl } = await import('../src/repl.js');
   await runRepl({ config, logger, planMode: args.plan, forkSession: args.fork });
 }
