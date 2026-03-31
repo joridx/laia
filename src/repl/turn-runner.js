@@ -12,9 +12,10 @@ function createSpinner() {
   const chars = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
   let timer = null;
   let frame = 0;
+  const isTTY = stderr.isTTY;
   return {
     start() {
-      if (timer) return;
+      if (timer || !isTTY) return;
       stderr.write('\n');
       timer = setInterval(() => {
         stderr.write(`\r\x1b[36m${chars[frame++ % chars.length]}\x1b[0m`);

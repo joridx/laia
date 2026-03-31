@@ -490,14 +490,18 @@ export async function handleSlashCommand(input, session) {
         const expanded = expandCommand(cmd, args);
         stderr.write(`\x1b[2m[/${name}] Expanding command...\x1b[0m\n`);
         try {
-          await executeTurn({
+          const result = await executeTurn({
             input: expanded,
             config,
             logger,
             context,
             undoStack,
             autoCommitter,
+            planMode: planCtrl.getPlanMode?.(),
+            effort: effortCtrl.getEffort?.(),
           });
+          // Return result so main loop can do post-turn accounting
+          return { handled: true, turnResult: result };
         } catch (err) {
           stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
         }

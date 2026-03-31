@@ -322,8 +322,31 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
 
     // Slash commands
     if (input.startsWith('/')) {
-      const handled = await handleSlashCommand(input, session);
-      if (handled) { updatePrompt(); rl.prompt(); continue; }
+      const result = await handleSlashCommand(input, session);
+      if (result) {
+        // If a skill turn was executed, do post-turn accounting
+        if (result.turnResult) {
+          const tr = result.turnResult;
+          sendFeedback(tr.turnMessages, tr.text).catch(e => {
+            if (config.verbose) console.error('[feedback]', e.message);
+          });
+          suggestions = suggestFollowUps(tr.text);
+          selectedSuggestion = 0;
+          showSuggestions();
+          if (tr.usage) {
+            const inTok = tr.usage.input_tokens ?? tr.usage.prompt_tokens ?? 0;
+            const outTok = tr.usage.output_tokens ?? tr.usage.completion_tokens ?? 0;
+            sessionTokens.turns++;
+            sessionTokens.totalIn += (typeof inTok === 'number' ? inTok : 0);
+            sessionTokens.totalOut += (typeof outTok === 'number' ? outTok : 0);
+            const pct = context.usagePercent();
+            const ctxColor = pct > 80 ? '31;1' : pct > 60 ? '33;1' : '32';
+            const totalStr = formatTokenCount(sessionTokens.totalIn + sessionTokens.totalOut);
+            stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m · Σ${totalStr}]\x1b[0m\n`);
+          }
+        }
+        updatePrompt(); rl.prompt(); continue;
+      }
     }
 
     // Normal prompt — use unified executeTurn
