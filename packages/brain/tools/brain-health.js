@@ -112,6 +112,12 @@ export async function handler({ duplicates, quality } = {}) {
     const avgVitality = vitalityCount > 0 ? (totalVitality / vitalityCount).toFixed(3) : "N/A";
 
     lines.push(`- Total: ${learningFiles.length} files, ${metaSlugs.size} meta entries`);
+
+    // V4: Protected count
+    const protectedCount = Object.values(meta?.learnings || {}).filter(d => d.protected || d.type === "principle").length;
+    const procedureCount = Object.values(meta?.learnings || {}).filter(d => d.type === "procedure").length;
+    if (protectedCount > 0) lines.push(`- Protected (immune to decay): **${protectedCount}** 🛡️`);
+    if (procedureCount > 0) lines.push(`- Procedures: **${procedureCount}**`);
     lines.push(`- Orphans (meta without file): ${orphans.length}`);
     if (orphans.length > 0) {
       issues.push(`${orphans.length} orphan meta entries: ${orphans.slice(0, 5).join(", ")}`);

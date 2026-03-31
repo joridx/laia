@@ -465,6 +465,31 @@ export function scoreLearning(learning, queryTokens, meta, activeProject, graphT
     if (fbScore !== 0.5) signals.feedback = +fbScore.toFixed(2); // Only show if non-neutral
   }
 
+  // S9: Procedure trigger_intents match (V4 Sprint 1A)
+  // Boosts procedures whose trigger_intents match the query
+  rawScores.procedure = 0;
+  if (learning.type === "procedure" && Array.isArray(learning.trigger_intents) && learning.trigger_intents.length > 0) {
+    const intentTokens = learning.trigger_intents.map(t => t.toLowerCase().split(/\s+/)).flat();
+    const triggerMatches = queryTokens.filter(t => intentTokens.includes(t));
+    if (triggerMatches.length > 0) {
+      rawScores.procedure = triggerMatches.length * 3.0;
+      signals.procedure_trigger = triggerMatches.length;
+    }
+  }
+
+  // S10: Procedure confidence bonus (V4 Sprint 1A)
+  // High success_rate procedures get a scoring boost
+  if (learning.type === "procedure" && meta?.learnings) {
+    const metaEntry = meta.learnings[learning.slug];
+    const usedCount = metaEntry?.used_count || learning.used_count || 0;
+    const successCount = metaEntry?.success_count || learning.success_count || 0;
+    if (usedCount >= 2) {
+      const confidenceBonus = (successCount / usedCount) * 1.5;
+      rawScores.procedure = (rawScores.procedure || 0) + confidenceBonus;
+      signals.procedure_confidence = +(successCount / usedCount).toFixed(2);
+    }
+  }
+
   // Gate: >=2 active signals (freshness always counts as 1)
   const activeSignals = Object.keys(signals).length;
   if (!showAll && activeSignals < 2) return null;

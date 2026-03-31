@@ -32,17 +32,27 @@ export const description = "Save knowledge to brain. Single: content+tags+type. 
 export const schema = {
   content: z.string().optional().describe("Content to remember (single mode)"),
   tags: zCoercedArray(z.string()).optional().describe("Tags (single mode)"),
-  type: z.enum(["learning", "pattern", "warning", "principle", "bridge"]).optional().describe("Type: learning, pattern, warning, principle, bridge"),
+  type: z.enum(["learning", "pattern", "warning", "principle", "bridge", "procedure"]).optional().describe("Type: learning, pattern, warning, principle, bridge, procedure"),
   connects: zCoercedArray(z.string()).optional().describe("Bridge type only: concept slugs this bridge connects, e.g. ['python-http', 'corporate-ssl']"),
   domain: z.string().optional().describe("Save to knowledge/{domain}/ instead of learnings"),
   force: z.boolean().optional().describe("Bypass similarity gate"),
   supersedes: zCoercedArray(z.string()).optional().describe("Slugs this learning supersedes (marks old ones as superseded)"),
+  // V4 Sprint 1A: Procedure fields
+  trigger_intents: zCoercedArray(z.string()).optional().describe("Procedure: intents that trigger this procedure (e.g. ['deploy', 'release'])"),
+  preconditions: zCoercedArray(z.string()).optional().describe("Procedure: conditions that must be true before executing"),
+  steps: z.number().optional().describe("Procedure: number of steps in the body"),
+  // V4 Sprint 1B: Golden Suite
+  protected: z.boolean().optional().describe("Protected learning: immune to decay and prune. Use for critical knowledge."),
   learnings: zCoercedArray(z.object({
-    type: z.enum(["warning", "pattern", "learning", "principle", "bridge"]).describe("Type: warning, pattern, learning, principle, or bridge"),
+    type: z.enum(["warning", "pattern", "learning", "principle", "bridge", "procedure"]).describe("Type: warning, pattern, learning, principle, bridge, or procedure"),
     title: z.string().describe("Short title (becomes heading)"),
     description: z.string().describe("Full description with context"),
     tags: zCoercedArray(z.string()).describe("Relevant tags"),
-    connects: zCoercedArray(z.string()).optional().describe("Bridge only: concept slugs this connects")
+    connects: zCoercedArray(z.string()).optional().describe("Bridge only: concept slugs this connects"),
+    trigger_intents: zCoercedArray(z.string()).optional().describe("Procedure only: trigger intents"),
+    preconditions: zCoercedArray(z.string()).optional().describe("Procedure only: preconditions"),
+    steps: z.number().optional().describe("Procedure only: number of steps"),
+    protected: z.boolean().optional().describe("Protected: immune to decay")
   })).optional().describe("Batch mode: array of learnings to save"),
   session_ref: z.string().optional().describe("Session reference for batch mode"),
   agentProfile: z.string().optional().describe("Agent profile name (V2b). Auto-stored in learning metadata for agent-scoped retrieval."),
@@ -52,7 +62,7 @@ export const schema = {
   source_ref: z.string().optional().describe("P15.0: External reference (Jira key, commit SHA, URL)")
 };
 
-export async function handler({ content, tags, type, connects, domain, force = false, supersedes, learnings, session_ref, agentProfile, source_type, source_context, created_by, source_ref }) {
+export async function handler({ content, tags, type, connects, domain, force = false, supersedes, learnings, session_ref, agentProfile, source_type, source_context, created_by, source_ref, trigger_intents, preconditions, steps, protected: isProtected }) {
   // P15.0: Build provenance object (only include non-null/non-empty fields)
   const provenance = {};
   if (source_type) provenance.source_type = source_type;
@@ -78,7 +88,7 @@ export async function handler({ content, tags, type, connects, domain, force = f
       }
     }
 
-    let saved = { warning: 0, pattern: 0, learning: 0, principle: 0, bridge: 0 };
+    let saved = { warning: 0, pattern: 0, learning: 0, principle: 0, bridge: 0, procedure: 0 };
     let blocked = 0;
     let merged = 0;
     const details = [];
@@ -127,10 +137,28 @@ export async function handler({ content, tags, type, connects, domain, force = f
 
       const extra = session_ref ? `\n- **Session**: ${session_ref}\n` : null;
       const related = generateRelatedSection(slug, cleanTags);
-      const fileContent = buildLearningMarkdown(learning.title, learning.type, cleanTags, learning.description, extra, { connects: learning.connects, provenance: hasProvenance ? provenance : undefined }) + related;
+      // V4: Build procedure fields and protected flag for batch items
+      const batchProcedureFields = learning.type === "procedure" ? {
+        trigger_intents: learning.trigger_intents || [],
+        preconditions: learning.preconditions || [],
+        steps: learning.steps || 0,
+        used_count: 0, success_count: 0, last_outcome: null, last_used: null
+      } : undefined;
+      const fileContent = buildLearningMarkdown(learning.title, learning.type, cleanTags, learning.description, extra, {
+        connects: learning.connects,
+        provenance: hasProvenance ? provenance : undefined,
+        procedureFields: batchProcedureFields,
+        protected: learning.protected || (learning.type === "principle")
+      }) + related;
 
       writeFile(filePath, fileContent);
-      ensureLearningMeta(slug, learning.title, filePath, learning.type, { agentProfile });
+      ensureLearningMeta(slug, learning.title, filePath, learning.type, {
+        agentProfile,
+        protected: learning.protected || (learning.type === "principle"),
+        trigger_intents: learning.trigger_intents,
+        preconditions: learning.preconditions,
+        step_count: learning.steps,
+      });
       allBatchTags.push(...cleanTags); // Defer relations update to batch end
 
       // P14.1: Bridge auto-graph edges
@@ -155,7 +183,7 @@ export async function handler({ content, tags, type, connects, domain, force = f
       details.push(`✓ ${learning.type}: ${learning.title}`);
     }
 
-    const total = saved.warning + saved.pattern + saved.learning + saved.principle + saved.bridge;
+    const total = saved.warning + saved.pattern + saved.learning + saved.principle + saved.bridge + saved.procedure;
 
     // Batch-deferred: single relations.json update with all accumulated tags
     if (allBatchTags.length >= 2) {
@@ -170,6 +198,7 @@ export async function handler({ content, tags, type, connects, domain, force = f
     output += `- Patterns (#pattern): ${saved.pattern}\n`;
     output += `- Principles (#principle): ${saved.principle}\n`;
     if (saved.bridge > 0) output += `- Bridges (#bridge): ${saved.bridge}\n`;
+    if (saved.procedure > 0) output += `- Procedures (#procedure): ${saved.procedure}\n`;
     output += `- General: ${saved.learning}\n`;
     if (merged > 0) output += `- **Merged into existing:** ${merged}\n`;
     output += `\n`;
@@ -226,6 +255,15 @@ export async function handler({ content, tags, type, connects, domain, force = f
     _valueAssessment = assessment;
   }
 
+  // V4: Build procedure fields for single mode
+  const singleProcedureFields = type === "procedure" ? {
+    trigger_intents: trigger_intents || [],
+    preconditions: preconditions || [],
+    steps: steps || 0,
+    used_count: 0, success_count: 0, last_outcome: null, last_used: null
+  } : undefined;
+  const mdOpts = { connects, provenance: hasProvenance ? provenance : undefined, procedureFields: singleProcedureFields, protected: isProtected || (type === "principle") };
+
   // P7.1: Similarity gate — only for learnings (not knowledge/ domain files)
   if (!safeDomain && !force) {
     const similar = await findSimilarLearning(title, cleanTags);
@@ -256,9 +294,9 @@ export async function handler({ content, tags, type, connects, domain, force = f
       const src = similar.source ? ` [${similar.source}]` : "";
       const reason = similar.reason ? `\n💡 ${similar.reason}` : "";
       const related = generateRelatedSection(slug, cleanTags);
-      const fileContent = buildLearningMarkdown(title, type, cleanTags, content, null, { connects, provenance: hasProvenance ? provenance : undefined }) + related;
+      const fileContent = buildLearningMarkdown(title, type, cleanTags, content, null, mdOpts) + related;
       writeFile(filePath, fileContent);
-      ensureLearningMeta(slug, title, filePath, type, { agentProfile });
+      ensureLearningMeta(slug, title, filePath, type, { agentProfile, protected: isProtected || (type === "principle"), trigger_intents, preconditions, step_count: steps });
       addTagCooccurrenceRelations(cleanTags);
       return {
         content: [{ type: "text", text: `✓ Remembered: ${filePath}\nTags: ${cleanTags.map(t => `#${t}`).join(", ")}\n⚠ Similar learning exists${src} (similarity ${similar.similarity}): "${similar.title}" (${similar.slug})${reason}` }]
@@ -267,10 +305,16 @@ export async function handler({ content, tags, type, connects, domain, force = f
   }
 
   const related = safeDomain ? "" : generateRelatedSection(slug, cleanTags);
-  const fileContent = buildLearningMarkdown(title, type, cleanTags, content, null, { connects, provenance: hasProvenance ? provenance : undefined }) + related;
+  const fileContent = buildLearningMarkdown(title, type, cleanTags, content, null, mdOpts) + related;
   writeFile(filePath, fileContent);
   if (!safeDomain) {
-    ensureLearningMeta(slug, title, filePath, type, { agentProfile });
+    ensureLearningMeta(slug, title, filePath, type, {
+      agentProfile,
+      protected: isProtected || (type === "principle"),
+      trigger_intents,
+      preconditions,
+      step_count: steps,
+    });
   }
   addTagCooccurrenceRelations(cleanTags);
 

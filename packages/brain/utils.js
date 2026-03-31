@@ -74,9 +74,13 @@ export function parseLearningFrontmatter(content) {
     const match = line.match(/^([\w-]+):\s*(.*)$/);
     if (!match) continue;
     const [, key, value] = match;
-    if (key === "tags" || key === "connects") {
+    if (key === "tags" || key === "connects" || key === "trigger_intents" || key === "preconditions") {
       const arrMatch = value.match(/\[([^\]]*)\]/);
       fm[key] = arrMatch ? arrMatch[1].split(",").map(t => t.trim()).filter(Boolean) : [];
+    } else if (key === "protected") {
+      fm[key] = value === "true";
+    } else if (["steps", "used_count", "success_count"].includes(key)) {
+      fm[key] = parseInt(value, 10) || 0;
     } else if (value.startsWith('"') && value.endsWith('"')) {
       fm[key] = value.slice(1, -1).replace(/\\\"/g, '"');
     } else {
@@ -109,8 +113,8 @@ export function noteSlugFromPath(normalizedFp, notesDirNorm) {
   return rel.replace(/\//g, "-");
 }
 
-const VALID_TYPES = ["learning", "pattern", "warning", "principle", "bridge"];
-const TYPE_TAG_MAP = { warning: "#avoid", pattern: "#pattern", bridge: "#bridge" };
+const VALID_TYPES = ["learning", "pattern", "warning", "principle", "bridge", "procedure"];
+const TYPE_TAG_MAP = { warning: "#avoid", pattern: "#pattern", bridge: "#bridge", procedure: "#procedure" };
 
 /** Normalize a concept slug for connects[] — same rules as sanitizeTag but preserving hyphens */
 export function normalizeConnectSlug(s) {
@@ -138,7 +142,7 @@ function _yamlSafe(val) {
   return '"' + val.replace(/"/g, '\\"') + '"';
 }
 
-export function buildLearningMarkdown(title, type, tags, content, extra, { connects, provenance } = {}) {
+export function buildLearningMarkdown(title, type, tags, content, extra, { connects, provenance, procedureFields, protected: isProtected } = {}) {
   const safeType = VALID_TYPES.includes(type) ? type : "learning";
   const headline = (content.split("\n").find(l => l.trim()) || "").slice(0, 150);
   const typeTag = TYPE_TAG_MAP[safeType] || "#learning";
@@ -160,6 +164,26 @@ export function buildLearningMarkdown(title, type, tags, content, extra, { conne
     md += `connects: [${cleanConnects.join(", ")}]\n`;
   }
   md += `slug: ${slug}\n`;
+  // Protected flag (Golden Suite Lite)
+  if (isProtected) {
+    md += `protected: true\n`;
+  }
+  // Procedure-specific fields (Sprint 1A)
+  if (safeType === "procedure" && procedureFields) {
+    if (procedureFields.trigger_intents?.length > 0) {
+      md += `trigger_intents: [${procedureFields.trigger_intents.join(", ")}]\n`;
+    }
+    if (procedureFields.preconditions?.length > 0) {
+      md += `preconditions: [${procedureFields.preconditions.join(", ")}]\n`;
+    }
+    if (procedureFields.steps != null) {
+      md += `steps: ${procedureFields.steps}\n`;
+    }
+    md += `used_count: ${procedureFields.used_count || 0}\n`;
+    md += `success_count: ${procedureFields.success_count || 0}\n`;
+    md += `last_outcome: ${procedureFields.last_outcome || "null"}\n`;
+    md += `last_used: ${procedureFields.last_used || "null"}\n`;
+  }
   // Source provenance fields (P15.0)
   if (provenance) {
     if (provenance.source_type) md += `source_type: ${provenance.source_type}\n`;

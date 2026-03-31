@@ -411,7 +411,7 @@ export function filterStaleLearnings(learnings, vitalityMap = null) {
 
 // ─── Learning meta ────────────────────────────────────────────────────────────
 
-export function ensureLearningMeta(slug, title, file, type, { agentProfile } = {}) {
+export function ensureLearningMeta(slug, title, file, type, { agentProfile, protected: isProtected, trigger_intents, preconditions, step_count } = {}) {
   const meta = _readMeta();
   if (!meta || !meta.learnings) return;
 
@@ -436,6 +436,11 @@ export function ensureLearningMeta(slug, title, file, type, { agentProfile } = {
       last_accessed: null,
       stale: false,
       ...(agentProfile ? { agentProfile } : {}),
+      // V4: Sprint 1 fields
+      ...(isProtected ? { protected: true } : {}),
+      ...(trigger_intents?.length ? { trigger_intents } : {}),
+      ...(preconditions?.length ? { preconditions } : {}),
+      ...(step_count ? { step_count } : {}),
     };
     _writeMeta(meta, slug);
     invalidateVitalityCache(); // new learning affects vitality map
@@ -717,6 +722,12 @@ export function computeAllVitalities({ forceRecompute = false, meta: providedMet
 
   const result = new Map();
   for (const [slug, data] of Object.entries(meta.learnings)) {
+    // V4 Golden Suite: protected learnings always have vitality 1.0, zone "active"
+    if (data.protected || data.type === "principle") {
+      result.set(slug, { vitality: 1.0, zone: "active", accessCount: data.hit_count || 0, inDegree: inDegreeMap.get(slug.toLowerCase()) || 0, pageRank: slugCentrality.get(slug) || 0, protected: true });
+      continue;
+    }
+
     const accessCount = data.hit_count || 0;
     const created = data.created_date;
     const lifetimeDays = created

@@ -35,6 +35,9 @@ export function performPrune(daysThreshold = 60, vitalityMap = null) {
     // Skip human notes: explicit maintenance flag or file path under notes/ (P3.2)
     if (data.maintenance === "manual" || (data.file && data.file.startsWith("memory/notes/"))) continue;
 
+    // V4 Golden Suite: skip protected learnings (never prune/stale)
+    if (data.protected || data.type === "principle") continue;
+
     if (data.stale) {
       alreadyStale++;
       continue;

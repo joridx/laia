@@ -31,7 +31,7 @@ try {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DB_FILENAME = ".brain.db";
-const CURRENT_SCHEMA = 3;
+const CURRENT_SCHEMA = 4;
 
 // FTS5 bm25 column weights: title×3, headline×2, body×1, tags×1.5
 const FTS_WEIGHTS_LEARNINGS = "-3.0, -2.0, -1.0, -1.5";
@@ -167,11 +167,18 @@ function ensureSchema(db) {
     if (row && row.version === 1) {
       migrateV1toV2(db);
       migrateV2toV3(db);
-      return false; // no full rebuild needed
+      migrateV3toV4(db);
+      return false;
     }
     // Schema v2 → v3 migration (P15.2: feedback columns)
     if (row && row.version === 2) {
       migrateV2toV3(db);
+      migrateV3toV4(db);
+      return false;
+    }
+    // Schema v3 → v4 migration (Sprint 1: procedure + protected)
+    if (row && row.version === 3) {
+      migrateV3toV4(db);
       return false;
     }
   }
@@ -290,6 +297,41 @@ function migrateV2toV3(db) {
   console.error(`SQLite: migration v2→v3 complete (${Date.now() - t0}ms)`);
 }
 
+/**
+ * Additive migration v3 → v4 (Sprint 1: Procedural Memory + Golden Suite Lite).
+ * Adds procedure-specific columns and protected flag.
+ */
+function migrateV3toV4(db) {
+  console.error("SQLite: migrating schema v3 → v4 (Sprint 1: procedure + protected)...");
+  const t0 = Date.now();
+
+  db.transaction(() => {
+    const existingCols = new Set(
+      db.prepare("PRAGMA table_info(learnings)").all().map(c => c.name)
+    );
+    const newCols = [
+      // Golden Suite Lite
+      ["protected", "INTEGER DEFAULT 0"],
+      // Procedural Memory
+      ["trigger_intents_json", "TEXT"],
+      ["preconditions_json", "TEXT"],
+      ["step_count", "INTEGER DEFAULT 0"],
+      ["used_count", "INTEGER DEFAULT 0"],
+      ["success_count", "INTEGER DEFAULT 0"],
+      ["last_outcome", "TEXT"],
+      ["last_used", "TEXT"],
+    ];
+    for (const [name, type] of newCols) {
+      if (!existingCols.has(name)) {
+        db.exec(`ALTER TABLE learnings ADD COLUMN ${name} ${type}`);
+      }
+    }
+    db.exec(`UPDATE schema_version SET version = 4`);
+  })();
+
+  console.error(`SQLite: migration v3→v4 complete (${Date.now() - t0}ms)`);
+}
+
 function createSchema(db) {
   db.exec(`
     DROP TABLE IF EXISTS change_log;
@@ -341,7 +383,16 @@ function createSchema(db) {
       feedback_hits INTEGER DEFAULT 0,
       feedback_misses INTEGER DEFAULT 0,
       feedback_appearances INTEGER DEFAULT 0,
-      feedback_last_hit INTEGER
+      feedback_last_hit INTEGER,
+      -- V4: Sprint 1 fields
+      protected INTEGER DEFAULT 0,
+      trigger_intents_json TEXT,
+      preconditions_json TEXT,
+      step_count INTEGER DEFAULT 0,
+      used_count INTEGER DEFAULT 0,
+      success_count INTEGER DEFAULT 0,
+      last_outcome TEXT,
+      last_used TEXT
     );
 
     -- FTS5 for learnings (content-sync mode)
@@ -503,12 +554,14 @@ const _upsertLearning = `
     (slug, title, headline, type, body, tags_json, project, domain, created, file, content_hash,
      hit_count, created_date, last_accessed, stale, archived, vitality, vitality_zone,
      search_appearances, search_followup_hits, confirmation_count, last_confirmed,
-     source, subsumes_json, superseded_by, merge_count, vitality_updated, archived_at, archived_by)
+     source, subsumes_json, superseded_by, merge_count, vitality_updated, archived_at, archived_by,
+     protected, trigger_intents_json, preconditions_json, step_count, used_count, success_count, last_outcome, last_used)
   VALUES
     (@slug, @title, @headline, @type, @body, @tags_json, @project, @domain, @created, @file, @content_hash,
      @hit_count, @created_date, @last_accessed, @stale, @archived, @vitality, @vitality_zone,
      @search_appearances, @search_followup_hits, @confirmation_count, @last_confirmed,
-     @source, @subsumes_json, @superseded_by, @merge_count, @vitality_updated, @archived_at, @archived_by)
+     @source, @subsumes_json, @superseded_by, @merge_count, @vitality_updated, @archived_at, @archived_by,
+     @protected, @trigger_intents_json, @preconditions_json, @step_count, @used_count, @success_count, @last_outcome, @last_used)
 `;
 
 const _deleteLearningTags = "DELETE FROM learning_tags WHERE slug = @slug";
@@ -565,6 +618,15 @@ export function syncLearning(db, slug, content, meta) {
     vitality_updated: metaEntry.vitality_updated || null,
     archived_at: metaEntry.archived_at || null,
     archived_by: metaEntry.archived_by || null,
+    // V4: Sprint 1 fields
+    protected: (fm.protected || metaEntry.protected) ? 1 : 0,
+    trigger_intents_json: fm.trigger_intents ? JSON.stringify(fm.trigger_intents) : (metaEntry.trigger_intents_json || null),
+    preconditions_json: fm.preconditions ? JSON.stringify(fm.preconditions) : (metaEntry.preconditions_json || null),
+    step_count: fm.steps || metaEntry.step_count || 0,
+    used_count: fm.used_count || metaEntry.used_count || 0,
+    success_count: fm.success_count || metaEntry.success_count || 0,
+    last_outcome: fm.last_outcome || metaEntry.last_outcome || null,
+    last_used: fm.last_used || metaEntry.last_used || null,
   };
 
   db.prepare(_upsertLearning).run(params);
@@ -602,7 +664,15 @@ export function syncLearningMeta(db, slug, meta) {
       feedback_hits = @feedback_hits,
       feedback_misses = @feedback_misses,
       feedback_appearances = @feedback_appearances,
-      feedback_last_hit = @feedback_last_hit
+      feedback_last_hit = @feedback_last_hit,
+      protected = @protected,
+      trigger_intents_json = @trigger_intents_json,
+      preconditions_json = @preconditions_json,
+      step_count = @step_count,
+      used_count = @used_count,
+      success_count = @success_count,
+      last_outcome = @last_outcome,
+      last_used = @last_used
     WHERE slug = @slug
   `).run({
     slug,
@@ -628,7 +698,34 @@ export function syncLearningMeta(db, slug, meta) {
     feedback_misses: meta.feedback_misses || 0,
     feedback_appearances: meta.feedback_appearances || 0,
     feedback_last_hit: meta.feedback_last_hit || null,
+    // V4: Sprint 1 fields
+    protected: meta.protected ? 1 : 0,
+    trigger_intents_json: meta.trigger_intents ? JSON.stringify(meta.trigger_intents) : (meta.trigger_intents_json || null),
+    preconditions_json: meta.preconditions ? JSON.stringify(meta.preconditions) : (meta.preconditions_json || null),
+    step_count: meta.step_count || 0,
+    used_count: meta.used_count || 0,
+    success_count: meta.success_count || 0,
+    last_outcome: meta.last_outcome || null,
+    last_used: meta.last_used || null,
   });
+}
+
+/**
+ * Update procedure outcome counters in SQLite.
+ * @param {string} slug
+ * @param {string} outcome - "success" | "failure" | "partial"
+ */
+export function updateProcedureOutcome(db, slug, outcome) {
+  const now = new Date().toISOString();
+  const successInc = outcome === "success" ? 1 : 0;
+  db.prepare(`
+    UPDATE learnings SET
+      used_count = used_count + 1,
+      success_count = success_count + ${successInc},
+      last_outcome = @outcome,
+      last_used = @now
+    WHERE slug = @slug
+  `).run({ slug, outcome, now });
 }
 
 export function syncLearningsBatch(db, items) {
