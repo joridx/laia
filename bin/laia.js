@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { loadConfig } from '../src/config.js';
+import { loadConfig, migrateLegacyConfig } from '../src/config.js';
+
+// Run legacy migration once at startup (no side effects at import time)
+migrateLegacyConfig();
 import { runRepl } from '../src/repl.js';
 import { runOneShot } from '../src/agent.js';
 import { createLogger } from '../src/logger.js';

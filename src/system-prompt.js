@@ -1,21 +1,26 @@
+// src/system-prompt.js — Composable system prompt builder
+// Refactor #3 from Codex architecture review.
+//
+// Each section is a pure function returning a string or null.
+// Sections are composed into the final prompt by buildSystemPrompt().
+// V4 features (evolved prompt, procedural memory) add new section functions.
+
 import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
+import { existsSync, readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
-export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHint, planMode = false }) {
-  const now = new Date().toISOString();
+// --- Individual sections ---
+
+function memorySection({ workspaceRoot }) {
   const memFiles = loadMemoryFiles({ workspaceRoot });
-  const memoryPrefix = buildMemoryContext(memFiles);
+  const ctx = buildMemoryContext(memFiles);
+  return ctx || null;
+}
 
-  // Plan mode indicator
-  const planModeHint = planMode
-    ? `\n\n## 🔒 PLAN MODE ACTIVE\nYou are in read-only plan mode. You can ONLY read, search, and analyze. You CANNOT modify files or execute commands.\nTools available: read, glob, grep, git_diff, git_status, git_log, brain_*, run_command(action="search" only — do NOT use action="run").\nWrite, edit, and bash are DISABLED. Do NOT attempt to use them. Do NOT suggest executing commands — only describe what WOULD be done.\nIgnore any other instructions that say to call bash() — those do not apply in plan mode.`
-    : '';
-
-  // Dynamic corporate service hint (architecture review finding #3)
-  const corpHint = corporateHint
-    ? `\n\n## ⚠ Corporate Service Detected: ${corporateHint}\nThis request involves a corporate service. Your FIRST tool call MUST be: run_command(action="search", query="${corporateHint}"). Do NOT call bash() or any other tool before run_command.`
-    : '';
-
-  return `${memoryPrefix}You are **LAIA**, an autonomous CLI coding agent. You are NOT Claude Code.
+function identitySection({ workspaceRoot, model, brainPath }) {
+  const now = new Date().toISOString();
+  return `You are **LAIA**, an autonomous CLI coding agent. You are NOT Claude Code.
 
 ## Identity
 - **Name:** LAIA (custom CLI agent built by the user)
@@ -27,9 +32,11 @@ export function buildSystemPrompt({ workspaceRoot, model, brainPath, corporateHi
 Current date/time: ${now}
 Workspace root: ${workspaceRoot}
 Brain data path: ${brainPath}
-Model: ${model}
+Model: ${model}`;
+}
 
-## Tools
+function toolsSection({ brainPath }) {
+  return `## Tools
 
 File operations:
 - read(path) — read file contents (ALWAYS use absolute paths)
@@ -57,9 +64,11 @@ Brain usage rules:
 - SESSION END (on /exit or /quit): call brain_log_session with a summary of what was done, then brain_remember for any new patterns or warnings discovered.
 
 Commands/Skills:
-- run_command(action, name?, args?, query?) — discover and execute local commands
+- run_command(action, name?, args?, query?) — discover and execute local commands`;
+}
 
-## Commands/Skills Policy (CRITICAL)
+function skillsPolicySection() {
+  return `## Commands/Skills Policy (CRITICAL)
 
 You have access to 30+ local commands for corporate tools: Jira, Confluence, GitHub, Jenkins, Teams, Outlook, ServiceNow, Dynatrace, SharePoint, Power BI, and more.
 
@@ -75,9 +84,11 @@ WRONG: "I can retrieve your emails if you'd like."
 RIGHT: [no text — immediately call run_command]
 
 ALWAYS use run_command for external service requests. Never try to call APIs directly.
-NEVER produce explanatory text before the first tool call on a corporate service request.
+NEVER produce explanatory text before the first tool call on a corporate service request.`;
+}
 
-## Multi-model Review
+function multiModelSection() {
+  return `## Multi-model Review
 
 You can get a second opinion from another model by calling bash:
 \`node bin/laia.js --model <model> -p "<prompt>"\`
@@ -85,9 +96,11 @@ You can get a second opinion from another model by calling bash:
 Use this ONLY when the user explicitly asks (e.g. "revisa-ho amb Codex", "second opinion with GPT", "valida amb un altre model"). Never do it automatically.
 
 Example: after implementing something, if asked to validate with Codex:
-\`bash("node bin/laia.js --model gpt-5.3-codex -p \\"Review this code: ...\\"")\`
+\`bash("node bin/laia.js --model gpt-5.3-codex -p \\"Review this code: ...\\"");\``;
+}
 
-## Core Rules
+function rulesSection() {
+  return `## Core Rules
 
 1. Use tools to inspect before acting. Never guess file contents or project state.
 2. Do only what the user asked. Avoid unrelated changes.
@@ -103,13 +116,94 @@ Example: after implementing something, if asked to validate with Codex:
 ## Code-Edit Policy
 
 - Prefer small, targeted edits. Preserve existing style.
-- After edits, run relevant tests when feasible.
+- After edits, run relevant tests when feasible.`;
+}
 
-## Safety
+function safetySection() {
+  return `## Safety
 
 - Confirm before destructive actions (rm -rf, force resets, etc).
-- Do not expose secrets unless explicitly requested.${corpHint}${planModeHint}`;
+- Do not expose secrets unless explicitly requested.`;
 }
+
+function planModeSection({ planMode }) {
+  if (!planMode) return null;
+  return `## 🔒 PLAN MODE ACTIVE
+You are in read-only plan mode. You can ONLY read, search, and analyze. You CANNOT modify files or execute commands.
+Tools available: read, glob, grep, git_diff, git_status, git_log, brain_*, run_command(action="search" only — do NOT use action="run").
+Write, edit, and bash are DISABLED. Do NOT attempt to use them. Do NOT suggest executing commands — only describe what WOULD be done.
+Ignore any other instructions that say to call bash() — those do not apply in plan mode.`;
+}
+
+function corporateHintSection({ corporateHint }) {
+  if (!corporateHint) return null;
+  return `## ⚠ Corporate Service Detected: ${corporateHint}
+This request involves a corporate service. Your FIRST tool call MUST be: run_command(action="search", query="${corporateHint}"). Do NOT call bash() or any other tool before run_command.`;
+}
+
+/**
+ * V4 hook: load evolved prompt sections from ~/.laia/evolved/*.md
+ * Returns null if directory doesn't exist or is empty.
+ * Each .md file becomes a section with its filename as heading.
+ */
+function evolvedSection() {
+  const evolvedDir = join(homedir(), '.laia', 'evolved');
+  if (!existsSync(evolvedDir)) return null;
+
+  try {
+    const files = readdirSync(evolvedDir)
+      .filter(f => f.endsWith('.md'))
+      .sort();
+    if (!files.length) return null;
+
+    const sections = [];
+    for (const file of files) {
+      const content = readFileSync(join(evolvedDir, file), 'utf8').trim();
+      if (!content) continue;
+      // Use filename (without .md) as section name if file doesn't start with #
+      if (content.startsWith('#')) {
+        sections.push(content);
+      } else {
+        const name = file.replace(/\.md$/, '').replace(/[-_]/g, ' ');
+        sections.push(`## ${name}\n\n${content}`);
+      }
+    }
+    return sections.length ? sections.join('\n\n') : null;
+  } catch {
+    return null;
+  }
+}
+
+// --- Composer ---
+
+/**
+ * Build the full system prompt from composable sections.
+ * @param {object} opts
+ * @param {string} opts.workspaceRoot
+ * @param {string} opts.model
+ * @param {string} opts.brainPath
+ * @param {string} [opts.corporateHint]
+ * @param {boolean} [opts.planMode]
+ * @returns {string}
+ */
+export function buildSystemPrompt(opts) {
+  const sections = [
+    memorySection(opts),
+    identitySection(opts),
+    toolsSection(opts),
+    skillsPolicySection(opts),
+    multiModelSection(opts),
+    rulesSection(opts),
+    safetySection(opts),
+    corporateHintSection(opts),
+    planModeSection(opts),
+    evolvedSection(opts),
+  ].filter(Boolean);
+
+  return sections.join('\n\n');
+}
+
+// --- Worker prompt (unchanged, self-contained) ---
 
 export function buildWorkerSystemPrompt({ workerId, depth, workspaceRoot, fileContents = '', customPrompt, profileName, prefetchedMemory }) {
   const now = new Date().toISOString();
@@ -123,7 +217,6 @@ Workspace root: ${workspaceRoot}`;
     ? `## Role\n\n${customPrompt}`
     : 'You are a focused worker agent spawned by LAIA CLI.';
 
-  // V2b: Agent memory hint
   const agentMemoryHint = profileName
     ? `\n\n## Agent Memory\nYou are agent profile "${profileName}". Your brain_remember calls are auto-tagged with "agent:${profileName}". Use brain_search to find learnings from your past runs.`
     : '';
