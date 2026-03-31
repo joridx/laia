@@ -18,8 +18,9 @@ import { detectClusters } from "../maintenance.js";
 import {
   isDbAvailable, getDb, getDbStats, checkFtsIntegrity,
   getActivationStatsFromDb, getEmbeddingDbStats,
-  loadAllEmbeddings, metaRepo
+  loadAllEmbeddings, metaRepo, getRecentQuality
 } from "../database.js";
+import { analyzeTrend } from "../quality.js";
 import { readTodos } from "../todos.js";
 import { getPageRankMap } from "../graph.js";
 import { isLlmAvailable, getBudgetStatus } from "../llm.js";
@@ -955,6 +956,19 @@ export async function handler({ duplicates, quality } = {}) {
         }
       }
     } catch { /* non-blocking */ }
+
+    // V4 Sprint 3: Session Quality Trend
+    if (isDbAvailable()) {
+      try {
+        const recentQuality = getRecentQuality(getDb(), 10);
+        if (recentQuality.length > 0) {
+          const trend = analyzeTrend(recentQuality);
+          lines.push(`\n## Session Quality Trend`);
+          lines.push(`- Last ${recentQuality.length} sessions: ${trend.sparkline} (avg: ${trend.avg}, last: ${trend.last})`);
+          if (trend.alert) lines.push(`- ${trend.alert}`);
+        }
+      } catch { /* non-blocking */ }
+    }
 
     lines.push("");
     if (issues.length === 0) {

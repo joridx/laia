@@ -81,6 +81,7 @@ export function getDb() {
     }
     ensureActivationsTable(_db);
     ensureEmbeddingsTable(_db);
+    ensureSessionQualityTable(_db);
     return _db;
   } catch (e) {
     // Close partially-opened handle before any recovery attempt
@@ -100,6 +101,7 @@ export function getDb() {
         _db.pragma("foreign_keys = ON");
         ensureSchema(_db);
         ensureActivationsTable(_db);
+        ensureSessionQualityTable(_db);
         _dbDirty = true;
         _dbPath = dbPath;
         return _db;
@@ -327,6 +329,25 @@ function migrateV3toV4(db) {
       }
     }
     db.exec(`UPDATE schema_version SET version = 4`);
+
+    // Also ensure session_quality table exists (additive, safe if already present)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS session_quality (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_date TEXT NOT NULL,
+        project TEXT,
+        score REAL NOT NULL,
+        task_completed INTEGER,
+        rework_required INTEGER,
+        user_corrections INTEGER DEFAULT 0,
+        tool_errors INTEGER DEFAULT 0,
+        tools_used INTEGER DEFAULT 0,
+        turns INTEGER DEFAULT 0,
+        satisfaction TEXT,
+        session_file TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_sq_date ON session_quality(session_date);
+    `);
   })();
 
   console.error(`SQLite: migration v3→v4 complete (${Date.now() - t0}ms)`);
@@ -514,6 +535,23 @@ function createSchema(db) {
     );
     CREATE INDEX idx_change_log_entity ON change_log(entity_type, entity_id);
     CREATE INDEX idx_change_log_ts ON change_log(timestamp);
+
+    -- V4 Sprint 3: Session quality scorecard
+    CREATE TABLE IF NOT EXISTS session_quality (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_date TEXT NOT NULL,
+      project TEXT,
+      score REAL NOT NULL,
+      task_completed INTEGER,
+      rework_required INTEGER,
+      user_corrections INTEGER DEFAULT 0,
+      tool_errors INTEGER DEFAULT 0,
+      tools_used INTEGER DEFAULT 0,
+      turns INTEGER DEFAULT 0,
+      satisfaction TEXT,
+      session_file TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sq_date ON session_quality(session_date);
   `);
 }
 
@@ -740,6 +778,45 @@ export function syncLearningsBatch(db, items) {
     }
   });
   tx();
+}
+
+// ─── Session Quality (V4 Sprint 3) ───────────────────────────────────────
+
+/**
+ * Insert a quality score entry for a session.
+ */
+export function insertSessionQuality(db, entry) {
+  db.prepare(`
+    INSERT INTO session_quality
+      (session_date, project, score, task_completed, rework_required, user_corrections, tool_errors, tools_used, turns, satisfaction, session_file)
+    VALUES
+      (@session_date, @project, @score, @task_completed, @rework_required, @user_corrections, @tool_errors, @tools_used, @turns, @satisfaction, @session_file)
+  `).run({
+    session_date: entry.session_date,
+    project: entry.project ?? null,
+    score: entry.score,
+    task_completed: entry.task_completed != null ? (entry.task_completed ? 1 : 0) : null,
+    rework_required: entry.rework_required != null ? (entry.rework_required ? 1 : 0) : null,
+    user_corrections: entry.user_corrections ?? 0,
+    tool_errors: entry.tool_errors ?? 0,
+    tools_used: entry.tools_used ?? 0,
+    turns: entry.turns ?? 0,
+    satisfaction: entry.satisfaction ?? null,
+    session_file: entry.session_file ?? null,
+  });
+}
+
+/**
+ * Get the N most recent quality entries, ordered by date desc.
+ */
+export function getRecentQuality(db, limit = 10) {
+  return db.prepare(`
+    SELECT session_date, project, score, task_completed, rework_required,
+           user_corrections, tool_errors, tools_used, turns, satisfaction, session_file
+    FROM session_quality
+    ORDER BY id DESC
+    LIMIT @limit
+  `).all({ limit }).reverse();  // reverse so oldest first for sparkline
 }
 
 // ─── Sync: files ────────────────────────────────────────────────────────────
@@ -1317,6 +1394,35 @@ function ensureEmbeddingsTable(db) {
         content_hash TEXT,
         model_id TEXT DEFAULT 'paraphrase-multilingual-MiniLM-L12-v2'
       )
+    `);
+  }
+}
+
+/**
+ * Additive migration: create session_quality table if it doesn't exist.
+ * Called from getDb() to handle DBs that were already at schema v4 before Sprint 3.
+ */
+function ensureSessionQualityTable(db) {
+  const exists = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='session_quality'"
+  ).get();
+  if (!exists) {
+    db.exec(`
+      CREATE TABLE session_quality (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_date TEXT NOT NULL,
+        project TEXT,
+        score REAL NOT NULL,
+        task_completed INTEGER,
+        rework_required INTEGER,
+        user_corrections INTEGER DEFAULT 0,
+        tool_errors INTEGER DEFAULT 0,
+        tools_used INTEGER DEFAULT 0,
+        turns INTEGER DEFAULT 0,
+        satisfaction TEXT,
+        session_file TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_sq_date ON session_quality(session_date);
     `);
   }
 }
