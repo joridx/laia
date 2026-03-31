@@ -261,3 +261,7 @@ export async function brainLogSession(summary, tags) {
 export async function brainFeedback(args) {
   return callBrainTool('brain_feedback', args);
 }
+
+export async function brainReflectSession(args) {
+  return callBrainTool('brain_reflect_session', args);
+}

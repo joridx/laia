@@ -54,7 +54,7 @@ function getTimeout(provider, task) {
 }
 
 /** Check if a task is enabled in config. */
-function isTaskEnabled(task) {
+export function isTaskEnabled(task) {
   const cfg = getLlmConfig();
   const tCfg = cfg.tasks?.[task];
   return tCfg?.enabled !== false; // default: enabled
@@ -335,7 +335,7 @@ function _callGenAiLab(messages, config) {
   }
 }
 
-const _defaultCosts = { expansion: 1, autotags: 1, duplicate: 1, rerank: 2, distill: 4, summarize: 2, compact: 3, assess: 0.5 };
+const _defaultCosts = { expansion: 1, autotags: 1, duplicate: 1, rerank: 2, distill: 4, summarize: 2, compact: 3, assess: 0.5, reflection: 3 };
 // Budget costs can be overridden from llm-config.json tasks[].budgetCost
 function getCost(task) {
   const cfg = getLlmConfig();

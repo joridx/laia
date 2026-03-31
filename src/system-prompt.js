@@ -60,6 +60,7 @@ Memory (local brain):
 - brain_remember(type, title, description, tags) — store a learning
 - brain_get_context(project?) — get user prefs and relevant context
 - brain_log_session(summary) — log what happened this session
+- brain_reflect_session(transcript, auto_save?) — analyze session for corrections, preferences, errors (LLM-powered)
 - When brain tools return file references (e.g. "knowledge/people/name.md"), the full path is: ${brainPath}/<relative_path>
 
 Brain usage rules:
