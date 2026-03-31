@@ -103,14 +103,16 @@ export async function handler({ transcript, session_id, auto_save = false }) {
   }
 
   // ─── Truncate transcript ─────────────────────────────────────────────────
+  // Truncate from the BEGINNING to preserve the tail (recent context most valuable)
   const truncated = transcript.length > MAX_TRANSCRIPT_CHARS
-    ? transcript.slice(0, MAX_TRANSCRIPT_CHARS) + "\n\n[... transcript truncated ...]"
+    ? "[... transcript truncated ...]\n\n" + transcript.slice(-MAX_TRANSCRIPT_CHARS)
     : transcript;
 
   // ─── Call LLM ────────────────────────────────────────────────────────────
-  // Dynamic import to avoid circular dependency and allow mock injection
+  // Fence transcript in XML tags to reduce prompt injection surface
+  const fencedTranscript = `<session_transcript>\n${truncated}\n</session_transcript>`;
   const { default: callReflectionLlm } = await import("../reflection-llm.js");
-  const llmResult = await callReflectionLlm(REFLECTION_SYSTEM_PROMPT, truncated);
+  const llmResult = await callReflectionLlm(REFLECTION_SYSTEM_PROMPT, fencedTranscript);
 
   if (!llmResult) {
     return { content: [{ type: "text", text: "⚠️ LLM reflection call failed or returned empty. No observations extracted." }] };
@@ -124,6 +126,23 @@ export async function handler({ transcript, session_id, auto_save = false }) {
     return { content: [{ type: "text", text: `⚠️ Failed to parse LLM response: ${e.message}\n\nRaw response:\n${llmResult.slice(0, 500)}` }] };
   }
 
+  // Evidence grounding: verify each observation's evidence appears in transcript.
+  // Ungrounded evidence → force confidence to 0 (discard).
+  const transcriptLower = truncated.toLowerCase();
+  for (const obs of observations) {
+    const evidenceLower = obs.evidence.toLowerCase().trim();
+    // Require at least 10 chars of evidence to be present in the transcript
+    if (evidenceLower.length >= 10 && !transcriptLower.includes(evidenceLower)) {
+      // Try fuzzy: check if 80% of evidence words appear in transcript
+      const evidenceWords = evidenceLower.split(/\s+/).filter(w => w.length > 3);
+      const matchedWords = evidenceWords.filter(w => transcriptLower.includes(w));
+      if (matchedWords.length < evidenceWords.length * 0.6) {
+        obs.confidence = 0;  // Force discard
+        obs._ungrounded = true;
+      }
+    }
+  }
+
   // ─── Apply safeguards ────────────────────────────────────────────────────
   const stats = {
     corrections_found: 0,
@@ -135,6 +154,8 @@ export async function handler({ transcript, session_id, auto_save = false }) {
     discarded: 0,
     dedup_blocked: 0,
     contradiction_blocked: 0,
+    ungrounded: 0,
+    rate_limited: 0,
   };
 
   const results = [];
@@ -147,14 +168,20 @@ export async function handler({ transcript, session_id, auto_save = false }) {
 
     // Confidence gating
     if (obs.confidence < CONFIDENCE_REVIEW) {
-      obs.write_recommendation = "discard";
-      stats.discarded++;
+      obs.write_recommendation = obs._ungrounded ? "ungrounded" : "discard";
+      if (obs._ungrounded) stats.ungrounded++;
+      else stats.discarded++;
       results.push(obs);
       continue;
     }
 
     const isAutoEligible = obs.confidence >= CONFIDENCE_AUTO && autoWriteCount < MAX_AUTO_WRITES;
-    obs.write_recommendation = isAutoEligible ? "auto" : "review";
+    if (obs.confidence >= CONFIDENCE_AUTO && autoWriteCount >= MAX_AUTO_WRITES) {
+      obs.write_recommendation = "rate_limited";
+      stats.rate_limited++;
+    } else {
+      obs.write_recommendation = isAutoEligible ? "auto" : "review";
+    }
 
     // Dedup check
     const similar = await findSimilarLearning(
@@ -218,8 +245,10 @@ export async function handler({ transcript, session_id, auto_save = false }) {
     for (const obs of results) {
       const icon = obs.write_recommendation === "auto" ? (obs.saved ? "✅" : "💾")
         : obs.write_recommendation === "review" ? "👀"
+        : obs.write_recommendation === "rate_limited" ? "⏸️"
         : obs.write_recommendation === "dedup_blocked" ? "🔄"
         : obs.write_recommendation === "contradiction_blocked" ? "⚠️"
+        : obs.write_recommendation === "ungrounded" ? "👻"
         : "❌";
       output += `${icon} **[${obs.type}]** ${obs.content}\n`;
       output += `   Evidence: "${obs.evidence}"\n`;
@@ -243,7 +272,7 @@ export async function handler({ transcript, session_id, auto_save = false }) {
 
 /**
  * Parse LLM response into validated observations array.
- * Handles JSON wrapped in markdown code fences.
+ * Handles JSON wrapped in markdown code fences, object wrappers, trailing commas.
  */
 function parseObservations(raw) {
   let text = raw.trim();
@@ -252,17 +281,33 @@ function parseObservations(raw) {
   const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
   if (fenceMatch) text = fenceMatch[1].trim();
 
+  // Strip trailing commas (common LLM error)
+  text = text.replace(/,\s*(\]|\})/g, '$1');
+
   const parsed = JSON.parse(text);
-  if (!Array.isArray(parsed)) throw new Error("Expected JSON array");
+
+  // Unwrap common wrapper patterns
+  let arr;
+  if (Array.isArray(parsed)) {
+    arr = parsed;
+  } else if (parsed && Array.isArray(parsed.observations)) {
+    arr = parsed.observations;
+  } else {
+    throw new Error("Expected JSON array or {observations: [...]}" );
+  }
+
+  const preFilterCount = arr.length;
 
   // Validate and sanitize each observation
-  return parsed
+  const validated = arr
     .slice(0, MAX_OBSERVATIONS)
     .filter(obs =>
       obs &&
       typeof obs.content === "string" &&
       typeof obs.evidence === "string" &&
       typeof obs.confidence === "number" &&
+      !isNaN(obs.confidence) &&
+      isFinite(obs.confidence) &&
       OBSERVATION_TYPES.includes(obs.type)
     )
     .map(obs => ({
@@ -277,6 +322,12 @@ function parseObservations(raw) {
           : [],
       } : { title: obs.content.slice(0, 120), tags: [] },
     }));
+
+  if (preFilterCount > 0 && validated.length === 0) {
+    throw new Error(`LLM returned ${preFilterCount} items but none passed validation`);
+  }
+
+  return validated;
 }
 
 /**

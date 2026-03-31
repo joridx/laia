@@ -9,7 +9,6 @@
 
 import { callLlm } from "./llm.js";
 
-const REFLECTION_BUDGET_COST = 3;  // budget units per reflection call
 const REFLECTION_MAX_TOKENS = 2048;
 const REFLECTION_TEMPERATURE = 0.3;
 
@@ -33,11 +32,18 @@ export default async function callReflectionLlm(systemPrompt, transcript) {
     { role: "user", content: transcript }
   ];
 
-  const result = await callLlm(messages, {
-    maxTokens: REFLECTION_MAX_TOKENS,
-    temperature: REFLECTION_TEMPERATURE,
-    task: "reflection",
-  });
+  try {
+    // callLlm handles budget reservation internally via task="reflection"
+    // Budget cost for reflection is defined in llm.js _defaultCosts
+    const result = await callLlm(messages, {
+      maxTokens: REFLECTION_MAX_TOKENS,
+      temperature: REFLECTION_TEMPERATURE,
+      task: "reflection",
+    });
 
-  return result?.content || null;
+    return result?.content || null;
+  } catch (e) {
+    console.error(`[reflection-llm] callLlm failed: ${e.message}`);
+    return null;
+  }
 }
