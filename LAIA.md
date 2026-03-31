@@ -69,21 +69,30 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 | **2** | **Post-Session Reflection** — `brain_reflect_session`, LLM-powered, confidence-gated, evidence grounding, anti-spam | 2 | 254 | ✅ Done |
 | **3** | **Quality Scorecard** — composite score (1-10), sparkline trends, alerts, `session_quality` SQLite table | 2 | 281 | ✅ Done |
 | **4** | **Evolved System Prompt** — `~/.laia/evolved/`, compiled dual-layer (Stable + Adaptive), auto-expiry | 2 | 287 | ✅ Done |
-| **Future** | **Evaluation Harness** — replay corpus, rubrics, regression detection | — | — | 🔲 DEFERRED |
+| **Future** | **Evaluation Harness** — replay corpus, rubrics, regression detection | — | — | 🔲 Deferred (needs 50+ sessions) |
 
-**All 4 sprints completed** on 2026-03-31. Each sprint followed: implement → test → E2E → commit → Codex review → fix criticals → commit.
+**All 4 sprints + all post-sprint tasks completed** on 2026-03-31. Ported to Claudia production same day.
 
-### What's Next (post-V4)
+**Next milestone**: Evaluation Harness (D1-D3) — requires ~50 sessions with quality data to have meaningful replay corpus and trend analysis. Estimated start: when `session_quality` table has 50+ entries (check via `brain_health`).
 
-| Priority | Task | Effort |
-|----------|------|--------|
-| 🔴 | Auto-promotion to Golden (hit≥10 AND appearances≥20) | 1h |
-| 🔴 | Contradiction check in brain_remember (not just reflection) | 1h |
-| 🟡 | Procedure outcome tracking via brain_feedback | 2h |
-| 🟡 | Auto-compile evolved prompt at session end | 1h |
-| 🟡 | Port Sprint 1-4 features to Claudia production | 4h |
-| 🟢 | `/reflect` and `/evolve` custom commands | 1h |
-| 🔵 | Evaluation Harness (needs 50+ sessions with quality data) | 20h+ |
+| Sub-task | Description | Effort |
+|----------|-------------|--------|
+| **D1** | Replay corpus — record session transcripts + tool calls for deterministic replay | 8h |
+| **D2** | Rubrics — define what constitutes a "good session" (accuracy, tool efficiency, user satisfaction proxy) | 6h |
+| **D3** | Regression detection — compare quality scores before/after evolved prompt changes, alert on degradation | 6h |
+
+### What's Next
+
+| Priority | Task | Effort | Status |
+|----------|------|--------|--------|
+| ~~🔴~~ | ~~Auto-promotion to Golden (hit≥10 AND appearances≥20)~~ | ~~1h~~ | ✅ Done |
+| ~~🔴~~ | ~~Contradiction check in brain_remember~~ | ~~1h~~ | ✅ Done |
+| ~~🟡~~ | ~~Procedure outcome tracking via brain_feedback~~ | ~~2h~~ | ✅ Done |
+| ~~🟡~~ | ~~Auto-compile evolved prompt at session end~~ | ~~1h~~ | ✅ Done |
+| ~~🟡~~ | ~~Port Sprint 1-4 features to Claudia production~~ | ~~4h~~ | ✅ Done |
+| ~~🟢~~ | ~~`/reflect` command~~ | ~~30min~~ | ✅ Done |
+| ~~🟢~~ | ~~brain_health evolved prompt stats~~ | ~~30min~~ | ✅ Done |
+| 🔵 | **Evaluation Harness** — replay corpus, rubrics, regression detection | 20h+ | 🔲 Deferred (needs 50+ sessions with quality data) |
 
 ---
 
@@ -162,7 +171,7 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 - [x] `package.json` → name: "laia"
 - [x] `bin/claudia.js` → `bin/laia.js`
 - [x] System prompt → Identitat "LAIA"
-- [ ] README.md → Nou README per LAIA
+- [x] README.md → Nou README per LAIA
 - [ ] Skill references → Actualitzar paths si divergeixen
 
 ---
@@ -179,4 +188,8 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 | 2026-03-31 | Sprint 2: Post-Session Reflection ✅ |
 | 2026-03-31 | Sprint 3: Quality Scorecard ✅ |
 | 2026-03-31 | Sprint 4: Evolved System Prompt ✅ |
+| 2026-03-31 | Post-Sprint: A4 auto-promotion, A5 contradiction check, B1 procedure outcome, B2 auto-compile ✅ |
 | 2026-03-31 | Memory import: 21 learnings from Claudia brain (selective) |
+| 2026-03-31 | Port V4 complet a Claudia producció (brain server + agent) |
+| 2026-03-31 | C1 `/reflect` command + C3 brain_health evolved stats |
+| 2026-03-31 | Housekeeping: LAIA.md + README.md actualitzats |
