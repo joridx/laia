@@ -197,7 +197,7 @@ export COPILOT_PLUGIN_VERSION="copilot-chat/0.38.0"
 
 ## Standalone Brain (without Claudia installed)
 
-Brain uses `@claude/providers` via an npm `file:` dependency pointing to
+Brain uses `@laia/providers` via an npm `file:` dependency pointing to
 `../../claudia/packages/providers`. If Claudia is not a sibling directory,
 the import fails silently and Brain uses **inline fallback stubs** that preserve
 the original Copilot-only behavior.

@@ -1,6 +1,6 @@
 // Authentication module — multi-provider token resolution
 // Supports: Copilot (token exchange), bearer (env var), api-key, anthropic, none
-// Cross-platform: uses @claude/providers for path resolution
+// Cross-platform: uses @laia/providers for path resolution
 
 import { readFileSync, writeFileSync, statSync } from 'fs';
 import { join } from 'path';
@@ -9,7 +9,7 @@ import {
   resolveToken as providerResolveToken,
   buildAuthHeaders, findCopilotAppsJson, findCopilotOAuthToken,
   getTempDir, COPILOT_GITHUB_API_VERSION,
-} from '@claude/providers';
+} from '@laia/providers';
 
 const CACHE_FILE = join(getTempDir(), 'copilot_token_cache.json');
 const CACHE_TTL_SEC = 25 * 60; // refresh at 25 min (token lasts 30)

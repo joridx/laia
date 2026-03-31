@@ -14,10 +14,11 @@
     "test": "node --test \"tests/**/*.test.js\""
   },
   "dependencies": {
-    "@claude/providers": "file:./packages/providers",
+    "@laia/providers": "file:./packages/providers",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "fast-glob": "^3.3.3",
-    "yaml": "^2.8.3"
+    "yaml": "^2.8.3",
+    "@laia/brain": "file:./packages/brain"
   },
   "overrides": {
     "picomatch": ">=2.3.2"

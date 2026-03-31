@@ -5,7 +5,7 @@ import { runTurn, printStep } from './agent.js';
 import { createContext } from './context.js';
 import { loadFileCommands, expandCommand, listSkills, loadSkill } from './skills.js';
 import { getCopilotToken, getProviderToken } from './auth.js';
-import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@claude/providers';
+import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@laia/providers';
 import { startBrain, stopBrain, brainFeedback } from './brain/client.js';
 import { setReadlineInterface } from './permissions.js';
 import { renderMarkdown } from './render.js';

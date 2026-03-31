@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve, extname, basename } from 'path';
 import { createLLMClient, runAgentTurn as _runAgentTurnDefault } from '../llm.js';
 import { getCopilotToken, getProviderToken } from '../auth.js';
-import { detectProvider } from '@claude/providers';
+import { detectProvider } from '@laia/providers';
 import { buildWorkerSystemPrompt } from '../system-prompt.js';
 import { executeTool, getToolSchemas, getToolNames, registerTool } from './index.js';
 import { createPermissionContext } from '../permissions.js';

@@ -1,11 +1,11 @@
-// LLM client — multi-provider support via @claude/providers
+// LLM client — multi-provider support via @laia/providers
 // Dual endpoint: /responses (codex models) + /chat/completions (claude, gpt-5.x)
 // Node.js 24+, ESM, global fetch
 
 import {
   PROVIDERS, getProvider, detectProvider, getBaseUrl,
   buildAuthHeaders, resolveUrl,
-} from '@claude/providers';
+} from '@laia/providers';
 
 const DEFAULT_MODEL = 'gpt-5.3-codex';
 const MAX_TOOL_ITERATIONS = 100;

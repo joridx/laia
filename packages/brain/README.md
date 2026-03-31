@@ -28,4 +28,4 @@ npm test
 - `@modelcontextprotocol/sdk` — SDK del protocol MCP
 - `@huggingface/transformers` — Generació d'embeddings locals
 - `better-sqlite3` — Base de dades SQLite (opcional)
-- `@claude/providers` — Proveïdors de models (paquet local compartit)
+- `@laia/providers` — Proveïdors de models (paquet local compartit)

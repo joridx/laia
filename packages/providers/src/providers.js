@@ -1,4 +1,4 @@
-// @claude/providers — Multi-provider registry for LLM API routing
+// @laia/providers — Multi-provider registry for LLM API routing
 // Shared between LAIA (CLI agent) and Brain (MCP server)
 // Transport-agnostic: resolves WHAT to call, not HOW (fetch vs curl)
 

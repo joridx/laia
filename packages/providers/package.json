@@ -1,5 +1,5 @@
 {
-  "name": "@claude/providers",
+  "name": "@laia/providers",
   "version": "1.0.0",
   "type": "module",
   "description": "Multi-provider registry for LLM API routing (Copilot, OpenAI, Anthropic, Azure, Ollama)",

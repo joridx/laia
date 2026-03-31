@@ -110,7 +110,7 @@ bin/claudia.js            Entry point (CLI args, mode dispatch)
 ├── src/memory-files.js    CLAUDE.md hierarchy loader
 ├── src/user-profile.js    User preferences
 │
-└── packages/providers/    @claude/providers (shared package)
+└── packages/providers/    @laia/providers (shared package)
     └── src/providers.js   Multi-provider registry (Copilot, Anthropic, Azure, GenAI Lab, Ollama)
 ```
 
@@ -351,7 +351,7 @@ claudia --mcp                    # Run as MCP server (stdio)
 
 ## Provider System
 
-### `@claude/providers` (shared package)
+### `@laia/providers` (shared package)
 
 A transport-agnostic provider registry used by both Claudia and Brain:
 
@@ -530,7 +530,7 @@ node --test tests/unit/*.js     # Unit tests only
 | Mar 16 | Vision/images, auto-router, attachments, brain MCP |
 | Mar 17 | Token budget, CLAUDE.md hierarchy, git tools, diff, auto-commit, undo, cost tracking |
 | Mar 18 | Swarm (multi-agent), MCP server mode, permissions refactor, automated 5-agent code review |
-| Mar 19 | Architecture review (0 HIGH findings), multi-provider `@claude/providers` package |
+| Mar 19 | Architecture review (0 HIGH findings), multi-provider `@laia/providers` package |
 | Mar 21 | `/briefing` (7 parallel workers), parallel agent fixes, **V1 Feature Complete** |
 | Mar 22 | Plan mode, agent profiles, brain quality, CLI flags, **V2 Complete** (6/6 items in one session) |
 | Mar 22 | Skills V3 loader + migration |

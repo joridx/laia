@@ -21,7 +21,7 @@ function withEnv(overrides, fn) {
 
 // ─── PROVIDERS registry ──────────────────────────────────────────────────────
 
-describe('@claude/providers — registry', () => {
+describe('@laia/providers — registry', () => {
   it('has all 5 providers', () => {
     assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'copilot', 'ollama', 'openai']);
   });
@@ -46,7 +46,7 @@ describe('@claude/providers — registry', () => {
 
 // ─── detectProvider ──────────────────────────────────────────────────────────
 
-describe('@claude/providers — detectProvider', () => {
+describe('@laia/providers — detectProvider', () => {
   it('routes claude models to anthropic (when available)', () => {
     withEnv({ ANTHROPIC_API_KEY: 'test-key' }, () => {
       const r = detectProvider('claude-opus-4.6');
@@ -169,7 +169,7 @@ describe('@claude/providers — detectProvider', () => {
 
 // ─── getProvider ─────────────────────────────────────────────────────────────
 
-describe('@claude/providers — getProvider', () => {
+describe('@laia/providers — getProvider', () => {
   it('returns provider by id', () => {
     assert.equal(getProvider('copilot').id, 'copilot');
     assert.equal(getProvider('openai').id, 'openai');
@@ -182,7 +182,7 @@ describe('@claude/providers — getProvider', () => {
 
 // ─── isProviderAvailable ─────────────────────────────────────────────────────
 
-describe('@claude/providers — isProviderAvailable', () => {
+describe('@laia/providers — isProviderAvailable', () => {
   it('ollama is always available (auth=none)', () => {
     assert.ok(isProviderAvailable('ollama'));
   });
@@ -209,7 +209,7 @@ describe('@claude/providers — isProviderAvailable', () => {
 
 // ─── buildAuthHeaders ────────────────────────────────────────────────────────
 
-describe('@claude/providers — buildAuthHeaders', () => {
+describe('@laia/providers — buildAuthHeaders', () => {
   it('copilot → Bearer', () => {
     assert.deepStrictEqual(buildAuthHeaders(getProvider('copilot'), 'tok'), { Authorization: 'Bearer tok' });
   });
@@ -233,7 +233,7 @@ describe('@claude/providers — buildAuthHeaders', () => {
 
 // ─── resolveToken ────────────────────────────────────────────────────────────
 
-describe('@claude/providers — resolveToken', () => {
+describe('@laia/providers — resolveToken', () => {
   it('none provider returns null', async () => {
     assert.equal(await resolveToken(getProvider('ollama')), null);
   });
@@ -263,7 +263,7 @@ describe('@claude/providers — resolveToken', () => {
 
 // ─── resolveUrl + getBaseUrl (call-time env resolution) ──────────────────────────
 
-describe('@claude/providers — resolveUrl', () => {
+describe('@laia/providers — resolveUrl', () => {
   it('copilot: baseUrl + endpoint', () => {
     assert.equal(resolveUrl(getProvider('copilot'), 'chat/completions'), 'https://api.business.githubcopilot.com/chat/completions');
   });
@@ -325,7 +325,7 @@ describe('@claude/providers — resolveUrl', () => {
   });
 });
 
-describe('@claude/providers — getBaseUrl', () => {
+describe('@laia/providers — getBaseUrl', () => {
   it('returns static baseUrl for copilot', () => {
     assert.equal(getBaseUrl(getProvider('copilot')), 'https://api.business.githubcopilot.com');
   });
@@ -345,7 +345,7 @@ describe('@claude/providers — getBaseUrl', () => {
 
 // ─── Cross-platform utilities ────────────────────────────────────────────────
 
-describe('@claude/providers — cross-platform', () => {
+describe('@laia/providers — cross-platform', () => {
   it('findCopilotAppsJson returns string or null', () => {
     const result = findCopilotAppsJson();
     assert.ok(result === null || typeof result === 'string');

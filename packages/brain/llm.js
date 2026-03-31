@@ -94,14 +94,14 @@ function hasAlternativeProviders() {
   return chain.some(p => p !== 'copilot');
 }
 
-// ─── @claude/providers integration (graceful fallback for standalone mode) ───
+// ─── @laia/providers integration (graceful fallback for standalone mode) ───
 
 let _providers = null;
 
 async function getProviders() {
   if (_providers) return _providers;
   try {
-    _providers = await import('@claude/providers');
+    _providers = await import('@laia/providers');
   } catch {
     // Standalone mode: Brain running without LAIA repo as sibling.
     // Minimal Copilot-only stubs preserving current behavior.
@@ -123,7 +123,7 @@ async function getProviders() {
   return _providers;
 }
 
-// Fallback implementations used when @claude/providers is not installed
+// Fallback implementations used when @laia/providers is not installed
 function _findAppsJsonFallback() {
   if (process.env.LOCALAPPDATA) {
     const p = path.join(process.env.LOCALAPPDATA, "github-copilot", "apps.json");

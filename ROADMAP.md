@@ -146,7 +146,7 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | 2026-03-18 | +20 | Codex review fixes, swarm (agent tool + semaphore + batch dispatch + allowedTools), MCP server mode (stdio + stdout guard), permissions refactor |
 | 2026-03-18 | +1 | Automated multi-agent code review (5 parallel agents): fix 13 issues |
 | 2026-03-19 | +3 | Architecture review: registry freeze, atomic addTurn, corporate pre-hook |
-| 2026-03-19 | +2 | **Multi-provider LLM routing (api-agnostic-v2):** `@claude/providers` shared package (5 providers) |
+| 2026-03-19 | +2 | **Multi-provider LLM routing (api-agnostic-v2):** `@laia/providers` shared package (5 providers) |
 | 2026-03-21 | +4 | **`/briefing` daily briefing skill** (7 parallel workers). **Parallel agents fix** (3 Copilot streaming bugs). **V1 Feature Complete** declared after Codex review. |
 | 2026-03-22 | +1 | **Plan Mode** (`/plan`, `/execute`, `--plan`). Dual enforcement (schema + dispatch). Reviewed by Codex. V2 roadmap defined (6 items, ~30h). |
 | 2026-03-22 | +1 | **Agent Profiles V2a** — YAML profiles (`~/.claudia/agents/`), resolveToolSet, customPrompt, maxSteps cap. 3 example profiles. Reviewed by Codex (3 rounds). |

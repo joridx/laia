@@ -1,7 +1,7 @@
 // Agent turn loop: user input -> LLM -> tool calls -> LLM -> final text
 import { createLLMClient, runAgentTurn } from './llm.js';
 import { getCopilotToken, getProviderToken } from './auth.js';
-import { detectProvider } from '@claude/providers';
+import { detectProvider } from '@laia/providers';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getToolSchemas, executeTool as dispatchTool } from './tools/index.js';
 import { checkPermission, setAutoApprove } from './permissions.js';

@@ -1,5 +1,5 @@
 {
-  "name": "laia-brain",
+  "name": "@laia/brain",
   "version": "2.51.0",
   "description": "MCP Server for LAIA's Local Brain - Persistent Memory System",
   "main": "index.js",
@@ -20,7 +20,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@claude/providers": "file:../providers",
+    "@laia/providers": "file:../providers",
     "@huggingface/transformers": "^3.8.1",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "zod": "^4.3.6"

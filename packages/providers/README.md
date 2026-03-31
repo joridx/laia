@@ -1,4 +1,4 @@
-# @claude/providers
+# @laia/providers
 
 Shared multi-provider LLM routing package for **LAIA** (CLI agent) and **Brain** (MCP server).
 
@@ -58,7 +58,7 @@ Resolves a model string to `{ providerId, model }`.
 | *(anything else)* | default provider |
 
 ```js
-import { detectProvider } from '@claude/providers';
+import { detectProvider } from '@laia/providers';
 
 detectProvider('gpt-5.3-codex')
 // → { providerId: 'openai', model: 'gpt-5.3-codex' }
@@ -79,7 +79,7 @@ detectProvider('claude-opus-4.6')
 Returns the provider config object from `PROVIDERS`. Throws if unknown.
 
 ```js
-import { getProvider } from '@claude/providers';
+import { getProvider } from '@laia/providers';
 
 const p = getProvider('copilot');
 // → { id, baseUrl, auth, supports, extraHeaders, quirks }
@@ -96,7 +96,7 @@ Async. Returns the auth token for a provider.
 - `none`: returns `null`
 
 ```js
-import { resolveToken, getProvider } from '@claude/providers';
+import { resolveToken, getProvider } from '@laia/providers';
 
 const token = await resolveToken(getProvider('openai'));
 // → process.env.OPENAI_API_KEY
@@ -122,7 +122,7 @@ Returns the `Authorization` header object for a provider.
 Returns the full API URL.
 
 ```js
-import { resolveUrl, getProvider } from '@claude/providers';
+import { resolveUrl, getProvider } from '@laia/providers';
 
 resolveUrl(getProvider('openai'), 'chat/completions')
 // → 'https://api.openai.com/v1/chat/completions'

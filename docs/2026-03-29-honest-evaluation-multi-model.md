@@ -29,7 +29,7 @@ Avaluació multi-model independent del sistema Claudia (CLI agent, v1.1.0) + Cla
 | Versió | 1.1.0 |
 | LOC | 6.451 (35 fitxers font) |
 | Tests | 254 passant, 0 fallint |
-| Dependències | 4 (@claude/providers, @modelcontextprotocol/sdk, fast-glob, yaml) |
+| Dependències | 4 (@laia/providers, @modelcontextprotocol/sdk, fast-glob, yaml) |
 | TODO/FIXME/HACK | 0 |
 | Runtime | Node.js 24 ESM |
 | LLM Backend | GitHub Copilot Business (multi-model) |
@@ -39,7 +39,7 @@ Avaluació multi-model independent del sistema Claudia (CLI agent, v1.1.0) + Cla
 |---------|-------|
 | Versió | 2.45.0 |
 | LOC | 9.195 (core) + 2.743 (tools) + 2.541 (outlook) = ~14.500 |
-| Dependències | 4 (@claude/providers, @huggingface/transformers, @modelcontextprotocol/sdk, zod) |
+| Dependències | 4 (@laia/providers, @huggingface/transformers, @modelcontextprotocol/sdk, zod) |
 | Learnings | 1.064 actius |
 | Sessions | 133 |
 | Projectes | 30 |
@@ -65,7 +65,7 @@ BM25 + graph expansion + vitality decay + embeddings + LLM reranking + P12.5 dom
 ### 5. Integració corporativa real 🟢🔵
 35 skills per Jira, Confluence, Jenkins, Outlook, Dynatrace, ServiceNow, SharePoint, Power BI... No és un "toy project", és utilitat operativa diària en un entorn empresarial real.
 
-### 6. Multi-model routing + @claude/providers 🟢🟣
+### 6. Multi-model routing + @laia/providers 🟢🟣
 Auto-detecció per model + fallback chain (Copilot → Bedrock → GenAI Lab). Abstracció que paga dividends amb el ritme de canvis als LLMs (models nous cada 2-3 mesos).
 
 ### 7. Dual mode (CLI + MCP) 🟢🟣

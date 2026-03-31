@@ -27,7 +27,7 @@ Replace hardcoded Copilot dependency with a transparent multi-provider system wh
 
 ## Design
 
-### Shared module: `@claude/providers` (~120 LOC)
+### Shared module: `@laia/providers` (~120 LOC)
 
 #### Code sharing strategy (cross-platform, cross-repo)
 
@@ -52,18 +52,18 @@ C:/claude/  (or ~/claude/ on Linux)
 ├── claudia/
 │   ├── packages/
 │   │   └── providers/           ← NEW: shared provider package
-│   │       ├── package.json     ← {"name": "@claude/providers", "type": "module"}
+│   │       ├── package.json     ← {"name": "@laia/providers", "type": "module"}
 │   │       ├── index.js          ← re-exports from src/
 │   │       └── src/
 │   │           └── providers.js  ← THE shared code (~120 LOC)
-│   ├── package.json              ← adds "@claude/providers": "file:./packages/providers"
+│   ├── package.json              ← adds "@laia/providers": "file:./packages/providers"
 │   └── src/
-│       └── ...                   ← imports from '@claude/providers'
+│       └── ...                   ← imports from '@laia/providers'
 │
 └── claude-local-brain/
     └── mcp-server/
-        ├── package.json          ← adds "@claude/providers": "file:../../claudia/packages/providers"
-        └── ...                   ← imports from '@claude/providers'
+        ├── package.json          ← adds "@laia/providers": "file:../../claudia/packages/providers"
+        └── ...                   ← imports from '@laia/providers'
 ```
 
 **Why this works cross-platform:**
@@ -77,7 +77,7 @@ C:/claude/  (or ~/claude/ on Linux)
 
 ```json
 {
-  "name": "@claude/providers",
+  "name": "@laia/providers",
   "version": "1.0.0",
   "type": "module",
   "main": "./src/providers.js",
@@ -95,7 +95,7 @@ Brain may run standalone (e.g., Claude Code MCP server without Claudia installed
 // claude-local-brain/mcp-server/llm.js
 let providers;
 try {
-  providers = await import('@claude/providers');
+  providers = await import('@laia/providers');
 } catch {
   // Fallback: inline minimal copilot-only config (current behavior)
   providers = {
@@ -392,13 +392,13 @@ createLLMClient({ getToken: () => getProviderToken(providerId), model: config.mo
 
 ### Changes to Brain (`mcp-server/llm.js`)
 
-Same pattern. Import `@claude/providers` via npm `file:` dependency. Graceful fallback if package not found (standalone mode).
+Same pattern. Import `@laia/providers` via npm `file:` dependency. Graceful fallback if package not found (standalone mode).
 
-**Key difference from Claudia:** Brain uses `curl` via `execFile` (not `fetch`). The provider resolution (URL, headers, auth) is identical, but the HTTP transport layer stays curl-based. `@claude/providers` is transport-agnostic — it only resolves **what** to call, not **how**.
+**Key difference from Claudia:** Brain uses `curl` via `execFile` (not `fetch`). The provider resolution (URL, headers, auth) is identical, but the HTTP transport layer stays curl-based. `@laia/providers` is transport-agnostic — it only resolves **what** to call, not **how**.
 
 | What | Before | After |
 |------|--------|-------|
-| Lines 128-211: Copilot token code | `findAppsJson()` + `refreshCopilotToken()` | Use `findCopilotAppsJson()` from `@claude/providers`, keep token exchange |
+| Lines 128-211: Copilot token code | `findAppsJson()` + `refreshCopilotToken()` | Use `findCopilotAppsJson()` from `@laia/providers`, keep token exchange |
 | Line 262-298: `callLlm()` URL/headers | Hardcoded Copilot | `detectProvider(model)` → `resolveUrl()` + `buildAuthHeaders()` |
 | curl command builder | Copilot-specific headers | `...provider.extraHeaders` spread into curl `-H` args |
 | `ALLOWED_MODELS` set | Hardcoded GPT/Codex list | Removed — any model allowed, provider auto-detected |
@@ -407,7 +407,7 @@ Same pattern. Import `@claude/providers` via npm `file:` dependency. Graceful fa
 ```json
 {
   "dependencies": {
-    "@claude/providers": "file:../../claudia/packages/providers"
+    "@laia/providers": "file:../../claudia/packages/providers"
   }
 }
 ```
@@ -416,7 +416,7 @@ Same pattern. Import `@claude/providers` via npm `file:` dependency. Graceful fa
 ```js
 let providers;
 try {
-  providers = await import('@claude/providers');
+  providers = await import('@laia/providers');
 } catch {
   // Minimal copilot-only config — current behavior preserved
   providers = { /* inline stubs */ };
@@ -533,7 +533,7 @@ When implemented:
 | Tests break | Feature branch + rollback to `main` |
 | `isClaude` workarounds applied on non-Copilot | Fixed: workarounds gated on `provider.quirks`, not model name alone |
 | `/model` command fails on non-Copilot provider | Provider-aware: check `supports.listModels`, show message if unsupported |
-| `providers.js` copy drifts between Claudia and Brain | **Eliminated**: npm `file:` dependency, single source of truth in `claudia/packages/providers/`. Brain imports via `@claude/providers`. Fallback stubs for standalone mode. |
+| `providers.js` copy drifts between Claudia and Brain | **Eliminated**: npm `file:` dependency, single source of truth in `claudia/packages/providers/`. Brain imports via `@laia/providers`. Fallback stubs for standalone mode. |
 
 ## Scope summary
 

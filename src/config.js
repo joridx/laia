@@ -1,6 +1,23 @@
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+
+// ─── Legacy migration bridges ─────────────────────────────────────────────────
+if (process.env.CLAUDE_BRAIN_PATH && !process.env.LAIA_BRAIN_PATH) {
+  process.stderr.write(
+    '⚠️  CLAUDE_BRAIN_PATH is deprecated. Set LAIA_BRAIN_PATH instead.\n' +
+    '   Falling back to CLAUDE_BRAIN_PATH for this session.\n'
+  );
+  process.env.LAIA_BRAIN_PATH = process.env.CLAUDE_BRAIN_PATH;
+}
+
+const oldConfigDir = join(homedir(), '.claudia');
+if (existsSync(oldConfigDir) && !existsSync(join(homedir(), '.laia'))) {
+  process.stderr.write(
+    `⚠️  Found legacy ~/.claudia/ directory but no ~/.laia/.\n` +
+    `   Consider copying your config: cp -r ~/.claudia ~/.laia\n`
+  );
+}
 
 const DEFAULTS = {
   model: 'claude-opus-4.6',
