@@ -55,21 +55,20 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   let planMode = initialPlanMode || config.planMode || false;
   let effort = config.effort || null;
 
-  // Start brain MCP server
-  try {
-    await startBrain({ brainPath: config.brainPath, verbose: config.verbose });
-    try {
-      const brainPkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'packages', 'brain', 'package.json');
-      const brainPkg = JSON.parse(readFileSync(brainPkgPath, 'utf8'));
-      stderr.write(`\x1b[2m🧠 LAIA Brain MCP Server v${brainPkg.version}\x1b[0m\n`);
-    } catch {
-      stderr.write('\x1b[2m🧠 LAIA Brain MCP Server\x1b[0m\n');
-    }
-  } catch (err) {
-    stderr.write(`\x1b[33m[brain] Failed to start: ${err.message} (brain tools disabled)\x1b[0m\n`);
-  }
-
-  await registerBuiltinTools({ ...config, freeze: false });
+  // Parallel startup: brain + tools register run while banner animates
+  // Brain start (~700ms) and tools register (~270ms) overlap with banner animation (~810ms)
+  const brainReady = startBrain({ brainPath: config.brainPath, verbose: config.verbose })
+    .then(() => {
+      try {
+        const brainPkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'packages', 'brain', 'package.json');
+        const brainPkg = JSON.parse(readFileSync(brainPkgPath, 'utf8'));
+        return { ok: true, version: brainPkg.version };
+      } catch {
+        return { ok: true, version: null };
+      }
+    })
+    .catch(err => ({ ok: false, error: err.message }));
+  const toolsReady = registerBuiltinTools({ ...config, freeze: false });
   const context = createContext();
   const fileCommands = loadFileCommands(config.commandDirs);
   const router = createRouter();
@@ -289,7 +288,31 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
     });
   }
 
-  await animateCatBanner(config, planMode, fileCommands);
+  // Banner animates while brain + tools finish in background
+  // Use allSettled to ensure brainReady is always awaited even if toolsReady rejects
+  const [bannerS, toolsS, brainS] = await Promise.allSettled([
+    animateCatBanner(config, planMode, fileCommands),
+    toolsReady,
+    brainReady,
+  ]);
+
+  // Banner failure is non-fatal (cosmetic only)
+  if (bannerS.status === 'rejected' && config.verbose) {
+    stderr.write(`\x1b[2m[banner] ${bannerS.reason?.message ?? 'unknown error'}\x1b[0m\n`);
+  }
+
+  // Tools failure is fatal — rethrow
+  if (toolsS.status === 'rejected') throw toolsS.reason;
+
+  // Report brain status (resolved during banner animation)
+  const brainResult = brainS.status === 'fulfilled' ? brainS.value : { ok: false, error: brainS.reason?.message ?? 'unknown' };
+  if (brainResult.ok) {
+    const label = brainResult.version ? `v${brainResult.version}` : '';
+    stderr.write(`\x1b[2m🧠 LAIA Brain MCP Server ${label}\x1b[0m\n`);
+  } else {
+    stderr.write(`\x1b[33m[brain] Failed to start: ${brainResult.error} (brain tools disabled)\x1b[0m\n`);
+  }
+
   enablePaste();
   process.on('exit', disablePaste);
   process.on('SIGINT', disablePaste);

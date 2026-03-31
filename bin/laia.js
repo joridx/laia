@@ -7,7 +7,7 @@ import { loadConfig, migrateLegacyConfig } from '../src/config.js';
 migrateLegacyConfig();
 
 function parseArgv(argv) {
-  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false, plan: false, genai: null, effort: null, fork: null };
+  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: true, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false, plan: false, genai: null, effort: null, fork: null };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-p' || a === '--prompt') args.prompt = argv[++i];
@@ -16,6 +16,7 @@ function parseArgv(argv) {
     else if (a === '--verbose') args.verbose = true;
     else if (a === '-h' || a === '--help') args.help = true;
     else if (a === '--swarm') args.swarm = true;
+    else if (a === '--no-swarm') args.swarm = false;
     else if (a === '--mcp') args.mcp = true;
     else if (a === '--mcp-stdout-policy') args.mcpStdoutPolicy = argv[++i];
     else if (a === '--auto-commit') args.autoCommit = true;
@@ -43,7 +44,8 @@ Options:
   -p, --prompt <text>   One-shot prompt
   -m, --model <id>      Override model (default: claude-opus-4.6)
   --json                JSON output (one-shot mode)
-  --swarm               Enable swarm mode (agent tool)
+  --swarm               Enable swarm mode (default: on)
+  --no-swarm            Disable swarm mode
   --mcp                 Run as MCP server over stdio (exposes agent tool)
   --mcp-stdout-policy <strict|redirect>
                         Stdout safety policy in MCP mode (default: strict)
