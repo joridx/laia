@@ -5,7 +5,7 @@ import { runOneShot } from '../src/agent.js';
 import { createLogger } from '../src/logger.js';
 
 function parseArgv(argv) {
-  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false, plan: false, effort: null, fork: null };
+  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: false, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false, plan: false, genai: null, effort: null, fork: null };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-p' || a === '--prompt') args.prompt = argv[++i];
@@ -20,6 +20,7 @@ function parseArgv(argv) {
     else if (a === '--plan') args.plan = true;
     else if (a === '--effort') args.effort = argv[++i];
     else if (a === '--fork') args.fork = argv[++i];
+    else if (a === '--genai') args.genai = argv[++i] || 'sonnet';
     else if (a === '-v' || a === '--version') args.version = true;
     else if (!a.startsWith('-') && !args.prompt) args.prompt = a;
   }
@@ -48,6 +49,7 @@ Options:
   --plan                Read-only plan mode (no write/edit/bash)
   --effort <level>      Reasoning effort: low, medium, high, max (default: none)
   --fork <name|id>      Fork a saved session (new ID, preserves history)
+  --genai <agent>       Use GenAI Lab backend (sonnet|claude|gpt-5|o3|o4-mini)
   --verbose             Verbose logging
   -h, --help            Show help
   -v, --version         Show version`);
@@ -60,7 +62,7 @@ if (args.version) {
   process.exit(0);
 }
 
-const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm, autoCommit: args.autoCommit, planMode: args.plan, effort: args.effort });
+const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm, autoCommit: args.autoCommit, planMode: args.plan, effort: args.effort, genai: args.genai });
 const logger = createLogger(config);
 
 if (args.mcp) {

@@ -7,3 +7,6 @@ node_modules/
 get_*.py
 outlook_*.txt
 outlook_*.py
+-e 
+# Windows path artifact
+C:/

@@ -7,7 +7,7 @@ const DEFAULTS = {
   maxTurns: 8,
   contextThreshold: 0.8,
   workspaceRoot: process.cwd(),
-  brainPath: process.env.CLAUDE_BRAIN_PATH || 'C:/claude/claude-brain-data',
+  brainPath: process.env.CLAUDE_BRAIN_PATH || join(homedir(), 'claude', 'claude-brain-data'),
   commandDirs: [
     join(homedir(), '.claude', 'commands'),
     join(homedir(), '.claudia', 'commands'),
@@ -24,7 +24,7 @@ export function normalizeEffort(input) {
   return VALID_EFFORTS[key];
 }
 
-export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, planMode, effort } = {}) {
+export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, planMode, effort, genai } = {}) {
   let fileConfig = {};
   const configPath = join(homedir(), '.claudia', 'config.json');
   try {
@@ -43,5 +43,6 @@ export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, pl
     ...(autoCommit !== undefined ? { autoCommit } : {}),
     ...(planMode !== undefined ? { planMode } : {}),
     ...(effort ? { effort: normalizeEffort(effort) } : {}),
+    ...(genai ? { genai } : {}),
   };
 }
