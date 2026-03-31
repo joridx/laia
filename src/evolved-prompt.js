@@ -51,11 +51,10 @@ const SECTION_TITLES = {
 
 /**
  * Compile evolved prompt from brain learnings.
- * @param {Function} brainSearchFn - async function(query, opts) → search result text
- * @param {Function} brainGetLearningsFn - async function(opts) → learnings list
+ * @param {Function} brainGetLearningsFn - async function(opts) → learnings list text
  * @returns {object} { version, added, removed, expired, promoted, files, totalLines }
  */
-export async function compileEvolvedPrompt(brainSearchFn, brainGetLearningsFn) {
+export async function compileEvolvedPrompt(brainGetLearningsFn) {
   mkdirSync(EVOLVED_DIR, { recursive: true });
 
   // Load existing stable entries (they persist across compilations)
@@ -114,11 +113,18 @@ export async function compileEvolvedPrompt(brainSearchFn, brainGetLearningsFn) {
       // Check adaptive expiry
       const existing = existingAdaptive.get(slug);
       if (existing) {
+        // If already marked permanently expired, skip
+        if (existing.expired) {
+          stats.expired++;
+          continue;
+        }
         const ageMs = Date.now() - new Date(existing.added_at).getTime();
         const ageDays = ageMs / (1000 * 60 * 60 * 24);
         if (ageDays > ADAPTIVE_EXPIRY_DAYS && (l.hit_count ?? 0) === 0) {
+          // Mark as permanently expired in adaptive state
+          existingAdaptive.set(slug, { ...existing, expired: true });
           stats.expired++;
-          continue;  // Expired — don't include
+          continue;
         }
       }
 
@@ -189,10 +195,6 @@ export async function compileEvolvedPrompt(brainSearchFn, brainGetLearningsFn) {
 
   // Save adaptive entries
   const allAdaptive = new Map();
-  for (const content of Object.values(fileContents)) {
-    // Parse adaptive entries from the written content
-    // (entries tracked separately for cleanliness)
-  }
   for (const [filename, title] of Object.entries(SECTION_TITLES)) {
     const types = Object.entries(TYPE_FILE_MAP).filter(([_, f]) => f === filename).map(([t]) => t);
     const relevant = learnings.filter(l => types.includes(l.type));
@@ -301,7 +303,7 @@ export function parseLearningsFromBrainResult(text) {
       title: title.trim(),
       slug: slug.trim(),
       type: meta.type || 'learning',
-      vitality: parseFloat(meta.vitality) || 0.5,
+      vitality: Number.isFinite(parseFloat(meta.vitality)) ? parseFloat(meta.vitality) : 0.5,
       hit_count: parseInt(meta.hits || meta.hit_count) || 0,
       body: body.trim(),
     });
@@ -312,10 +314,22 @@ export function parseLearningsFromBrainResult(text) {
 
 // ─── Entry Formatting ───────────────────────────────────────────────────────
 
+/**
+ * Sanitize text before injecting into system prompt.
+ * Strips XML-like role tags that could confuse the model.
+ */
+function sanitizeForPrompt(text) {
+  if (!text) return '';
+  return text
+    .replace(/<\/?(?:system|user|assistant|human|tool|function_calls|antml)[^>]*>/gi, '')
+    .replace(/\n/g, ' ')
+    .trim();
+}
+
 function formatLearningLine(learning) {
-  const title = learning.title || '(untitled)';
+  const title = sanitizeForPrompt(learning.title || '(untitled)').slice(0, 200);
   const body = learning.body
-    ? learning.body.slice(0, 150).replace(/\n/g, ' ').trim()
+    ? sanitizeForPrompt(learning.body).slice(0, 150)
     : '';
 
   if (body && body !== title) {

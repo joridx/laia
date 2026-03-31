@@ -81,7 +81,7 @@ describe("compileEvolvedPrompt", () => {
   Push to develop, wait CI, build with params`;
     };
 
-    const result = await compileEvolvedPrompt(null, mockGetLearnings);
+    const result = await compileEvolvedPrompt(mockGetLearnings);
     assert.ok(result.version >= 1);
     assert.ok(result.files.length > 0);
     assert.ok(result.totalLines > 0);

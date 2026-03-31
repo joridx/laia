@@ -77,9 +77,8 @@ export async function handler({ dry_run = false } = {}) {
     };
   }
 
-  // Return structured data for the agent-side compiler to process
+  // Return formatted text for the agent-side compiler to process
   return {
     content: [{ type: "text", text: result }],
-    _learnings: learnings,  // Structured data (MCP will strip this, but useful for direct calls)
   };
 }
