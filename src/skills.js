@@ -9,6 +9,7 @@ import { readdirSync, readFileSync, statSync, existsSync, mkdirSync } from 'fs';
 import { join, basename, resolve, relative, sep } from 'path';
 import { homedir } from 'os';
 import { loadUserProfile } from './user-profile.js';
+import { BUNDLED_SKILLS } from './phase3/bundled-skills.js';
 
 const SKILLS_DIR = join(homedir(), '.laia', 'skills');
 const LEGACY_DIRS = [
@@ -188,6 +189,25 @@ export function discoverSkills({ force = false } = {}) {
   if (shadowed.length > 0) {
     for (const s of shadowed) {
       process.stderr.write(`\x1b[2m[skills] '${s.name}' shadowed by v3 skill\x1b[0m\n`);
+    }
+  }
+
+  // 3. Bundled skills (lowest priority — user skills shadow these)
+  for (const bs of BUNDLED_SKILLS) {
+    if (!map.has(bs.name)) {
+      map.set(bs.name, {
+        name: bs.name,
+        description: bs.description,
+        source: 'bundled',
+        body: bs.prompt,
+        invocation: 'user',
+        context: 'main',
+        arguments: true,
+        'argument-hint': bs.argHint || '',
+        'allowed-tools': null, // null = unrestricted ([] would mean no tools)
+        requiresArgs: bs.requiresArgs || false,
+        _bundled: true,
+      });
     }
   }
 
