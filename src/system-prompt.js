@@ -11,6 +11,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { getActiveStylePrompt } from './quick-wins/output-styles.js';
 import { buildMemoryIndex } from './phase2/typed-memory.js';
+import { getCoordinatorPromptSection } from './phase4/coordinator.js';
 
 // --- Individual sections ---
 
@@ -229,13 +230,17 @@ function outputStyleSection(opts) {
 }
 
 export function buildSystemPrompt(opts) {
+  // If coordinator is active, its prompt REPLACES tools/skills/multiModel sections
+  // but KEEPS safety, rules, and policy sections for compliance
+  const coordinatorPrompt = opts.coordinator ? getCoordinatorPromptSection(opts.coordinator) : null;
+
   return [
     memorySection(opts),
     identitySection(opts),
-    toolsSection(opts),
-    skillsPolicySection(opts),
-    multiModelSection(opts),
-    rulesSection(opts),
+    coordinatorPrompt || toolsSection(opts),
+    coordinatorPrompt ? null : skillsPolicySection(opts),
+    coordinatorPrompt ? null : multiModelSection(opts),
+    rulesSection(opts),          // ALWAYS keep core rules (even in coordinator mode)
     safetySection(opts),
     corporateHintSection(opts),
     planModeSection(opts),

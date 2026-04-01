@@ -10,6 +10,7 @@ import { stopBrain, brainReflectSession } from '../brain/client.js';
 import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buildDebugPrompt, listOutputStyles } from '../quick-wins/index.js';
 import { buildCompactionRequest, formatCompactSummary, applyCompaction } from '../phase2/compaction.js';
 import { MEMORY_TYPES, saveMemory, loadMemories, loadAllMemories } from '../phase2/typed-memory.js';
+import { createCoordinator } from '../phase4/coordinator.js';
 import { normalizeEffort } from '../config.js';
 import { saveSession, autoSave, loadSession, listSessions, forkSession as forkSessionFn } from '../session.js';
 import { loadProfile, listProfiles } from '../profiles.js';
@@ -41,6 +42,7 @@ export const COMMAND_META = {
   '/style':      { desc: 'Set/list output styles',          cat: 'config',   subs: ['list'] },
   '/tip':        { desc: 'Show a random tip',               cat: 'system',   subs: [] },
   '/memory':     { desc: 'Typed memories (user/feedback/project/ref)',  cat: 'system', subs: ['list', 'add', 'types'] },
+  '/coordinator': { desc: 'Toggle coordinator mode (4-phase)',  cat: 'agents',   subs: ['on', 'off', 'status'] },
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
   '/reflect':    { desc: 'Reflect on session (brain LLM)',  cat: 'system',   subs: ['auto'] },
@@ -697,6 +699,55 @@ export async function handleSlashCommand(input, session) {
         stderr.write(`\n${tip.content}\n\n`);
       } else {
         stderr.write('\x1b[2mNo tips available.\x1b[0m\n');
+      }
+      return true;
+    }
+
+    case 'coordinator': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const C = '\x1b[36m';
+      const G = '\x1b[32m';
+
+      // Lazily create coordinator if not present
+      if (!session.coordinator) {
+        session.coordinator = createCoordinator();
+      }
+      const coord = session.coordinator;
+
+      const sub = args?.trim()?.toLowerCase();
+
+      if (!sub || sub === 'on') {
+        if (coord.isActive()) {
+          stderr.write(`${C}Coordinator mode already active (phase: ${coord.getPhase()})${R}\n`);
+        } else {
+          coord.activate();
+          stderr.write(`${G}\n🤖 Coordinator Mode ON${R}\n`);
+          stderr.write(`${DIM}The LLM will now orchestrate workers in 4 phases:\n`);
+          stderr.write(`  1. Research (parallel workers investigate)\n`);
+          stderr.write(`  2. Synthesis (coordinator formulates specs)\n`);
+          stderr.write(`  3. Implementation (workers with precise specs)\n`);
+          stderr.write(`  4. Verification (fresh workers verify)\n`);
+          stderr.write(`\nUse /coordinator off to deactivate, /coordinator status for info.${R}\n\n`);
+        }
+      } else if (sub === 'off') {
+        coord.deactivate();
+      } else if (sub === 'status') {
+        const status = coord.getStatus();
+        if (!status.active) {
+          stderr.write(`${DIM}Coordinator mode is OFF. Use /coordinator on to activate.${R}\n`);
+        } else {
+          stderr.write(`\n${B}Coordinator Status:${R}\n`);
+          stderr.write(`  ${C}Phase:${R} ${status.phase}\n`);
+          stderr.write(`  ${C}Workers:${R} ${status.workers.total} total (${status.workers.running} running, ${status.workers.completed} completed, ${status.workers.failed} failed)\n`);
+          if (status.phaseHistory.length > 0) {
+            stderr.write(`  ${C}History:${R} ${status.phaseHistory.map(h => h.phase).join(' → ')} → ${status.phase}\n`);
+          }
+          stderr.write('\n');
+        }
+      } else {
+        stderr.write(`\x1b[33mUsage: /coordinator [on|off|status]${R}\n`);
       }
       return true;
     }

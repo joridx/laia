@@ -28,6 +28,7 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
     brainPath: config.brainPath,
     corporateHint,
     planMode,
+    coordinator: config.coordinator,
   });
   const tools = planMode
     ? getToolSchemas({ exclude: PLAN_MODE_EXCLUDED_TOOLS })

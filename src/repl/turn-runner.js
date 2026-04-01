@@ -109,6 +109,18 @@ export async function executeTurn({
           if (step.type === 'tool_call' && (step.name === 'write' || step.name === 'edit') && step.args?.path) {
             undoStack.trackFile(resolvePath(config.workspaceRoot, step.args.path));
           }
+          // Coordinator: track agent spawns and results
+          if (config.coordinator?.isActive()) {
+            if (step.type === 'tool_call' && step.name === 'agent') {
+              const desc = step.args?.prompt?.slice(0, 80) || 'worker';
+              config.coordinator.trackWorker(step.callId || `w-${Date.now()}`, desc);
+            }
+            if (step.type === 'tool_result' && step.name === 'agent') {
+              const resultText = typeof step.result === 'string' ? step.result : JSON.stringify(step.result);
+              const success = !step.result?.error;
+              config.coordinator.recordResult(step.callId || 'unknown', resultText, success);
+            }
+          }
           printStep(step);
           // Additional step handler
           if (hooks.onStep) try { hooks.onStep(step); } catch {}

@@ -400,6 +400,10 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
       }
 
       const effectiveConfig = { ...config };
+      // Pass coordinator to system prompt builder if active
+      if (session.coordinator?.isActive()) {
+        effectiveConfig.coordinator = session.coordinator;
+      }
       let corporateHint = null;
       if (config.model === 'auto') {
         const decision = router.route(input);
