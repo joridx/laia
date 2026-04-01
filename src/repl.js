@@ -29,6 +29,7 @@ import { executeTurn } from './repl/turn-runner.js';
 import { handleSlashCommand, COMMAND_META, BUILTIN_COMMANDS, formatTokenCount } from './repl/slash-commands.js';
 import { animateCatBanner, suggestFollowUps } from './repl/ui.js';
 import { sendFeedback } from './repl/feedback.js';
+import { syncOnSessionEnd } from './memory/bridge.js';
 
 // Simple Y/n prompt using raw mode (default Y)
 async function askYesNo(rl) {
@@ -328,6 +329,12 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
         stderr.write('\x1b[2m[session] Auto-saved\x1b[0m\n');
       } catch {}
     }
+    // Memory bridge: promote confirmed feedback → brain (only if brain is available)
+    try {
+      // TODO: wire brainRemember from brain client when available
+      // For now, syncOnSessionEnd gracefully skips if brainRemember is null
+      await syncOnSessionEnd({ stderr });
+    } catch {}
     await stopBrain();
     process.exit(0);
   });

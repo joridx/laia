@@ -10,7 +10,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'f
 import { join } from 'path';
 import { homedir } from 'os';
 import { getActiveStylePrompt } from './services/output-styles.js';
-import { buildMemoryIndex } from './memory/typed-memory.js';
+import { buildUnifiedMemoryContext } from './memory/unified-view.js';
 import { getCoordinatorPromptSection } from './coordinator/coordinator.js';
 
 // --- Individual sections ---
@@ -212,8 +212,8 @@ function evolvedSection(/* opts */) {
  */
 function typedMemorySection() {
   try {
-    const index = buildMemoryIndex();
-    return index || null;
+    const context = buildUnifiedMemoryContext();
+    return context || null;
   } catch {
     return null;
   }

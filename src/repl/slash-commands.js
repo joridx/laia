@@ -10,6 +10,8 @@ import { stopBrain, brainReflectSession } from '../brain/client.js';
 import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buildDebugPrompt, listOutputStyles } from '../services/dx-index.js';
 import { buildCompactionRequest, formatCompactSummary, applyCompaction } from '../services/compaction.js';
 import { MEMORY_TYPES, saveMemory, loadMemories, loadAllMemories } from '../memory/typed-memory.js';
+import { getOwner, OWNERSHIP_MATRIX } from '../memory/ownership.js';
+import { getMemoryStats } from '../memory/unified-view.js';
 import { createCoordinator } from '../coordinator/coordinator.js';
 import { listBackgroundAgents, getBackgroundResult } from '../coordinator/background.js';
 import { normalizeEffort } from '../config.js';
@@ -809,18 +811,21 @@ export async function handleSlashCommand(input, session) {
 
       if (!sub || sub === 'list') {
         const all = loadAllMemories();
+        const stats = getMemoryStats();
         if (all.length === 0) {
           stderr.write(`${DIM}No typed memories yet. Use /memory add <type> <name> <description>${R}\n`);
           stderr.write(`${DIM}Types: ${MEMORY_TYPES.join(', ')}. See /memory types for details.${R}\n`);
         } else {
-          stderr.write(`\n${B}Typed Memories (${all.length}):${R}\n\n`);
+          stderr.write(`\n${B}Typed Memories (${stats.typed} active, ${stats.promoted} promoted to brain):${R}\n\n`);
           for (const type of MEMORY_TYPES) {
             const mems = all.filter(m => m.type === type);
             if (mems.length === 0) continue;
-            stderr.write(`${C}  ${type} (${mems.length})${R}\n`);
+            const owner = getOwner(type) || 'unknown';
+            stderr.write(`${C}  ${type} (${mems.length}) ${DIM}[owner: ${owner}]${R}\n`);
             for (const m of mems) {
               const stale = m.staleWarning ? ` ${DIM}${m.staleWarning}${R}` : '';
-              stderr.write(`    ${B}${m.name}${R}: ${DIM}${m.description.split('\n')[0].slice(0, 80)}${R}${stale}\n`);
+              const promoted = m.promotion_state === 'promoted' ? ` ${DIM}[→brain]${R}` : '';
+              stderr.write(`    ${B}${m.name}${R}: ${DIM}${m.description.split('\n')[0].slice(0, 80)}${R}${stale}${promoted}\n`);
             }
           }
           stderr.write('\n');
@@ -848,7 +853,14 @@ export async function handleSlashCommand(input, session) {
         }
 
         if (!MEMORY_TYPES.includes(type)) {
-          stderr.write(`\x1b[31mInvalid type '${type}'. Valid: ${MEMORY_TYPES.join(', ')}${R}\n`);
+          // Check if it's a brain-owned type
+          if (OWNERSHIP_MATRIX[type]?.owner === 'brain') {
+            stderr.write(`\x1b[33mType '${type}' is owned by Brain. Use brain_remember instead.${R}\n`);
+            stderr.write(`${DIM}Brain types: procedure, learning, warning, pattern, principle${R}\n`);
+            return true;
+          }
+          stderr.write(`\x1b[31mInvalid type '${type}'. Valid typed: ${MEMORY_TYPES.join(', ')}${R}\n`);
+          stderr.write(`${DIM}Brain-owned types (use brain_remember): procedure, learning, warning, pattern, principle${R}\n`);
           return true;
         }
 
