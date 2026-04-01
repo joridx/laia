@@ -159,6 +159,7 @@ All commands start with `/` and can be typed in the REPL.
 |---------|-------------|-------|
 | `/agents [show\|validate\|create]` | Manage agent profiles | `/agents show reviewer` |
 | `/swarm` | Toggle swarm mode (parallel workers) | `/swarm` |
+| `/coordinator [on\|off\|status]` | Toggle coordinator mode (4-phase orchestration) | `/coordinator on` |
 
 ### 🎯 Skills
 
@@ -377,6 +378,56 @@ Your prompt template here. Use $ARGUMENTS for user input.
 | `arguments` | | Accept arguments? | `true` |
 | `argument-hint` | | Hint for autocomplete | `""` |
 | `allowed-tools` | | Restrict tools for this skill | `[]` (all) |
+
+---
+
+## Coordinator Mode
+
+Coordinator mode transforms LAIA into a multi-agent orchestrator following a 4-phase workflow inspired by Claude Code's coordinator architecture.
+
+### Activation
+
+```
+/coordinator on       # Activate
+/coordinator off      # Deactivate
+/coordinator status   # Show phase, workers, history
+```
+
+### The 4 Phases
+
+| Phase | Who | What |
+|-------|-----|------|
+| **1. Research** | Parallel workers | Investigate codebase from multiple angles. Read-only. |
+| **2. Synthesis** | Coordinator (LLM) | Read findings, formulate precise implementation specs |
+| **3. Implementation** | Workers with specs | Make changes, run tests, commit |
+| **4. Verification** | Fresh workers | Verify with fresh eyes, check edge cases |
+
+### The Synthesis Rule
+
+After research workers report back, the coordinator **must synthesize** before spawning implementation workers. This means:
+
+- Read all findings
+- Understand the full picture
+- Include file paths, line numbers, exact specs in the worker prompt
+
+**Bad:** `agent({ prompt: "Fix the bug we discussed" })` — worker has no context.
+**Good:** `agent({ prompt: "Fix null pointer in src/auth.ts:42. Add null check before user.id." })`
+
+### Worker Tracking
+
+The coordinator automatically tracks:
+- Each worker's status (running/completed/failed/cancelled)
+- Phase transitions
+- Worker results (capped at 5KB each, 100 workers max with FIFO eviction)
+
+### What Changes in Coordinator Mode
+
+| Aspect | Normal | Coordinator |
+|--------|--------|-------------|
+| System prompt | Tools + skills + rules | Coordinator prompt + rules + safety |
+| Primary tool | All tools | Mostly `agent` (for delegation) |
+| LLM role | Direct executor | Orchestrator |
+| Worker results | Returned inline | Tracked + synthesized |
 
 ---
 
