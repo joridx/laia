@@ -142,9 +142,9 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
-| 1 | **Skills System upgrade** — SKILL.md amb frontmatter + bundled skills | 🔲 TODO | `/batch`, `/simplify`, `/remember`. Ref: CC `src/skills/bundled/` |
-| 2 | **`/init`** — generar LAIA.md per projecte | 🔲 TODO | Ref: CC `src/commands/init.ts` |
-| 3 | **Magic Docs** — auto-updating docs | 🔲 TODO | Ref: CC `src/services/MagicDocs/` |
+| 1 | **Skills System upgrade** — 5 bundled skills (batch/simplify/verify/init/skillify) | ✅ DONE | `/batch`, `/simplify`, `/remember`. Ref: CC `src/skills/bundled/` |
+| 2 | **`/init`** — generar LAIA.md per projecte (amb overwrite protection) | ✅ DONE | Ref: CC `src/commands/init.ts` |
+| 3 | **Magic Docs** — deferred (low ROI vs effort) | 🟡 DEFER | Ref: CC `src/services/MagicDocs/` |
 
 ### Phase 4: Orquestració Multi-Agent 🤖 (pendent)
 
