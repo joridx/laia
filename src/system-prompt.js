@@ -9,6 +9,7 @@ import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { getActiveStylePrompt } from './quick-wins/output-styles.js';
 
 // --- Individual sections ---
 
@@ -207,6 +208,16 @@ function evolvedSection(/* opts */) {
  * @param {boolean} [opts.planMode]
  * @returns {string}
  */
+function outputStyleSection(opts) {
+  try {
+    const prompt = getActiveStylePrompt({ cwd: opts.workspaceRoot, config: opts });
+    if (!prompt) return null;
+    return `## Output Style\n\n${prompt}`;
+  } catch {
+    return null;  // Graceful fallback — don't break prompt assembly
+  }
+}
+
 export function buildSystemPrompt(opts) {
   return [
     memorySection(opts),
@@ -218,6 +229,7 @@ export function buildSystemPrompt(opts) {
     safetySection(opts),
     corporateHintSection(opts),
     planModeSection(opts),
+    outputStyleSection(opts),
     evolvedSection(opts),
   ].filter(Boolean).map(s => s.trim()).join('\n\n');
 }

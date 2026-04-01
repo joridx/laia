@@ -6,23 +6,45 @@ import { runTurn, printStep } from '../agent.js';
 import { renderMarkdown } from '../render.js';
 import { resolve as resolvePath } from 'path';
 import { stderr } from 'process';
+import { getRandomTip } from '../quick-wins/tips.js';
 
-// Spinner helper (self-contained)
+// Spinner helper with contextual tips
 function createSpinner() {
   const chars = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
   let timer = null;
+  let tipTimer = null;
+  let tipShown = false;
   let frame = 0;
   const isTTY = stderr.isTTY;
   return {
     start() {
       if (timer || !isTTY) return;
+      tipShown = false;
       stderr.write('\n');
       timer = setInterval(() => {
         stderr.write(`\r\x1b[36m${chars[frame++ % chars.length]}\x1b[0m`);
       }, 80);
+      // Show a tip after 3 seconds of waiting
+      tipTimer = setTimeout(() => {
+        const tip = getRandomTip();
+        if (tip) {
+          tipShown = true;
+          stderr.write(`\r\x1b[0K\x1b[2m${tip.content}\x1b[0m\n`);
+        }
+      }, 3000);
     },
     stop() {
-      if (timer) { clearInterval(timer); timer = null; stderr.write('\r\x1b[0K\x1b[1A\x1b[0K'); }
+      if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
+      if (timer) {
+        clearInterval(timer); timer = null;
+        // Clean up spinner line + tip line if shown
+        if (tipShown) {
+          stderr.write('\r\x1b[0K\x1b[1A\x1b[0K\x1b[1A\x1b[0K');
+        } else {
+          stderr.write('\r\x1b[0K\x1b[1A\x1b[0K');
+        }
+        tipShown = false;
+      }
     },
   };
 }

@@ -7,6 +7,7 @@ import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@laia
 import { getProviderToken } from '../auth.js';
 import { expandCommand, listSkills, loadSkill } from '../skills.js';
 import { stopBrain, brainReflectSession } from '../brain/client.js';
+import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buildDebugPrompt, listOutputStyles } from '../quick-wins/index.js';
 import { normalizeEffort } from '../config.js';
 import { saveSession, autoSave, loadSession, listSessions, forkSession as forkSessionFn } from '../session.js';
 import { loadProfile, listProfiles } from '../profiles.js';
@@ -32,6 +33,11 @@ export const COMMAND_META = {
   '/swarm':      { desc: 'Toggle swarm mode',              cat: 'agents',   subs: [] },
   '/skills':     { desc: 'List all skills',                cat: 'skills',   subs: [] },
   '/help':       { desc: 'Show this help',                 cat: 'system',   subs: [] },
+  '/commit':     { desc: 'Generate commit from changes',   cat: 'git',      subs: [] },
+  '/review':     { desc: 'Code review a Pull Request',     cat: 'git',      subs: [] },
+  '/debug':      { desc: 'Diagnose session issues',         cat: 'system',   subs: [] },
+  '/style':      { desc: 'Set/list output styles',          cat: 'config',   subs: ['list'] },
+  '/tip':        { desc: 'Show a random tip',               cat: 'system',   subs: [] },
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
   '/reflect':    { desc: 'Reflect on session (brain LLM)',  cat: 'system',   subs: ['auto'] },
@@ -44,6 +50,7 @@ export const BUILTIN_COMMANDS = Object.keys(COMMAND_META);
 const CATEGORY_LABELS = {
   session: '📦 Session',
   config:  '🔧 Config',
+  git:     '🔀 Git',
   files:   '📎 Files',
   agents:  '🤖 Agents',
   skills:  '🎯 Skills',
@@ -521,6 +528,131 @@ export async function handleSlashCommand(input, session) {
         }
       } catch (err) {
         stderr.write(`\x1b[31mReflection failed: ${err.message}\x1b[0m\n`);
+      }
+      return true;
+    }
+
+    // --- Quick Win commands (Phase 1 roadmap) ---
+
+    case 'commit': {
+      stderr.write('\x1b[2m[commit] Gathering git data...\x1b[0m\n');
+      try {
+        const gitData = await gatherGitData();
+        if (!gitData.diff && !gitData.status) {
+          stderr.write('\x1b[33mNo changes detected. Nothing to commit.\x1b[0m\n');
+          return true;
+        }
+        const prompt = buildCommitPrompt(gitData);
+        const result = await executeTurn({
+          input: prompt,
+          config,
+          logger,
+          context,
+          undoStack,
+          autoCommitter,
+          planMode: false,
+          effort: effortCtrl.getEffort?.(),
+        });
+        return { handled: true, turnResult: result };
+      } catch (err) {
+        stderr.write(`\x1b[31mCommit failed: ${err.message}\x1b[0m\n`);
+      }
+      return true;
+    }
+
+    case 'review': {
+      // Preflight: check gh CLI availability
+      try {
+        const { execSync } = await import('child_process');
+        execSync('gh --version', { stdio: 'ignore', timeout: 5000 });
+      } catch {
+        stderr.write('\x1b[31m/review requires GitHub CLI (gh). Install: https://cli.github.com/\x1b[0m\n');
+        return true;
+      }
+      const prompt = buildReviewPrompt(args);
+      stderr.write(`\x1b[2m[review] ${args ? `Reviewing PR #${args}...` : 'Listing PRs...'}\x1b[0m\n`);
+      try {
+        const result = await executeTurn({
+          input: prompt,
+          config,
+          logger,
+          context,
+          undoStack,
+          autoCommitter,
+          planMode: planCtrl.getPlanMode?.(),
+          effort: effortCtrl.getEffort?.(),
+        });
+        return { handled: true, turnResult: result };
+      } catch (err) {
+        stderr.write(`\x1b[31mReview failed: ${err.message}\x1b[0m\n`);
+      }
+      return true;
+    }
+
+    case 'debug': {
+      const prompt = buildDebugPrompt(args);
+      stderr.write('\x1b[2m[debug] Analyzing session logs...\x1b[0m\n');
+      try {
+        const result = await executeTurn({
+          input: prompt,
+          config,
+          logger,
+          context,
+          undoStack,
+          autoCommitter,
+          planMode: true,  // read-only — debug shouldn't write
+          effort: effortCtrl.getEffort?.(),
+        });
+        return { handled: true, turnResult: result };
+      } catch (err) {
+        stderr.write(`\x1b[31mDebug failed: ${err.message}\x1b[0m\n`);
+      }
+      return true;
+    }
+
+    case 'style': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const G = '\x1b[32m';
+
+      if (!args || args === 'list') {
+        const styles = listOutputStyles(process.cwd());
+        if (styles.length === 0) {
+          stderr.write(`${DIM}No output styles found. Create .md files in ~/.laia/output-styles/${R}\n`);
+        } else {
+          stderr.write(`\n${B}Output Styles:${R}\n`);
+          const current = process.env.LAIA_OUTPUT_STYLE || config.outputStyle || '(none)';
+          for (const s of styles) {
+            const active = s.name === current ? ` ${G}← active${R}` : '';
+            stderr.write(`  ${B}${s.name}${R} — ${DIM}${s.description}${R}${active}\n`);
+          }
+          stderr.write(`\nUse: /style <name> to activate, /style off to disable\n\n`);
+        }
+      } else if (args === 'off') {
+        delete process.env.LAIA_OUTPUT_STYLE;
+        config.outputStyle = null;
+        stderr.write(`${G}Output style disabled.${R}\n`);
+      } else {
+        const styles = listOutputStyles(process.cwd());
+        const style = styles.find(s => s.name === args);
+        if (style) {
+          config.outputStyle = args;
+          process.env.LAIA_OUTPUT_STYLE = args;
+          stderr.write(`${G}Output style set to: ${B}${args}${R}\n`);
+        } else {
+          stderr.write(`\x1b[33mStyle '${args}' not found. Use /style list to see available styles.\x1b[0m\n`);
+        }
+      }
+      return true;
+    }
+
+    case 'tip': {
+      const tip = getRandomTip();
+      if (tip) {
+        stderr.write(`\n${tip.content}\n\n`);
+      } else {
+        stderr.write('\x1b[2mNo tips available.\x1b[0m\n');
       }
       return true;
     }
