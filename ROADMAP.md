@@ -111,7 +111,7 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 |-------|-------|--------|--------|
 | 1 | **Memory Unification** — ownership matrix, one-way bridge, unified view, sanitization | ✅ DONE |
 | 2 | **Reflection Pipeline** — auto-reflect, dedupe, confidence gate, /reflect command | ✅ DONE |
-| 3 | **Prompt/Context Governance** — Deterministic precedence: 1) Safety/core, 2) Evolved stable, 3) Task context, 4) Compacted/session (bounded). `/evolve` command. | 0.5-1d | 🔲 TODO |
+| 3 | **Prompt/Context Governance** — 7-level precedence, budget enforcement, /evolve (7 subs) | ✅ DONE |
 | 4 | **Evaluation Harness** — Deterministic replay from V5 artifacts + scorecard rubric + regression gates. | 2-3d | 🔲 DEFERRED |
 
 ---
