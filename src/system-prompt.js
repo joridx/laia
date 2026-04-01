@@ -9,9 +9,9 @@ import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { getActiveStylePrompt } from './quick-wins/output-styles.js';
-import { buildMemoryIndex } from './phase2/typed-memory.js';
-import { getCoordinatorPromptSection } from './phase4/coordinator.js';
+import { getActiveStylePrompt } from './services/output-styles.js';
+import { buildMemoryIndex } from './memory/typed-memory.js';
+import { getCoordinatorPromptSection } from './coordinator/coordinator.js';
 
 // --- Individual sections ---
 

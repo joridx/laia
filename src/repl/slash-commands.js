@@ -7,11 +7,11 @@ import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@laia
 import { getProviderToken } from '../auth.js';
 import { expandCommand, listSkills, loadSkill } from '../skills.js';
 import { stopBrain, brainReflectSession } from '../brain/client.js';
-import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buildDebugPrompt, listOutputStyles } from '../quick-wins/index.js';
-import { buildCompactionRequest, formatCompactSummary, applyCompaction } from '../phase2/compaction.js';
-import { MEMORY_TYPES, saveMemory, loadMemories, loadAllMemories } from '../phase2/typed-memory.js';
-import { createCoordinator } from '../phase4/coordinator.js';
-import { listBackgroundAgents, getBackgroundResult } from '../phase4/agent-enhancements.js';
+import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buildDebugPrompt, listOutputStyles } from '../services/dx-index.js';
+import { buildCompactionRequest, formatCompactSummary, applyCompaction } from '../services/compaction.js';
+import { MEMORY_TYPES, saveMemory, loadMemories, loadAllMemories } from '../memory/typed-memory.js';
+import { createCoordinator } from '../coordinator/coordinator.js';
+import { listBackgroundAgents, getBackgroundResult } from '../coordinator/background.js';
 import { normalizeEffort } from '../config.js';
 import { saveSession, autoSave, loadSession, listSessions, forkSession as forkSessionFn } from '../session.js';
 import { loadProfile, listProfiles } from '../profiles.js';
@@ -827,7 +827,7 @@ export async function handleSlashCommand(input, session) {
         }
       } else if (sub === 'types') {
         stderr.write(`\n${B}Memory Types:${R}\n\n`);
-        const { MEMORY_TYPE_DESCRIPTIONS } = await import('../phase2/typed-memory.js');
+        const { MEMORY_TYPE_DESCRIPTIONS } = await import('../memory/typed-memory.js');
         for (const type of MEMORY_TYPES) {
           const desc = MEMORY_TYPE_DESCRIPTIONS[type];
           stderr.write(`${C}${type}${R}: ${desc.description}\n`);

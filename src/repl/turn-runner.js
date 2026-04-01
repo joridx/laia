@@ -6,7 +6,7 @@ import { runTurn, printStep } from '../agent.js';
 import { renderMarkdown } from '../render.js';
 import { resolve as resolvePath } from 'path';
 import { stderr } from 'process';
-import { getRandomTip } from '../quick-wins/tips.js';
+import { getRandomTip } from '../services/tips.js';
 
 // Spinner helper with contextual tips
 function createSpinner() {

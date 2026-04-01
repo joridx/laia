@@ -9,7 +9,7 @@ import { readdirSync, readFileSync, statSync, existsSync, mkdirSync } from 'fs';
 import { join, basename, resolve, relative, sep } from 'path';
 import { homedir } from 'os';
 import { loadUserProfile } from './user-profile.js';
-import { BUNDLED_SKILLS } from './phase3/bundled-skills.js';
+import { BUNDLED_SKILLS } from './skills/bundled.js';
 
 const SKILLS_DIR = join(homedir(), '.laia', 'skills');
 const LEGACY_DIRS = [

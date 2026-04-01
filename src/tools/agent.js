@@ -11,7 +11,7 @@ import { buildWorkerSystemPrompt } from '../system-prompt.js';
 import { executeTool, getToolSchemas, getToolNames, registerTool } from './index.js';
 import { createPermissionContext } from '../permissions.js';
 import { loadProfile, resolveToolSet } from '../profiles.js';
-import { runInBackground, getEnhancedAgentParams } from '../phase4/agent-enhancements.js';
+import { runInBackground, getEnhancedAgentParams } from '../coordinator/background.js';
 
 const MAX_FILE_BYTES = 100_000;
 const MAX_TOTAL_BYTES = 500_000;
