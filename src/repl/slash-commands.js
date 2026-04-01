@@ -8,7 +8,8 @@ import { getProviderToken } from '../auth.js';
 import { expandCommand, listSkills, loadSkill } from '../skills.js';
 import { stopBrain, brainReflectSession } from '../brain/client.js';
 import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buildDebugPrompt, listOutputStyles } from '../quick-wins/index.js';
-import { runCompaction, createAutoCompactTracker, buildCompactionRequest, formatCompactSummary, applyCompaction } from '../phase2/compaction.js';
+import { buildCompactionRequest, formatCompactSummary, applyCompaction } from '../phase2/compaction.js';
+import { MEMORY_TYPES, saveMemory, loadMemories, loadAllMemories } from '../phase2/typed-memory.js';
 import { normalizeEffort } from '../config.js';
 import { saveSession, autoSave, loadSession, listSessions, forkSession as forkSessionFn } from '../session.js';
 import { loadProfile, listProfiles } from '../profiles.js';
@@ -39,6 +40,7 @@ export const COMMAND_META = {
   '/debug':      { desc: 'Diagnose session issues',         cat: 'system',   subs: [] },
   '/style':      { desc: 'Set/list output styles',          cat: 'config',   subs: ['list'] },
   '/tip':        { desc: 'Show a random tip',               cat: 'system',   subs: [] },
+  '/memory':     { desc: 'Typed memories (user/feedback/project/ref)',  cat: 'system', subs: ['list', 'add', 'types'] },
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
   '/reflect':    { desc: 'Reflect on session (brain LLM)',  cat: 'system',   subs: ['auto'] },
@@ -158,7 +160,7 @@ export async function handleSlashCommand(input, session) {
         if (summary && summary.length >= 50) {
           applyCompaction(context, summary);
           const tokensAfter = context.estimateTokens();
-          const pct = Math.round((1 - tokensAfter / tokensBefore) * 100);
+          const pct = tokensBefore > 0 ? Math.round((1 - tokensAfter / tokensBefore) * 100) : 0;
           stderr.write(`\x1b[32m[compact] ✅ ${tokensBefore} → ${tokensAfter} tokens (${pct}% reduction, ${turns} → ${context.turnCount()} turns)\x1b[0m\n`);
         } else {
           stderr.write('\x1b[33m[compact] LLM summary too short, falling back to simple compaction\x1b[0m\n');
@@ -695,6 +697,87 @@ export async function handleSlashCommand(input, session) {
         stderr.write(`\n${tip.content}\n\n`);
       } else {
         stderr.write('\x1b[2mNo tips available.\x1b[0m\n');
+      }
+      return true;
+    }
+
+    case 'memory': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const C = '\x1b[36m';
+      const G = '\x1b[32m';
+
+      const sub = args?.split(' ')[0]?.toLowerCase();
+
+      if (!sub || sub === 'list') {
+        const all = loadAllMemories();
+        if (all.length === 0) {
+          stderr.write(`${DIM}No typed memories yet. Use /memory add <type> <name> <description>${R}\n`);
+          stderr.write(`${DIM}Types: ${MEMORY_TYPES.join(', ')}. See /memory types for details.${R}\n`);
+        } else {
+          stderr.write(`\n${B}Typed Memories (${all.length}):${R}\n\n`);
+          for (const type of MEMORY_TYPES) {
+            const mems = all.filter(m => m.type === type);
+            if (mems.length === 0) continue;
+            stderr.write(`${C}  ${type} (${mems.length})${R}\n`);
+            for (const m of mems) {
+              const stale = m.staleWarning ? ` ${DIM}${m.staleWarning}${R}` : '';
+              stderr.write(`    ${B}${m.name}${R}: ${DIM}${m.description.split('\n')[0].slice(0, 80)}${R}${stale}\n`);
+            }
+          }
+          stderr.write('\n');
+        }
+      } else if (sub === 'types') {
+        stderr.write(`\n${B}Memory Types:${R}\n\n`);
+        const { MEMORY_TYPE_DESCRIPTIONS } = await import('../phase2/typed-memory.js');
+        for (const type of MEMORY_TYPES) {
+          const desc = MEMORY_TYPE_DESCRIPTIONS[type];
+          stderr.write(`${C}${type}${R}: ${desc.description}\n`);
+          stderr.write(`  ${DIM}Save when: ${desc.when_to_save}${R}\n`);
+          stderr.write(`  ${DIM}Example: ${desc.examples[0]}${R}\n\n`);
+        }
+      } else if (sub === 'add') {
+        // /memory add <type> <name> <...description>
+        const parts = args.slice(4).trim().split(' ');
+        const type = parts[0];
+        const name = parts[1];
+        const description = parts.slice(2).join(' ');
+
+        if (!type || !name || !description) {
+          stderr.write(`\x1b[33mUsage: /memory add <type> <name> <description>${R}\n`);
+          stderr.write(`${DIM}Types: ${MEMORY_TYPES.join(', ')}${R}\n`);
+          return true;
+        }
+
+        if (!MEMORY_TYPES.includes(type)) {
+          stderr.write(`\x1b[31mInvalid type '${type}'. Valid: ${MEMORY_TYPES.join(', ')}${R}\n`);
+          return true;
+        }
+
+        try {
+          const result = saveMemory({ type, name, description });
+          stderr.write(`${G}\u2705 Memory saved: ${type}/${result.slug}${R}\n`);
+        } catch (err) {
+          stderr.write(`\x1b[31mFailed: ${err.message}${R}\n`);
+        }
+      } else {
+        // /memory <type> — list memories of that type
+        if (MEMORY_TYPES.includes(sub)) {
+          const mems = loadMemories(sub);
+          if (mems.length === 0) {
+            stderr.write(`${DIM}No ${sub} memories yet.${R}\n`);
+          } else {
+            stderr.write(`\n${C}${sub} memories (${mems.length}):${R}\n`);
+            for (const m of mems) {
+              const stale = m.staleWarning ? ` ${DIM}${m.staleWarning}${R}` : '';
+              stderr.write(`  ${B}${m.name}${R}: ${m.description.split('\n')[0].slice(0, 100)}${stale}\n`);
+            }
+            stderr.write('\n');
+          }
+        } else {
+          stderr.write(`\x1b[33mUnknown subcommand '${sub}'. Try: /memory list, /memory add, /memory types, /memory <type>${R}\n`);
+        }
       }
       return true;
     }

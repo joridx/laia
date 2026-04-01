@@ -10,6 +10,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'f
 import { join } from 'path';
 import { homedir } from 'os';
 import { getActiveStylePrompt } from './quick-wins/output-styles.js';
+import { buildMemoryIndex } from './phase2/typed-memory.js';
 
 // --- Individual sections ---
 
@@ -208,6 +209,15 @@ function evolvedSection(/* opts */) {
  * @param {boolean} [opts.planMode]
  * @returns {string}
  */
+function typedMemorySection() {
+  try {
+    const index = buildMemoryIndex();
+    return index || null;
+  } catch {
+    return null;
+  }
+}
+
 function outputStyleSection(opts) {
   try {
     const prompt = getActiveStylePrompt({ cwd: opts.workspaceRoot, config: opts });
@@ -229,6 +239,7 @@ export function buildSystemPrompt(opts) {
     safetySection(opts),
     corporateHintSection(opts),
     planModeSection(opts),
+    typedMemorySection(),
     outputStyleSection(opts),
     evolvedSection(opts),
   ].filter(Boolean).map(s => s.trim()).join('\n\n');
