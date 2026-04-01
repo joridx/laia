@@ -30,6 +30,9 @@ import { handleSlashCommand, COMMAND_META, BUILTIN_COMMANDS, formatTokenCount } 
 import { animateCatBanner, suggestFollowUps } from './repl/ui.js';
 import { sendFeedback } from './repl/feedback.js';
 import { syncOnSessionEnd } from './memory/bridge.js';
+import { runReflectionPipeline } from './memory/reflection.js';
+import { brainSearch, brainRemember, brainLogSession } from './brain/client.js';
+import { createClient } from './agent.js';
 
 // Simple Y/n prompt using raw mode (default Y)
 async function askYesNo(rl) {
@@ -79,6 +82,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   const undoStack = createUndoStack({ workspaceRoot: config.workspaceRoot });
 
   const sessionTokens = { turns: 0, totalIn: 0, totalOut: 0 };
+  const sessionStartTime = Date.now();
 
   // Session object — single bundle passed to slash commands and turn runner
   const session = {
@@ -329,12 +333,63 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
         stderr.write('\x1b[2m[session] Auto-saved\x1b[0m\n');
       } catch {}
     }
-    // Memory bridge: promote confirmed feedback → brain (only if brain is available)
+
+    // ── Memory bridge: promote confirmed feedback → brain ──
     try {
-      // TODO: wire brainRemember from brain client when available
-      // For now, syncOnSessionEnd gracefully skips if brainRemember is null
-      await syncOnSessionEnd({ stderr });
+      await syncOnSessionEnd({ brainRemember, stderr });
     } catch {}
+
+    // ── Reflection pipeline: extract insights from session ──
+    if (context.turnCount() >= 3) {
+      try {
+        // Build a lightweight LLM call for reflection (uses cheap model, hard timeout)
+        const reflectLlm = async (prompt) => {
+          const client = createClient({ ...config, model: 'claude-sonnet-4-20250514' });
+          const timeoutMs = 15_000;  // Hard 15s timeout — fail-open
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const resp = await client.chat({
+              messages: [{ role: 'user', content: prompt }],
+              max_tokens: 2000,
+              signal: controller.signal,
+            });
+            // Extract text from response
+            if (typeof resp === 'string') return resp;
+            if (resp?.choices?.[0]?.message?.content) return resp.choices[0].message.content;
+            if (resp?.content?.[0]?.text) return resp.content[0].text;
+            if (resp?.output) return typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
+            return JSON.stringify(resp);
+          } finally {
+            clearTimeout(timer);
+          }
+        };
+
+        // Get session notes summary for reflection
+        const sessionSummary = context.serialize();
+        const lastMessages = sessionSummary?.turns?.slice(-10)
+          ?.map(t => `${t.role}: ${typeof t.content === 'string' ? t.content.slice(0, 500) : '(tool use)'}`)
+          ?.join('\n') || '';
+
+        if (lastMessages.length > 100) {
+          await runReflectionPipeline({
+            sessionNotes: lastMessages,
+            sessionId: sessionMeta.sessionId,
+            llmCall: reflectLlm,
+            brainSearch,
+            brainRemember: (learning) => brainRemember(learning),
+            brainLogSession: (summary, tags) => brainLogSession(summary, tags),
+            tokenCount: sessionTokens.totalIn + sessionTokens.totalOut,
+            turnCount: sessionTokens.turns,
+            durationMs: Date.now() - sessionStartTime,
+            stderr,
+          });
+        }
+      } catch (err) {
+        stderr.write(`\x1b[2m[reflect] Pipeline error: ${err.message}\x1b[0m\n`);
+      }
+    }
+
     await stopBrain();
     process.exit(0);
   });
@@ -374,6 +429,54 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
     if (input.startsWith('/')) {
       const result = await handleSlashCommand(input, session);
       if (result) {
+        // Handle /reflect — run pipeline on-demand
+        if (result.reflectRequested) {
+          try {
+            const client = createClient({ ...config, model: 'claude-sonnet-4-20250514' });
+            const reflectLlm = async (prompt) => {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 15_000);
+              try {
+                const resp = await client.chat({
+                  messages: [{ role: 'user', content: prompt }],
+                  max_tokens: 2000,
+                  signal: controller.signal,
+                });
+                if (typeof resp === 'string') return resp;
+                if (resp?.choices?.[0]?.message?.content) return resp.choices[0].message.content;
+                if (resp?.content?.[0]?.text) return resp.content[0].text;
+                if (resp?.output) return typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
+                return JSON.stringify(resp);
+              } finally { clearTimeout(timer); }
+            };
+            const sessionSummary = context.serialize();
+            const lastMessages = sessionSummary?.turns?.slice(-10)
+              ?.map(t => `${t.role}: ${typeof t.content === 'string' ? t.content.slice(0, 500) : '(tool use)'}`)
+              ?.join('\n') || '';
+            if (lastMessages.length > 100) {
+              const res = await runReflectionPipeline({
+                sessionNotes: lastMessages,
+                sessionId: sessionMeta.sessionId,
+                llmCall: reflectLlm,
+                brainSearch,
+                brainRemember: (l) => brainRemember(l),
+                brainLogSession: (s, t) => brainLogSession(s, t),
+                tokenCount: sessionTokens.totalIn + sessionTokens.totalOut,
+                turnCount: sessionTokens.turns,
+                durationMs: Date.now() - sessionStartTime,
+                stderr,
+              });
+              stderr.write(`\x1b[32m\u2705 Reflection: ${res.saved.length} saved, ${res.duplicates.length} dupes, ${res.skipped.length} skipped\x1b[0m\n`);
+            } else {
+              stderr.write('\x1b[33mNot enough content to reflect on.\x1b[0m\n');
+            }
+          } catch (err) {
+            stderr.write(`\x1b[31mReflection failed: ${err.message}\x1b[0m\n`);
+          }
+          rl.prompt();
+          continue;
+        }
+
         // If a skill turn was executed, do post-turn accounting
         if (result.turnResult) {
           const tr = result.turnResult;

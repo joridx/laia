@@ -44,6 +44,7 @@ export const COMMAND_META = {
   '/debug':      { desc: 'Diagnose session issues',         cat: 'system',   subs: [] },
   '/style':      { desc: 'Set/list output styles',          cat: 'config',   subs: ['list'] },
   '/tip':        { desc: 'Show a random tip',               cat: 'system',   subs: [] },
+  '/reflect':    { desc: 'Reflect on session and extract insights', cat: 'system', subs: [] },
   '/memory':     { desc: 'Typed memories (user/feedback/project/ref)',  cat: 'system', subs: ['list', 'add', 'types'] },
   '/coordinator': { desc: 'Toggle coordinator mode (4-phase)',  cat: 'agents',   subs: ['on', 'off', 'status'] },
   '/tasks':       { desc: 'List/check background agents',     cat: 'agents',   subs: ['get'] },
@@ -705,6 +706,17 @@ export async function handleSlashCommand(input, session) {
         stderr.write('\x1b[2mNo tips available.\x1b[0m\n');
       }
       return true;
+    }
+
+    case 'reflect': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      if (session.context.turnCount() < 3) {
+        stderr.write(`\x1b[33mNeed at least 3 turns for reflection.${R}\n`);
+        return true;
+      }
+      stderr.write(`${DIM}Running reflection pipeline...${R}\n`);
+      return { reflectRequested: true };
     }
 
     case 'tasks': {
