@@ -8,6 +8,7 @@ import { getProviderToken } from '../auth.js';
 import { expandCommand, listSkills, loadSkill } from '../skills.js';
 import { stopBrain, brainReflectSession } from '../brain/client.js';
 import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buildDebugPrompt, listOutputStyles } from '../quick-wins/index.js';
+import { runCompaction, createAutoCompactTracker, buildCompactionRequest, formatCompactSummary, applyCompaction } from '../phase2/compaction.js';
 import { normalizeEffort } from '../config.js';
 import { saveSession, autoSave, loadSession, listSessions, forkSession as forkSessionFn } from '../session.js';
 import { loadProfile, listProfiles } from '../profiles.js';
@@ -124,10 +125,51 @@ export async function handleSlashCommand(input, session) {
       console.log('History cleared.');
       return true;
 
-    case 'compact':
-      context.compact();
-      console.log('History compacted.');
+    case 'compact': {
+      const turns = context.turnCount();
+      const tokensBefore = context.estimateTokens();
+
+      if (turns <= 2) {
+        stderr.write('\x1b[33mToo few turns to compact.\x1b[0m\n');
+        return true;
+      }
+
+      stderr.write(`\x1b[2m[compact] ${turns} turns, ~${tokensBefore} tokens → LLM summary (9 sections)...\x1b[0m\n`);
+
+      try {
+        // Build compaction request
+        const { messages: compactMsgs } = buildCompactionRequest(context);
+
+        // Run a dedicated turn just for compaction
+        const compactResult = await executeTurn({
+          input: compactMsgs[compactMsgs.length - 1].content,
+          config,
+          logger,
+          context,
+          undoStack,
+          autoCommitter,
+          planMode: true,
+          effort: 'high',
+        });
+
+        const raw = compactResult?.assistantText || '';
+        const summary = formatCompactSummary(raw);
+
+        if (summary && summary.length >= 50) {
+          applyCompaction(context, summary);
+          const tokensAfter = context.estimateTokens();
+          const pct = Math.round((1 - tokensAfter / tokensBefore) * 100);
+          stderr.write(`\x1b[32m[compact] ✅ ${tokensBefore} → ${tokensAfter} tokens (${pct}% reduction, ${turns} → ${context.turnCount()} turns)\x1b[0m\n`);
+        } else {
+          stderr.write('\x1b[33m[compact] LLM summary too short, falling back to simple compaction\x1b[0m\n');
+          context.compact();
+        }
+      } catch (err) {
+        stderr.write(`\x1b[33m[compact] LLM failed (${err.message}), falling back to simple compaction\x1b[0m\n`);
+        context.compact();
+      }
       return true;
+    }
 
     case 'exit':
     case 'quit':

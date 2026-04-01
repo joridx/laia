@@ -87,7 +87,8 @@ export async function executeTurn({
 
   // Prepare context
   context.addUser(typeof input === 'string' ? input : input.text);
-  if (context.needsCompaction()) context.compact();
+  // Note: auto-compaction warning is shown post-turn in repl.js
+  // The naive context.compact() was removed — use /compact for LLM-powered summary
   undoStack.startTurn();
 
   try {

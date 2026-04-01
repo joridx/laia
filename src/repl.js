@@ -467,6 +467,12 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
         const totalStr = formatTokenCount(sessionTokens.totalIn + sessionTokens.totalOut);
         stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m · Σ${totalStr}]\x1b[0m\n`);
       }
+
+      // Auto-compaction warning (post-turn)
+      const ctxPct = context.usagePercent();
+      if (ctxPct > 80) {
+        stderr.write(`\x1b[33m⚠ Context ${ctxPct}% full — consider running /compact for LLM-powered summarization\x1b[0m\n`);
+      }
     } catch (err) {
       const isAbort = err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || turnAbort?.signal?.aborted;
       if (isAbort) {
