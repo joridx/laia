@@ -1,6 +1,7 @@
 # LAIA — Architecture Deep Dive
 
 > Document generat per auto-exploració del codebase el 2026-03-31.
+> Actualitzat 2026-04-01 (post V4 Tracks 1-3 + V5 + polish).
 > Objectiu: servir com a input per a una LLM externa que analitzi punts forts, debilitats i oportunitats.
 
 ---
@@ -11,12 +12,12 @@
 
 | Mètrica | Valor |
 |---------|-------|
-| LOC agent (`src/`) | ~8.000 |
+| LOC agent (`src/`) | ~12.000 |
 | LOC brain (`packages/brain/`) | ~14.700 |
 | LOC providers (`packages/providers/`) | ~300 |
-| LOC total | ~23.000 |
-| Tests | 287 cases, 59 suites |
-| Temps tests | ~1.9s |
+| LOC total | ~27.000 |
+| Tests | 397 cases, 84 suites |
+| Temps tests | ~3s |
 | Dependències directes | 6 (`fast-glob`, `@modelcontextprotocol/sdk`, `yaml`, `@huggingface/transformers`, `zod`, `better-sqlite3`) |
 | Node.js runtime | ≥24 (ESM, global fetch, native test runner) |
 
@@ -119,25 +120,74 @@ Auto-router per torn que selecciona el model basat en el contingut de l'input:
 - **Profiles** (`~/.laia/agents/*.yml`): model override, allowed tools, timeout, custom prompt
 - **Memory prefetch**: opcionalment injecta learnings rellevants al worker context
 
-### 2.6 System Prompt (`src/system-prompt.js` — 263 LOC + `src/evolved-prompt.js` — 393 LOC)
+### 2.6 System Prompt (`src/system-prompt.js` + `src/memory/prompt-governance.js` + `src/evolved-prompt.js`)
 
-**Composable**: 10+ seccions pures (cadascuna retorna string o null), compostes per `buildSystemPrompt()`:
+**V4 Track 3: 7-Level Governed Prompt** amb precedence stack determinista i budget enforcement:
 
-1. `memorySection()` — LAIA.md files (user + project)
-2. `identitySection()` — Nom, runtime, datetime
-3. `toolsSection()` — Documentació eines disponibles
-4. `skillsPolicySection()` — CRITICAL: corporate tool policy
-5. `multiModelSection()` — Second opinion via bash
-6. `rulesSection()` — Core rules + tool-use + code-edit + safety
-7. `evolvedSection()` — **V4**: compiled from brain learnings
+```
+P1 — SAFETY + CORE RULES       [🔒 PINNED, never truncated]
+P2 — IDENTITY + TOOLS           [🔒 PINNED, size-capped]
+P3 — EVOLVED STABLE             [📌 PINNED, manually confirmed]
+P4 — TASK CONTEXT               [📎 CONTEXTUAL: corporate, plan, coordinator]
+P5 — TYPED MEMORY               [📝 ADAPTIVE, Track 1 unified view]
+P6 — EVOLVED ADAPTIVE           [🔄 ROTATING, 30-day expiry, first to truncate]
+P7 — OUTPUT STYLE               [🎨 OPTIONAL, first to drop]
+```
 
-**Evolved Prompt** (V4 Sprint 4):
-- **Dual-layer**: Stable (manually confirmed, never expire) + Adaptive (auto-compiled, 30-day expiry)
+- **Budget**: 20KB default, 32KB hard cap, configurable
+- **Truncation**: bottom-up (P7 first), largest-first within same priority
+- **Conflict detection**: rule-based negation patterns (always/never, must/do-not, prefer/avoid)
+- **`/evolve` command**: 7 subcommands (list, budget, promote, demote, expire, conflicts, recompile)
+
+**Evolved Prompt** (dual-layer):
+- **Stable**: manually confirmed, never expire, `_stable-entries.json`
+- **Adaptive**: auto-compiled, 30-day expiry, `_adaptive-entries.json`
 - **4 fitxers**: `user-preferences.md`, `task-patterns.md`, `error-recovery.md`, `domain-knowledge.md`
-- **Safety**: max 50 lines/section, 200 lines total, 16K char cap, anti-injection sanitization
 - **Audit trail**: `_evolution-log.jsonl`
 
-### 2.7 Context Management (`src/context.js` — 155 LOC)
+### 2.7 Memory System (V4 Track 1: Memory Unification)
+
+Tres sistemes de memòria unificats amb single-owner matrix:
+
+```
+┌───────────────────────────────────────────────────────────┐
+│              UNIFIED MEMORY CONTEXT                      │
+│   ┌─ TYPED (SoT) ──────┐  ┌── BRAIN (SoT) ──┐         │
+│   │ user/              │  │ procedures    │         │
+│   │ project/           │  │ learnings     │         │
+│   │ feedback/          │  │ warnings      │         │
+│   │ reference/         │  │ patterns      │         │
+│   └────────────────────┘  │ principles    │         │
+│                            └───────────────┘         │
+│   Bridge: feedback score≥1.0 → promote to brain           │
+│   Dedup: canonical_key cross-system                      │
+└───────────────────────────────────────────────────────────┘
+```
+
+Modules:
+- `memory/ownership.js` — SoT matrix: 5 brain-owned + 4 typed-owned types
+- `memory/bridge.js` — One-way promotion: feedback → brain (score-based, transactional)
+- `memory/unified-view.js` — `buildUnifiedMemoryContext()` for prompt injection (budget-limited, sanitized)
+- `memory/typed-memory.js` — `.md` files with frontmatter at `~/.laia/memories/`
+
+### 2.8 Reflection Pipeline (V4 Track 2)
+
+Automatic post-session learning:
+
+```
+Session End (≥3 turns)
+  │
+  ├─ CAPTURE: session-notes.js (9-section summary)
+  ├─ REFLECT: LLM extracts insights with confidence scores
+  ├─ DEDUPE: canonical_key + Jaccard similarity (≥0.6 = duplicate)
+  ├─ GATE: ≥0.8 auto-save, 0.5-0.8 #needs-review, <0.5 skip
+  └─ LOG: session metadata (pointers, not duplicate text)
+```
+
+- Triggered automatically on `/exit` or manually via `/reflect`
+- Module: `memory/reflection.js` (335 lines)
+
+### 2.9 Context Management (`src/context.js` — 155 LOC)
 
 - **Turn-based**: almacena transcripcions completes (tool calls + results + reply)
 - **Compaction**: últims 6 torns en full detail; antics → only user+assistant text
@@ -153,13 +203,18 @@ Auto-router per torn que selecciona el model basat en el contingut de l'input:
 - **Atomic writes**: write to tmpfile + rename (anti-corruption)
 - **Restore**: per index, partial name match, o path directe
 
-### 2.9 Skills System (`src/skills.js` — 362 LOC)
+### 2.12 Skills System (`src/skills.js` + `src/skills/intent-matcher.js`)
 
 - **V3 Skills**: `~/.laia/skills/*/SKILL.md` (directory-based with frontmatter)
+- **Project-level skills**: `./laia-skills/*/SKILL.md` (highest priority, shadows user skills)
 - **Legacy commands**: `~/.laia/commands/*.md` (flat files, auto-wrapped)
-- **Frontmatter schema**: `name`, `description`, `invocation`, `context`, `allowed-tools`, `argument-hint`
+- **Frontmatter schema**: `name`, `description`, `invocation` (user|both), `context` (main|fork), `allowed-tools`, `intent-keywords`
+- **Auto-invoke (V3P3)**: keyword-based intent matching (no LLM), threshold 0.3
+  - Scoring: intentKeywords (0.5) + name (0.3) + tags (0.2)
+  - `context: 'fork'` runs in isolated context, restored via try/finally
+  - Duplicate prevention: slash command + auto-invoke can't fire same turn
 - **Placeholder resolution**: `{{user.name}}`, `{{env.VAR}}` → from `~/.laia/user.json` + env
-- **Cache**: 5s TTL amb fingerprint (mtime + count)
+- **Cache**: 5s TTL amb fingerprint (mtime + count), keyed by workspaceRoot
 - **36 skills** per integració amb Jira, Confluence, Teams, Jenkins, GitHub, etc.
 
 ---
@@ -429,16 +484,17 @@ Defaults (src/config.js)
 | **Brain tools** | MCP tool modules | `packages/brain/tools/` |
 | **LLM config** | JSON config | `packages/brain/llm-config.json` |
 
-### 5.3 REPL Slash Commands (28)
+### 5.3 REPL Slash Commands (34)
 
 | Category | Commands |
 |----------|----------|
 | Session | `/save`, `/load`, `/sessions`, `/fork`, `/clear`, `/compact` |
 | Config | `/model`, `/effort`, `/plan`, `/execute`, `/tokens` |
+| Git | `/commit`, `/review`, `/debug`, `/autocommit`, `/undo` |
 | Files | `/attach`, `/detach`, `/attached` |
-| Agents | `/agents`, `/swarm` |
+| Agents | `/agents`, `/swarm`, `/coordinator`, `/tasks` |
 | Skills | `/skills` |
-| System | `/help`, `/autocommit`, `/undo`, `/reflect`, `/exit`, `/quit` |
+| System | `/help`, `/style`, `/tip`, `/reflect`, `/evolve`, `/memory`, `/exit`, `/quit` |
 
 ---
 
@@ -455,10 +511,10 @@ Defaults (src/config.js)
 
 | Component | Suites | Tests | Focus |
 |-----------|--------|-------|-------|
-| Agent (`tests/unit/`) | 11 | ~100 | Edit, diff, SSE, swarm, permissions, registry, sessions |
-| Agent (`tests/`) | 6 | ~40 | Evolved prompt, git-commit, paste, providers, quality, undo |
-| Brain (`packages/brain/tests/`) | 42 | ~150 | Scoring, search, embeddings, database, regression, integration |
-| **Total** | **59** | **287** | |
+| Agent (`tests/unit/`) | 17 | ~250 | Edit, diff, SSE, swarm, permissions, registry, sessions, ownership, governance, bridge, intent |
+| Agent (`tests/`) | 6 | ~50 | Evolved prompt, git-commit, paste, providers, quality, undo |
+| Brain (`packages/brain/tests/`) | 42 | ~100 | Scoring, search, embeddings, database, regression, integration |
+| **Total** | **84** | **397** | |
 
 ### 6.3 Test Highlights
 
@@ -495,7 +551,7 @@ Defaults (src/config.js)
 | Embedding init | ~5-15s | First load only (ONNX model) |
 | Single embedding | ~20-50ms | After init |
 | FTS5 query | ~5ms | SQLite BM25 |
-| Test suite | ~1.9s | 287 tests, 59 suites |
+| Test suite | ~3s | 397 tests, 84 suites |
 | LLM first token | 1-5s | Depends on provider + model |
 
 ---
@@ -570,19 +626,21 @@ Integracions amb 30+ serveis corporatius definides com a fitxers `.md` amb front
 
 | Mètrica | Valor |
 |---------|-------|
-| Fitxers JS (src/) | 44 |
+| Fitxers JS (src/) | 65 |
 | Fitxers JS (brain/) | 48 |
 | Brain MCP tools | 16 |
-| Agent tools | 16 |
-| REPL slash commands | 28 |
-| Skills disponibles | ~36 |
+| Agent tools | 14 |
+| REPL slash commands | 34 |
+| Skills disponibles | ~36 + project-level |
 | Scoring signals | 11 |
 | Providers suportats | 7 |
 | Max tool iterations/turn | 100 |
 | Max worker recursion | 3 |
 | Worker concurrency | 4 |
 | Context window | 300K tokens |
-| Evolved prompt cap | 200 lines / 16K chars |
+| Prompt budget | 20KB default, 32KB hard cap |
+| Prompt precedence levels | 7 (P1-Safety → P7-Style) |
+| Memory systems | 3 (brain + typed + evolved) |
 | Session quality scale | 1-10 |
 | Brain LLM tasks | 8 |
 | Brain LLM budget/session | 1000 units |
@@ -592,4 +650,4 @@ Integracions amb 30+ serveis corporatius definides com a fitxers `.md` amb front
 
 ---
 
-*Document generat automàticament per LAIA explorant el seu propi codebase. Actualitzar manualment si l'arquitectura canvia significativament.*
+*Document generat automàticament per LAIA. Actualitzat manualment el 2026-04-01 amb V4 Tracks 1-3, V5, i polish items.*
