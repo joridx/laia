@@ -151,8 +151,8 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
 | 1 | **CoordinatorMode** — Research→Synthesis→Implementation→Verify | ✅ DONE | Ref: CC `src/coordinator/coordinatorMode.ts` |
-| 2 | **AgentTool millorat** — modes sync/async/fork | 🔲 TODO | Ref: CC `src/tools/AgentTool/` |
-| 3 | **SendMessage/Mailbox** — inter-agent messaging | 🔲 TODO | Ref: CC `src/tools/SendMessageTool/` |
+| 2 | **AgentTool millorat** — modes sync/background, description | ✅ DONE | Ref: CC `src/tools/AgentTool/` |
+| 3 | **SendMessage/Mailbox** — inter-agent messaging | ✅ DONE | Ref: CC `src/tools/SendMessageTool/` |
 
 ### Dropped (acordat amb Codex review 2026-03-21)
 - `/init` command — CLAUDE.md ja existeix a tots els projectes
