@@ -1,4 +1,4 @@
-# Claudia — Roadmap
+# LAIA — Roadmap
 
 > CLI coding assistant — V1 Feature Complete 🏁
 > Última actualització: 2026-03-22 (sessió 4)
@@ -7,7 +7,7 @@
 
 ## ✅ Ja implementat (equivalent o superior a Claude Code)
 
-| Feature | Claudia | Claude Code | Notes |
+| Feature | LAIA | Claude Code | Notes |
 |---------|:-------:|:-----------:|-------|
 | Agent loop + tool calls | ✅ | ✅ | `llm.js` — agentic loop amb max iterations |
 | Streaming | ✅ | ✅ | SSE per /responses i /chat/completions |
@@ -30,7 +30,7 @@
 | **Git auto-commit** | ✅ | ❌ | `git-commit.js` (92 LOC), `--auto-commit`, `/autocommit`, `git commit --only` aïllat |
 | **Diff preview** | ✅ | ✅ | Unified diff colorit al terminal per edit/write |
 | **Swarm — `agent` tool** | ✅ | ❌ | `tools/agent.js` + `swarm.js` — workers in-process, paral·lels, `allowedTools` filter |
-| **Agent Profiles** | ✅ | ❌ | YAML profiles (`~/.claudia/agents/`) — per-agent model, tools, prompt, maxSteps |
+| **Agent Profiles** | ✅ | ❌ | YAML profiles (`~/.laia/agents/`) — per-agent model, tools, prompt, maxSteps |
 | **Parallel agents (Copilot fix)** | ✅ | ✅ | Fix 3 bugs: streaming, forceToolChoiceRequired, index offset |
 | **MCP server mode** | ✅ | ❌ | `--mcp` flag: exposa tool `agent` via MCP stdio |
 | **/undo stack** | ✅ | ❌ | `undo.js` (113 LOC), 10-turn stack, conflict detection, workspace guard |
@@ -77,7 +77,7 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 ## 🔮 V3 — Skills System (planificat 2026-03-22)
 
 > Migrar de `~/.claude/commands/*.md` a `~/.claude/skills/*/SKILL.md`.
-> Principi: "Claude-compatible, Claudia-opinionated". Compatible amb Claude Code natiu.
+> Principi: "Claude-compatible, LAIA-opinionated". Compatible amb Claude Code natiu.
 > Document complet: `knowledge/tools/claudia-skills-v3-plan-2026-03-22.md`
 
 | Phase | Feature | Effort | Status |
@@ -205,7 +205,7 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | 2026-03-19 | +2 | **Multi-provider LLM routing (api-agnostic-v2):** `@laia/providers` shared package (5 providers) |
 | 2026-03-21 | +4 | **`/briefing` daily briefing skill** (7 parallel workers). **Parallel agents fix** (3 Copilot streaming bugs). **V1 Feature Complete** declared after Codex review. |
 | 2026-03-22 | +1 | **Plan Mode** (`/plan`, `/execute`, `--plan`). Dual enforcement (schema + dispatch). Reviewed by Codex. V2 roadmap defined (6 items, ~30h). |
-| 2026-03-22 | +1 | **Agent Profiles V2a** — YAML profiles (`~/.claudia/agents/`), resolveToolSet, customPrompt, maxSteps cap. 3 example profiles. Reviewed by Codex (3 rounds). |
+| 2026-03-22 | +1 | **Agent Profiles V2a** — YAML profiles (`~/.laia/agents/`), resolveToolSet, customPrompt, maxSteps cap. 3 example profiles. Reviewed by Codex (3 rounds). |
 | 2026-03-22 | +1 | **Brain Memory Quality V2** — type-aware idle decay, cold tier, dedup tuning (0.70→0.65), brain_health dashboard with grade. Production: 1233 all-active → 484 active + 281 stale + 154 cold + 247 fading. Reviewed by Codex (3 rounds). |
 | 2026-03-22 | +1 | **CLI Flags V2** — `--effort` (low/medium/high/max → reasoning_effort param) + `--fork` (session branching). `/effort` and `/fork` REPL commands. |
 | 2026-03-22 | +1 | **Subagents V2b** — persistent agent memory (memoryPrefetch, brain.search/remember gating, auto-tag agent:<profile>). **V3 Skills System** planned. |

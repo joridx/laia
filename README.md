@@ -12,12 +12,13 @@ Fork of [Claudia](https://github.developer.allianz.io/jordi-tribo/claudia) with 
 
 | Feature | Traditional Agent | LAIA |
 |---------|------------------|------|
-| **Memory** | Flat key-value store | Typed learnings (procedure, preference, warning, pattern) with vitality decay + knowledge graph |
-| **Session End** | "Done." | LLM-powered reflection extracts corrections, preferences, and errors automatically |
-| **Prompt** | Static CLAUDE.md | Evolved prompt compiled from memory — dual-layer (Stable + Adaptive with 30-day expiry) |
+| **Memory** | Flat key-value store | Unified 3-system memory: brain learnings + typed memory + evolved prompt, with single-owner matrix and cross-system dedup |
+| **Session End** | "Done." | Auto-reflection pipeline: LLM extracts insights → dedup → confidence gate (≥0.8 auto-save) → brain |
+| **Prompt** | Static CLAUDE.md | 7-level governed prompt (P1-Safety → P7-Style) with deterministic precedence, budget enforcement (20KB), /evolve command |
 | **Quality** | No tracking | Composite scorecard (1-10) with sparkline trends and degradation alerts |
 | **Critical Knowledge** | Can be forgotten | Protected learnings immune to decay — auto-promoted when frequently accessed |
 | **Procedures** | Text blobs | Structured steps with trigger intents, preconditions, and success/failure tracking |
+| **Skills** | Manual invocation | Auto-invoke via keyword matching, project-level skills (`./laia-skills/`), context fork isolation |
 
 ---
 
@@ -36,7 +37,7 @@ node bin/laia.js
 node bin/laia.js -p "explain this codebase"
 
 # Run tests
-npm test  # 287 tests, 57 suites
+npm test  # 397 tests, 84 suites
 ```
 
 ### Requirements
@@ -55,12 +56,14 @@ LAIA's brain is a local MCP server with SQLite, full-text search, 384-dimensiona
 ┌────────────────────────────────────────────────┐
 │                  LAIA Agent                     │
 │                                                 │
-│  system-prompt.js (composable, 10 sections)     │
-│    └── evolvedSection() ← ~/.laia/evolved/      │
-│         ├── user-preferences.md                 │
-│         ├── task-patterns.md                    │
-│         ├── error-recovery.md                   │
-│         └── domain-knowledge.md                 │
+│  system-prompt.js (governed, 7-level precedence)│
+│    ├── P1: Safety + Rules (pinned)               │
+│    ├── P2: Identity + Tools (pinned)              │
+│    ├── P3: Evolved Stable (confirmed learnings)   │
+│    ├── P4: Task Context (corporate, plan)         │
+│    ├── P5: Typed Memory (unified view)            │
+│    ├── P6: Evolved Adaptive (30d expiry)          │
+│    └── P7: Output Style (optional)                │
 │                                                 │
 │  evolved-prompt.js                              │
 │    compileEvolvedPrompt()                       │
@@ -137,11 +140,13 @@ LAIA_BRAIN_PATH=~/laia-data node bin/laia.js -p "brain health"
 laia/
 ├── bin/laia.js              # Entry point
 ├── src/
-│   ├── system-prompt.js     # Composable prompt builder (10 sections)
-│   ├── evolved-prompt.js    # Evolved prompt compiler
+│   ├── system-prompt.js     # 7-level governed prompt builder
+│   ├── evolved-prompt.js    # Evolved prompt compiler (stable/adaptive split)
+│   ├── memory/              # Ownership, bridge, reflection, unified view, governance
+│   ├── skills/              # Skill loader, intent matcher (auto-invoke)
 │   ├── brain/client.js      # Brain MCP client (timeout, reconnect)
-│   ├── turn-runner.js       # Modular turn execution
-│   └── ...
+│   ├── repl/turn-runner.js  # Modular turn execution
+│   └── ... (~65 files, ~12K LOC)
 ├── packages/brain/          # Brain MCP server
 │   ├── database.js          # SQLite schema v4
 │   ├── scoring.js           # 11-pass scoring engine
@@ -149,8 +154,8 @@ laia/
 │   ├── reflection-llm.js    # LLM bridge for reflection
 │   ├── tools/               # 16 brain tools
 │   └── ...
-├── tests/                   # 287 tests, 57 suites
-└── docs/                    # Architecture docs, evolution plan
+├── tests/                   # 397 tests, 84 suites
+└── docs/                    # Architecture, worker trust, evolution plan
 ```
 
 ---
@@ -159,7 +164,7 @@ laia/
 
 LAIA started as a fork of **Claudia** — a corporate CLI agent for Allianz — with the goal of adding self-evolution capabilities inspired by [ghostwright/phantom](https://github.com/ghostwright/phantom).
 
-The V4 Brain Evolution Plan was designed collaboratively between Claude Opus 4.6 and GPT-5.3-Codex, reviewed bidirectionally, and implemented in a single session (4 sprints, ~1750 LOC, 10 Codex criticals found and fixed).
+The V4 Brain Evolution (Tracks 1-3) plus V5 Claude Code Adoption (4 phases) were designed collaboratively between Claude Opus 4.6 and GPT-5.3-Codex, reviewed bidirectionally, and implemented across multiple sessions (~2500 LOC, 15+ Codex criticals found and fixed).
 
 ---
 

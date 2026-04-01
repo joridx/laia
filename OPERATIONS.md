@@ -1,7 +1,7 @@
 # LAIA — Operations Manual
 
 > **LAIA** (Local AI Agent) — CLI coding agent with self-evolving memory.
-> Version 2.0 · Node.js 24+ · Last updated: 2026-04-01
+> Version 4.0 · Node.js 24+ · Last updated: 2026-04-01
 
 ---
 
@@ -18,14 +18,18 @@
 9. [LAIA.md Hierarchy](#laiamd-hierarchy)
 10. [Sessions](#sessions)
 11. [Skills & Custom Commands](#skills--custom-commands)
-12. [Agent Profiles & Swarm](#agent-profiles--swarm)
-13. [Output Styles](#output-styles)
-14. [Tips System](#tips-system)
-15. [Git Integration](#git-integration)
-16. [MCP Server Mode](#mcp-server-mode)
-17. [Environment Variables](#environment-variables)
-18. [File Structure](#file-structure)
-19. [Troubleshooting](#troubleshooting)
+12. [Skills Auto-Invoke (V3P3)](#skills-auto-invoke-v3p3)
+13. [Agent Profiles & Swarm](#agent-profiles--swarm)
+14. [Output Styles](#output-styles)
+15. [Tips System](#tips-system)
+16. [Git Integration](#git-integration)
+17. [MCP Server Mode](#mcp-server-mode)
+18. [Memory Unification (Track 1)](#memory-unification-track-1)
+19. [Reflection Pipeline (Track 2)](#reflection-pipeline-track-2)
+20. [Prompt & Context Governance (Track 3)](#prompt--context-governance-track-3)
+21. [Environment Variables](#environment-variables)
+22. [File Structure](#file-structure)
+23. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -167,6 +171,24 @@ All commands start with `/` and can be typed in the REPL.
 |---------|-------------|-------|
 | `/skills` | List all available skills | `/skills` |
 | `/<skill-name> [args]` | Execute a skill by name | `/jira search "auth bug"` |
+
+### 🧬 Evolve
+
+| Command | Description | Usage |
+|---------|-------------|-------|
+| `/evolve list` | List all evolved prompt entries with vitality | `/evolve list` |
+| `/evolve budget` | Show evolved prompt token budget usage | `/evolve budget` |
+| `/evolve promote <id>` | Promote an entry to stable (never expires) | `/evolve promote abc123` |
+| `/evolve demote <id>` | Demote a stable entry back to adaptive | `/evolve demote abc123` |
+| `/evolve expire <id>` | Manually expire an entry | `/evolve expire abc123` |
+| `/evolve conflicts` | Detect and show conflicting entries | `/evolve conflicts` |
+| `/evolve recompile` | Force recompile of evolved prompt sections | `/evolve recompile` |
+
+### 🧠 Memory
+
+| Command | Description | Usage |
+|---------|-------------|-------|
+| `/memory` | Show unified memory view (ownership matrix) | `/memory` |
 
 ### ⚙️ System
 
@@ -378,6 +400,46 @@ Your prompt template here. Use $ARGUMENTS for user input.
 | `arguments` | | Accept arguments? | `true` |
 | `argument-hint` | | Hint for autocomplete | `""` |
 | `allowed-tools` | | Restrict tools for this skill | `[]` (all) |
+
+---
+
+## Skills Auto-Invoke (V3P3)
+
+Skills with `invocation: auto` can be triggered automatically by the agent based on intent matching.
+
+### How It Works
+
+1. **Intent matching** — The agent analyzes user input and matches it against skill descriptions and trigger patterns
+2. **Project-level skills** — Skills in `.laia/skills/*/SKILL.md` (project root) are loaded alongside user-global skills, with project skills taking precedence
+3. **Context fork** — Auto-invoked skills run in an isolated context fork to prevent side effects on the main conversation
+
+### Project Skills
+
+Place skills in your project's `.laia/skills/` directory:
+
+```
+.laia/skills/
+├── deploy/SKILL.md       # Project-specific deploy skill
+└── test-suite/SKILL.md   # Project-specific test runner
+```
+
+Project skills override user-global skills of the same name.
+
+### Auto-Invoke Frontmatter
+
+```markdown
+---
+name: deploy
+description: Deploy to staging or production
+schema: 1
+invocation: auto
+context: isolated
+triggers: ["deploy", "ship it", "push to staging"]
+allowed-tools: [bash, read]
+---
+```
+
+The `triggers` field provides keyword hints for intent matching. The `context: isolated` field ensures the skill runs in a forked context.
 
 ---
 
@@ -608,6 +670,90 @@ Exposes a single `agent` tool that other MCP clients can invoke to delegate task
 ```bash
 laia --mcp --mcp-stdout-policy redirect
 ```
+
+---
+
+## Memory Unification (Track 1)
+
+V4 unifies all memory sources into a single ownership-aware view.
+
+### Ownership Matrix
+
+Every memory entry has an owner that determines who can modify or expire it:
+
+| Owner | Source | Mutable by Agent | Expires |
+|-------|--------|-------------------|---------|
+| **user** | `LAIA.md`, `/evolve promote` | ❌ | Never |
+| **corporate** | `LAIA-managed.md` | ❌ | Never |
+| **agent** | `brain_remember()`, auto-learn | ✅ | Adaptive (30d default) |
+| **system** | Built-in rules, defaults | ❌ | Never |
+
+### Unified View
+
+The `/memory` command shows all memory sources in a single view:
+- User preferences (from `LAIA.md`)
+- Corporate policy (from `LAIA-managed.md`)
+- Agent learnings (from brain, with vitality scores)
+- Evolved prompt sections (compiled entries)
+
+Conflicts between owners are resolved by precedence (system > corporate > user > agent).
+
+---
+
+## Reflection Pipeline (Track 2)
+
+V4 adds an automated reflection pipeline that learns from sessions without user intervention.
+
+### Auto-Learn
+
+After each session (on `/exit`), the reflection pipeline:
+1. Analyzes the session transcript for patterns, mistakes, and insights
+2. Proposes candidate learnings with confidence scores
+3. Applies confidence gates before storing
+
+### Confidence Gates
+
+| Confidence | Action |
+|------------|--------|
+| **≥ 0.8** | Auto-stored as adaptive learning |
+| **0.5 – 0.8** | Stored but flagged for review |
+| **< 0.5** | Discarded (logged for debugging) |
+
+Manual reflection via `/reflect` bypasses confidence gates and always stores.
+
+The `/reflect auto` variant runs the same pipeline as the automatic post-session analysis but can be triggered mid-session.
+
+---
+
+## Prompt & Context Governance (Track 3)
+
+V4 introduces a 7-level precedence system for prompt assembly and a token budget for evolved content.
+
+### 7-Level Precedence
+
+Prompt sections are assembled in strict precedence order (highest wins on conflict):
+
+| Level | Source | Description |
+|-------|--------|-------------|
+| **7** | System core | Built-in agent rules and tool definitions |
+| **6** | Corporate policy | `LAIA-managed.md` — immutable by agent |
+| **5** | User preferences | `~/.laia/LAIA.md` — user-defined rules |
+| **4** | Project config | `./LAIA.md` — project-specific instructions |
+| **3** | Evolved stable | Promoted learnings (never expire) |
+| **2** | Evolved adaptive | Auto-learned entries (expire after 30d) |
+| **1** | Session context | Attached files, conversation history |
+
+### Token Budget
+
+Evolved prompt content is capped to prevent context bloat:
+
+| Category | Budget |
+|----------|--------|
+| Evolved stable | 8K tokens max |
+| Evolved adaptive | 4K tokens max |
+| Total evolved | 12K tokens max |
+
+When budget is exceeded, lowest-vitality adaptive entries are evicted first. Use `/evolve budget` to inspect current usage.
 
 ---
 
