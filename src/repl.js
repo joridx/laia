@@ -26,6 +26,8 @@ import { showCommandPicker } from './command-picker.js';
 
 // Extracted modules
 import { executeTurn } from './repl/turn-runner.js';
+import { discoverSkills, expandSkill } from './skills.js';
+import { matchIntent, couldAutoInvoke } from './skills/intent-matcher.js';
 import { handleSlashCommand, COMMAND_META, BUILTIN_COMMANDS, formatTokenCount } from './repl/slash-commands.js';
 import { animateCatBanner, suggestFollowUps } from './repl/ui.js';
 import { sendFeedback } from './repl/feedback.js';
@@ -504,6 +506,44 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
 
     // Normal prompt — use unified executeTurn
     try {
+      // V3P3: Auto-invoke matching skill
+      const rawInput = typeof input === 'string' ? input : input.text;
+      if (couldAutoInvoke(rawInput)) {
+        const skills = discoverSkills({ workspaceRoot: config.workspaceRoot });
+        const match = matchIntent(rawInput, skills);
+        if (match) {
+          const { skill, score } = match;
+          stderr.write(`\x1b[2m[auto-invoke → ${skill.name} (${(score * 100).toFixed(0)}%)]\x1b[0m\n`);
+          const expanded = expandSkill(skill, rawInput);
+          // Fork context if skill requests it
+          if (skill.context === 'fork') {
+            const forked = context.serialize();
+            try {
+              const result = await executeTurn({
+                input: expanded,
+                config: { ...config },
+                logger,
+                context,
+                undoStack,
+                autoCommitter,
+                signal: turnAbort?.signal || new AbortController().signal,
+                planMode,
+                effort,
+              });
+              suggestions = suggestFollowUps(result.text);
+              selectedSuggestion = 0;
+              showSuggestions();
+            } finally {
+              // Always restore context after fork (even on error)
+              context.deserialize(forked);
+            }
+            updatePrompt(); rl.prompt(); continue;
+          }
+          // For context:'main', prepend skill prompt to input
+          input = expanded;
+        }
+      }
+
       // Lazy-load Outlook tools if input mentions email/calendar keywords
       if (/\b(outlook|e-?mails?|correus?|inbox|calendar|calendari|drafts?|borrador|unread|schedule|agenda)\b/i.test(typeof input === 'string' ? input : input.text)) {
         await ensureOutlookTools(config);

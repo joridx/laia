@@ -15,26 +15,29 @@ const SKILLS_DIR = join(homedir(), '.laia', 'skills');
 const LEGACY_DIRS = [
   join(homedir(), '.laia', 'commands'),
 ];
+// V3 Phase 3: Project-level skills (checked in workspace root)
+const PROJECT_SKILLS_DIR = 'laia-skills';
 
 // --- Frontmatter v1 schema ---
 
 const SCHEMA_DEFAULTS = {
   schema: 1,
-  invocation: 'user',
-  context: 'main',
+  invocation: 'user',       // 'user' | 'both'
+  context: 'main',          // 'main' | 'fork'
   arguments: true,
   'allowed-tools': [],
   'argument-hint': '',
+  'intent-keywords': [],    // V3P3: keywords for auto-invoke
 };
 
 const REQUIRED_FIELDS = ['name', 'description'];
 
 // --- Cache ---
 
-let _cache = null;  // { map, fingerprint, ts }
+let _cache = null;  // { map, fingerprint, workspaceRoot, ts }
 const CACHE_TTL_MS = 5000;
 
-function computeFingerprint() {
+function computeFingerprint(workspaceRoot) {
   let maxMtime = 0;
   let fileCount = 0;
 
@@ -64,6 +67,23 @@ function computeFingerprint() {
         } catch {}
       }
     } catch {}
+  }
+
+  // Project-level skills
+  if (workspaceRoot) {
+    const projDir = join(workspaceRoot, PROJECT_SKILLS_DIR);
+    if (existsSync(projDir)) {
+      try {
+        for (const entry of readdirSync(projDir)) {
+          const skillMd = join(projDir, entry, 'SKILL.md');
+          try {
+            const st = statSync(skillMd);
+            maxMtime = Math.max(maxMtime, st.mtimeMs);
+            fileCount++;
+          } catch {}
+        }
+      } catch {}
+    }
   }
 
   return `${fileCount}:${maxMtime}`;
@@ -110,7 +130,7 @@ function normalizeSkill(name, frontmatter, body, source, skillDir = null) {
   }
 
   // Warn on unknown fields (forward compat)
-  const known = new Set([...Object.keys(SCHEMA_DEFAULTS), ...REQUIRED_FIELDS, 'tags', 'argument-hint', 'version']);
+  const known = new Set([...Object.keys(SCHEMA_DEFAULTS), ...REQUIRED_FIELDS, 'tags', 'argument-hint', 'version', 'intent-keywords']);
   for (const key of Object.keys(fm)) {
     if (!known.has(key)) warnings.push(`Unknown field: ${key}`);
   }
@@ -124,6 +144,7 @@ function normalizeSkill(name, frontmatter, body, source, skillDir = null) {
     allowedTools: fm['allowed-tools'] || [],
     arguments: fm.arguments,
     argumentHint: fm['argument-hint'] || '',
+    intentKeywords: fm['intent-keywords'] || [],
     tags: fm.tags || [],
     body,
     source,         // 'v3' | 'legacy'
@@ -135,12 +156,12 @@ function normalizeSkill(name, frontmatter, body, source, skillDir = null) {
 
 // --- Discovery ---
 
-export function discoverSkills({ force = false } = {}) {
+export function discoverSkills({ force = false, workspaceRoot = null } = {}) {
   // Check cache
   if (!force && _cache) {
     const age = Date.now() - _cache.ts;
-    if (age < CACHE_TTL_MS) {
-      const fp = computeFingerprint();
+    if (age < CACHE_TTL_MS && _cache.workspaceRoot === workspaceRoot) {
+      const fp = computeFingerprint(workspaceRoot);
       if (fp === _cache.fingerprint) return _cache.map;
     }
   }
@@ -185,14 +206,37 @@ export function discoverSkills({ force = false } = {}) {
     } catch {}
   }
 
-  // Log shadowing (once per cache cycle)
-  if (shadowed.length > 0) {
-    for (const s of shadowed) {
-      process.stderr.write(`\x1b[2m[skills] '${s.name}' shadowed by v3 skill\x1b[0m\n`);
+  // 3. Project-level skills: ./laia-skills/*/SKILL.md (highest priority — shadows all)
+  if (workspaceRoot) {
+    const projDir = join(workspaceRoot, PROJECT_SKILLS_DIR);
+    if (existsSync(projDir)) {
+      try {
+        for (const entry of readdirSync(projDir)) {
+          const skillDir = join(projDir, entry);
+          const skillMd = join(skillDir, 'SKILL.md');
+          try {
+            const raw = readFileSync(skillMd, 'utf8');
+            const { frontmatter, body } = parseFrontmatter(raw);
+            const skill = normalizeSkill(entry, frontmatter, body, 'project', skillDir);
+            skill.sourceFile = skillMd;
+            if (map.has(entry)) {
+              shadowed.push({ name: entry, shadowedBy: 'project', source: map.get(entry).sourceFile });
+            }
+            map.set(entry, skill); // Project wins over everything
+          } catch {}
+        }
+      } catch {}
     }
   }
 
-  // 3. Bundled skills (lowest priority — user skills shadow these)
+  // Log shadowing
+  if (shadowed.length > 0) {
+    for (const s of shadowed) {
+      process.stderr.write(`\x1b[2m[skills] '${s.name}' shadowed by ${s.shadowedBy} skill\x1b[0m\n`);
+    }
+  }
+
+  // 4. Bundled skills (lowest priority — user skills shadow these)
   for (const bs of BUNDLED_SKILLS) {
     if (!map.has(bs.name)) {
       map.set(bs.name, {
@@ -211,7 +255,7 @@ export function discoverSkills({ force = false } = {}) {
     }
   }
 
-  _cache = { map, fingerprint: computeFingerprint(), ts: Date.now() };
+  _cache = { map, fingerprint: computeFingerprint(workspaceRoot), workspaceRoot, ts: Date.now() };
   return map;
 }
 

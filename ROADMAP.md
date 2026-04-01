@@ -84,7 +84,7 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 |-------|---------|--------|--------|
 | 1 | **Skill Loader** — discover, load, frontmatter, supporting files, /skills | 4h | ✅ DONE (2026-03-22) |
 | 2 | **Migration** — commands/*.md → skills/*/SKILL.md (simple script) | 2h | ✅ DONE (2026-03-22) |
-| 3 | **Auto-invoke + Fork** — invocation:both, context:fork, project-level | 6h | 🟡 DEFERRED |
+| 3 | **Auto-invoke + Fork** — invocation:both, context:fork, project-level skills, intent matcher | 6h | ✅ DONE |
 
 ---
 
@@ -121,8 +121,8 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | Feature | Prioritat | Notes |
 |---------|-----------|-------|
 | MCP server connections | 🟡 DEFER | Connectar a MCP servers externs. 35 skills ja cobreixen tot. Fer quan hi hagi necessitat real. |
-| Prompt modularització | 🟡 DEFER | Separar system prompt en mòduls. Fer quan creixi. |
-| Worker trust docs | 🟡 DEFER | Documentar model de trust dels workers. |
+| Prompt modularisation | ✅ DONE | Resolt per V4 Track 3 (7-level prompt governance). |
+| Worker trust docs | ✅ DONE | `docs/worker-trust-model.md` — isolation model, tool restrictions, non-guarantees. |
 
 ---
 
@@ -180,13 +180,13 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 
 | Mètrica | Valor |
 |---------|-------|
-| Tests | 155 test cases (11 files) |
-| Fitxers src/ | ~50 (30 core + 14 tools + 3 coordinator + 2 memory + 7 services + 1 skills) |
+| Tests | 397 test cases (23 files) |
+| Fitxers src/ | ~65 (30 core + 14 tools + 3 coordinator + 7 memory + 7 services + 2 skills + 2 repl) |
 | Tools LLM | 14 (read, write, edit, bash, glob, grep, brain×3, run_command, git×3, agent) |
-| Slash commands | 31 (session×6, config×5, git×5, files×3, agents×4, skills×1, system×7) |
+| Slash commands | 34 (session×6, config×5, git×5, files×3, agents×4, skills×1, system×10) |
 | Bundled skills | 5 (/batch, /simplify, /verify, /init, /skillify) |
-| LOC (src/) | ~7200 |
-| Skills | 36 (`~/.laia/skills/*/SKILL.md`) + 5 bundled |
+| LOC (src/) | ~12,000 |
+| Skills | 36 (`~/.laia/skills/*/SKILL.md`) + 5 bundled + project-level (`./laia-skills/`) |
 | Dependències extra | 2 (`fast-glob`, `@modelcontextprotocol/sdk`) |
 | Node.js | 24+ (ESM) |
 
@@ -212,3 +212,4 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | 2026-03-22 | +1 | **`/agents` command** — list, validate, show. **V2 ROADMAP COMPLETE** (6/6 items done in one session). |
 | 2026-04-01 | +1 | **Phase 1 Quick Wins** (Claude Code adoption) — `/commit`, `/review`, `/debug`, `/style`, `/tip`, output styles, contextual tips. Reviewed by Codex. |
 | 2026-04-01 | +8 | **V5 Claude Code Adoption — ALL 4 PHASES DONE.** Phase 2: compaction, typed memory, session notes. Phase 3: 5 bundled skills (/batch, /simplify, /verify, /init, /skillify). Phase 4: coordinator mode, background agents, mailbox. Refactor: src/ reorganized from phase dirs to domain dirs (services/, memory/, coordinator/, skills/). V4 roadmap revised post-V5 overlap analysis. 25 Codex review issues fixed (11 CRITICAL + 14 WARNING). |
+| 2026-04-01 | +4 | **V4 Tracks 1-3 DONE + Polish.** Track 1: Memory Unification (ownership, bridge, unified view). Track 2: Reflection Pipeline (auto-learn, confidence gates, dedupe). Track 3: Prompt Governance (7-level precedence, /evolve). V3P3: Skills auto-invoke + project-level. Worker trust docs. Tests: 397 pass. |
