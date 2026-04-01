@@ -112,6 +112,48 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | Prompt modularització | 🟡 DEFER | Separar system prompt en mòduls. Fer quan creixi. |
 | Worker trust docs | 🟡 DEFER | Documentar model de trust dels workers. |
 
+---
+
+## 🚀 V5 — Claude Code Adoption Roadmap (2026-04-01)
+
+> Roadmap consensuat per 3 agents (OPUS, SONNET, CODEX) analitzant el codi font de Claude Code.
+> Document complet: `~/laia-data/knowledge/roadmap-claude-code-adoption.md`
+
+### Phase 1: Quick Wins DX ✅ (implementat 2026-04-01)
+
+| # | Feature | Status | Notes |
+|---|---------|--------|-------|
+| 1 | **`/commit`** — generate commit from staged/unstaged changes | ✅ DONE | Gathers git status/diff/branch/log, builds LLM prompt. Ref: CC `src/commands/commit.ts` |
+| 2 | **`/review <PR#>`** — code review a Pull Request | ✅ DONE | Uses `gh` CLI with preflight check. Ref: CC `src/commands/review.ts` |
+| 3 | **`/debug [issue]`** — diagnose session issues | ✅ DONE | Reads session logs, tool stats, builds diagnostic prompt. Ref: CC `src/skills/bundled/debug.ts` |
+| 4 | **`/style [name\|list\|off]`** — output styles | ✅ DONE | `.md` files with frontmatter in `~/.laia/output-styles/`. Injected into system prompt. Ref: CC `src/outputStyles/` |
+| 5 | **`/tip`** — contextual tips | ✅ DONE | 20 bundled tips, shown during spinner waits (3s delay). User-extensible via `~/.laia/tips.json` |
+| 6 | **Spinner tips** — auto-show tip during LLM wait | ✅ DONE | Integrated in `turn-runner.js` with proper terminal cleanup |
+
+### Phase 2: Memòria Intel·ligent 🧠 (pendent)
+
+| # | Feature | Status | Notes |
+|---|---------|--------|-------|
+| 1 | **Memòria Tipada** — 4 tipus: user/feedback/project/reference | 🔲 TODO | Ref: CC `src/memdir/memoryTypes.ts` |
+| 2 | **Session Memory/Notes** — template 9 seccions | 🔲 TODO | Ref: CC `src/services/SessionMemory/` |
+| 3 | **Context Compaction** — auto-compact al ~80% amb prompt 9 seccions | 🔲 TODO | Ref: CC `src/services/compact/` |
+
+### Phase 3: Skills & Commands ⚡ (pendent)
+
+| # | Feature | Status | Notes |
+|---|---------|--------|-------|
+| 1 | **Skills System upgrade** — SKILL.md amb frontmatter + bundled skills | 🔲 TODO | `/batch`, `/simplify`, `/remember`. Ref: CC `src/skills/bundled/` |
+| 2 | **`/init`** — generar LAIA.md per projecte | 🔲 TODO | Ref: CC `src/commands/init.ts` |
+| 3 | **Magic Docs** — auto-updating docs | 🔲 TODO | Ref: CC `src/services/MagicDocs/` |
+
+### Phase 4: Orquestració Multi-Agent 🤖 (pendent)
+
+| # | Feature | Status | Notes |
+|---|---------|--------|-------|
+| 1 | **CoordinatorMode** — Research→Synthesis→Implementation→Verify | 🔲 TODO | Ref: CC `src/coordinator/coordinatorMode.ts` |
+| 2 | **AgentTool millorat** — modes sync/async/fork | 🔲 TODO | Ref: CC `src/tools/AgentTool/` |
+| 3 | **SendMessage/Mailbox** — inter-agent messaging | 🔲 TODO | Ref: CC `src/tools/SendMessageTool/` |
+
 ### Dropped (acordat amb Codex review 2026-03-21)
 - `/init` command — CLAUDE.md ja existeix a tots els projectes
 - Interactive diff approval — /undo + auto-commit ja cobreixen
@@ -127,9 +169,10 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | Mètrica | Valor |
 |---------|-------|
 | Tests | 155 test cases (11 files) |
-| Fitxers src/ | 32 (20 core + 11 tools + 1 shared pkg) |
+| Fitxers src/ | 38 (26 core + 11 tools + 1 shared pkg) |
 | Tools LLM | 14 (read, write, edit, bash, glob, grep, brain×3, run_command, git×3, agent) |
-| LOC (src/) | ~4400 |
+| Slash commands | 28 (session×6, config×5, git×3, files×3, agents×2, skills×1, system×8) |
+| LOC (src/) | ~5000 |
 | Skills | 36 (`~/.claude/skills/*/SKILL.md`) — compatible Claude Code + Claudia |
 | Dependències extra | 2 (`fast-glob`, `@modelcontextprotocol/sdk`) |
 | Node.js | 24+ (ESM) |
@@ -154,3 +197,4 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | 2026-03-22 | +1 | **CLI Flags V2** — `--effort` (low/medium/high/max → reasoning_effort param) + `--fork` (session branching). `/effort` and `/fork` REPL commands. |
 | 2026-03-22 | +1 | **Subagents V2b** — persistent agent memory (memoryPrefetch, brain.search/remember gating, auto-tag agent:<profile>). **V3 Skills System** planned. |
 | 2026-03-22 | +1 | **`/agents` command** — list, validate, show. **V2 ROADMAP COMPLETE** (6/6 items done in one session). |
+| 2026-04-01 | +1 | **Phase 1 Quick Wins** (Claude Code adoption) — `/commit`, `/review`, `/debug`, `/style`, `/tip`, output styles, contextual tips. Reviewed by Codex. |
