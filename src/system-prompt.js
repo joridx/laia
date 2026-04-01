@@ -6,12 +6,14 @@
 // V4 features (evolved prompt, procedural memory) add new section functions.
 
 import { loadMemoryFiles, buildMemoryContext } from './memory-files.js';
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { getActiveStylePrompt } from './services/output-styles.js';
 import { buildUnifiedMemoryContext } from './memory/unified-view.js';
 import { getCoordinatorPromptSection } from './coordinator/coordinator.js';
+import { buildGovernedPrompt, formatBudgetStats } from './memory/prompt-governance.js';
+import { loadEvolvedSplit } from './evolved-prompt.js';
 
 // --- Individual sections ---
 
@@ -149,54 +151,7 @@ function corporateHintSection({ corporateHint }) {
 This request involves a corporate service. Your FIRST tool call MUST be: run_command(action="search", query="${corporateHint}"). Do NOT call bash() or any other tool before run_command.`;
 }
 
-/**
- * V4 hook: load evolved prompt sections from ~/.laia/evolved/*.md
- * Returns null if directory doesn't exist or is empty.
- * Each .md file becomes a section with its filename as heading.
- */
-const MAX_EVOLVED_FILE_SIZE = 32 * 1024; // 32 KB per file
-
-function evolvedSection(/* opts */) {
-  const evolvedDir = join(homedir(), '.laia', 'evolved');
-  if (!existsSync(evolvedDir)) return null;
-
-  try {
-    const resolvedBase = realpathSync(evolvedDir);
-    const files = readdirSync(evolvedDir)
-      .filter(f => f.endsWith('.md'))
-      .sort();
-    if (!files.length) return null;
-
-    const sections = [];
-    for (const file of files) {
-      const filePath = join(evolvedDir, file);
-
-      // Security: reject symlinks that escape evolvedDir
-      try {
-        const resolved = realpathSync(filePath);
-        if (!resolved.startsWith(resolvedBase + '/') && resolved !== resolvedBase) continue;
-      } catch { continue; }
-
-      // Size guard: skip files larger than 32KB
-      try {
-        const stat = statSync(filePath);
-        if (stat.size > MAX_EVOLVED_FILE_SIZE) continue;
-      } catch { continue; }
-
-      const content = readFileSync(filePath, 'utf8').trim();
-      if (!content) continue;
-      if (content.startsWith('#')) {
-        sections.push(content);
-      } else {
-        const name = file.replace(/\.md$/, '').replace(/[-_]/g, ' ');
-        sections.push(`## ${name}\n\n${content}`);
-      }
-    }
-    return sections.length ? sections.join('\n\n') : null;
-  } catch {
-    return null;
-  }
-}
+// evolvedSection() removed — replaced by loadEvolvedSplit() in prompt-governance.js (V4 Track 3)
 
 // --- Composer ---
 
@@ -229,25 +184,59 @@ function outputStyleSection(opts) {
   }
 }
 
+// Last governed prompt stats (for /evolve budget)
+let _lastPromptStats = null;
+
+/**
+ * Get the last prompt budget stats (for /evolve budget command).
+ * @returns {object|null}
+ */
+export function getPromptStats() {
+  return _lastPromptStats;
+}
+
 export function buildSystemPrompt(opts) {
   // If coordinator is active, its prompt REPLACES tools/skills/multiModel sections
   // but KEEPS safety, rules, and policy sections for compliance
   const coordinatorPrompt = opts.coordinator ? getCoordinatorPromptSection(opts.coordinator) : null;
 
-  return [
-    memorySection(opts),
-    identitySection(opts),
-    coordinatorPrompt || toolsSection(opts),
-    coordinatorPrompt ? null : skillsPolicySection(opts),
-    coordinatorPrompt ? null : multiModelSection(opts),
-    rulesSection(opts),          // ALWAYS keep core rules (even in coordinator mode)
-    safetySection(opts),
-    corporateHintSection(opts),
-    planModeSection(opts),
-    typedMemorySection(),
-    outputStyleSection(opts),
-    evolvedSection(opts),
-  ].filter(Boolean).map(s => s.trim()).join('\n\n');
+  // Load evolved stable/adaptive split
+  const evolved = loadEvolvedSplit();
+
+  // Collect all raw section texts
+  const sections = {
+    // P1: Safety + Rules
+    safety: safetySection(),
+    rules: rulesSection(),
+
+    // P2: Identity + Tools
+    identity: [memorySection(opts), identitySection(opts)].filter(Boolean).join('\n\n'),
+    tools: toolsSection(opts),
+    skillsPolicy: skillsPolicySection(),
+    multiModel: multiModelSection(),
+    coordinator: coordinatorPrompt,
+
+    // P3: Evolved Stable
+    evolvedStable: evolved.stable,
+
+    // P4: Task Context
+    corporateHint: corporateHintSection(opts),
+    planMode: planModeSection(opts),
+
+    // P5: Typed Memory
+    typedMemory: typedMemorySection(),
+
+    // P6: Evolved Adaptive
+    evolvedAdaptive: evolved.adaptive,
+
+    // P7: Output Style
+    outputStyle: outputStyleSection(opts),
+  };
+
+  const { prompt, stats } = buildGovernedPrompt({ sections, budget: opts.promptBudget });
+  _lastPromptStats = stats;
+
+  return prompt;
 }
 
 // --- Worker prompt (unchanged, self-contained) ---

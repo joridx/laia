@@ -18,6 +18,9 @@ import { normalizeEffort } from '../config.js';
 import { saveSession, autoSave, loadSession, listSessions, forkSession as forkSessionFn } from '../session.js';
 import { loadProfile, listProfiles } from '../profiles.js';
 import { executeTurn } from './turn-runner.js';
+import { loadEvolvedIndex, loadEvolvedSplit, promoteEntry, demoteEntry, expireEntry, compileEvolvedPrompt, getEvolvedVersion } from '../evolved-prompt.js';
+import { formatBudgetStats, detectConflicts } from '../memory/prompt-governance.js';
+import { getPromptStats } from '../system-prompt.js';
 
 // --- Command metadata for autocomplete + help ---
 export const COMMAND_META = {
@@ -45,6 +48,7 @@ export const COMMAND_META = {
   '/style':      { desc: 'Set/list output styles',          cat: 'config',   subs: ['list'] },
   '/tip':        { desc: 'Show a random tip',               cat: 'system',   subs: [] },
   '/reflect':    { desc: 'Reflect on session and extract insights', cat: 'system', subs: [] },
+  '/evolve':     { desc: 'Manage evolved prompt (budget, promote, demote)', cat: 'system', subs: ['list', 'budget', 'promote', 'demote', 'expire', 'conflicts', 'recompile'] },
   '/memory':     { desc: 'Typed memories (user/feedback/project/ref)',  cat: 'system', subs: ['list', 'add', 'types'] },
   '/coordinator': { desc: 'Toggle coordinator mode (4-phase)',  cat: 'agents',   subs: ['on', 'off', 'status'] },
   '/tasks':       { desc: 'List/check background agents',     cat: 'agents',   subs: ['get'] },
@@ -717,6 +721,130 @@ export async function handleSlashCommand(input, session) {
       }
       stderr.write(`${DIM}Running reflection pipeline...${R}\n`);
       return { reflectRequested: true };
+    }
+
+    case 'evolve': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const G = '\x1b[32m';
+      const Y = '\x1b[33m';
+      const C = '\x1b[36m';
+
+      const sub = args?.trim()?.split(/\s+/);
+      const subCmd = sub?.[0] || 'list';
+      const subArg = sub?.slice(1).join(' ');
+
+      switch (subCmd) {
+        case 'list': {
+          const { stableEntries, adaptiveEntries, version } = loadEvolvedIndex();
+          stderr.write(`\n${B}📋 Evolved Prompt Entries${R}\n`);
+          if (version) {
+            stderr.write(`${DIM}Version: ${version.version} | Compiled: ${version.compiled_at}${R}\n`);
+          }
+          stderr.write(`\n${G}Stable (${stableEntries.size}):${R}\n`);
+          if (stableEntries.size === 0) {
+            stderr.write(`${DIM}  (none)${R}\n`);
+          } else {
+            for (const [slug, meta] of stableEntries) {
+              stderr.write(`  📌 ${slug}${DIM}  promoted: ${meta.promoted_at || '?'}${meta.manual ? ' (manual)' : ''}${R}\n`);
+            }
+          }
+          stderr.write(`\n${C}Adaptive (${adaptiveEntries.size}):${R}\n`);
+          if (adaptiveEntries.size === 0) {
+            stderr.write(`${DIM}  (none)${R}\n`);
+          } else {
+            for (const [slug, meta] of adaptiveEntries) {
+              const expired = meta.expired ? ` ${Y}[EXPIRED]${R}` : '';
+              stderr.write(`  🔄 ${slug}${DIM}  added: ${meta.added_at || '?'}${R}${expired}\n`);
+            }
+          }
+          stderr.write('\n');
+          return true;
+        }
+
+        case 'budget': {
+          const stats = getPromptStats();
+          if (!stats) {
+            stderr.write(`${Y}No prompt stats yet (run a turn first).${R}\n`);
+            return true;
+          }
+          stderr.write('\n' + formatBudgetStats(stats) + '\n\n');
+          return true;
+        }
+
+        case 'promote': {
+          if (!subArg) {
+            stderr.write(`${Y}Usage: /evolve promote <slug>${R}\n`);
+            return true;
+          }
+          const ok = promoteEntry(subArg);
+          stderr.write(ok
+            ? `${G}✅ Promoted "${subArg}" to stable.${R}\n`
+            : `${Y}⚠ "${subArg}" not found or already stable.${R}\n`);
+          return true;
+        }
+
+        case 'demote': {
+          if (!subArg) {
+            stderr.write(`${Y}Usage: /evolve demote <slug>${R}\n`);
+            return true;
+          }
+          const ok = demoteEntry(subArg);
+          stderr.write(ok
+            ? `${G}✅ Demoted "${subArg}" to adaptive.${R}\n`
+            : `${Y}⚠ "${subArg}" not found or not stable.${R}\n`);
+          return true;
+        }
+
+        case 'expire': {
+          if (!subArg) {
+            stderr.write(`${Y}Usage: /evolve expire <slug>${R}\n`);
+            return true;
+          }
+          const ok = expireEntry(subArg);
+          stderr.write(ok
+            ? `${G}✅ Expired "${subArg}".${R}\n`
+            : `${Y}⚠ "${subArg}" not found in adaptive entries.${R}\n`);
+          return true;
+        }
+
+        case 'conflicts': {
+          const { stable, adaptive } = loadEvolvedSplit();
+          if (!stable || !adaptive) {
+            stderr.write(`${DIM}No evolved content or only one layer present.${R}\n`);
+            return true;
+          }
+          const conflicts = detectConflicts(stable, adaptive);
+          if (conflicts.length === 0) {
+            stderr.write(`${G}✅ No conflicts detected between stable and adaptive.${R}\n`);
+          } else {
+            stderr.write(`\n${Y}⚠ ${conflicts.length} potential conflict(s):${R}\n\n`);
+            for (const c of conflicts) {
+              stderr.write(`  ${B}[${c.confidence}]${R} ${c.type}\n`);
+              stderr.write(`  ${G}Stable:${R}   ${c.stable}\n`);
+              stderr.write(`  ${Y}Adaptive:${R} ${c.adaptive}\n\n`);
+            }
+          }
+          return true;
+        }
+
+        case 'recompile': {
+          stderr.write(`${DIM}Recompiling evolved prompt from brain...${R}\n`);
+          try {
+            const { brainSearch } = await import('../brain/client.js');
+            const result = await compileEvolvedPrompt(brainSearch);
+            stderr.write(`${G}✅ Compiled v${result.version}: ${result.stableCount} stable, ${result.adaptiveCount} adaptive, +${result.added} -${result.removed} ⏰${result.expired} ⬆${result.promoted}${R}\n`);
+          } catch (err) {
+            stderr.write(`${Y}⚠ Compile failed: ${err.message}${R}\n`);
+          }
+          return true;
+        }
+
+        default:
+          stderr.write(`${Y}Unknown subcommand: ${subCmd}. Try: list, budget, promote, demote, expire, conflicts, recompile${R}\n`);
+          return true;
+      }
     }
 
     case 'tasks': {

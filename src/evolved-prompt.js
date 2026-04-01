@@ -370,7 +370,7 @@ function saveAdaptiveEntries(map) {
   writeFileSync(file, JSON.stringify(Object.fromEntries(map), null, 2), 'utf8');
 }
 
-// ─── Read (used by system-prompt.js evolvedSection) ─────────────────────────
+// ─── Read (used by system-prompt.js / prompt-governance.js) ─────────────────
 
 /**
  * Load and return the evolved directory path.
@@ -390,4 +390,145 @@ export function getEvolvedVersion() {
   } catch {
     return null;
   }
+}
+
+/**
+ * Load evolved content split by stable vs adaptive.
+ * Returns { stable: string|null, adaptive: string|null }
+ * Used by prompt-governance.js for separate priority levels.
+ */
+export function loadEvolvedSplit() {
+  if (!existsSync(EVOLVED_DIR)) return { stable: null, adaptive: null };
+
+  try {
+    const stableParts = [];
+    const adaptiveParts = [];
+
+    const files = ['domain-knowledge.md', 'error-recovery.md', 'task-patterns.md', 'user-preferences.md'];
+
+    for (const filename of files) {
+      const filePath = join(EVOLVED_DIR, filename);
+      if (!existsSync(filePath)) continue;
+
+      const content = readFileSync(filePath, 'utf8');
+      if (!content.trim()) continue;
+
+      // Split by ## Stable / ## Adaptive headers
+      const sections = content.split(/^## /m);
+      for (const section of sections) {
+        const trimmed = section.trim();
+        if (!trimmed) continue;
+
+        if (trimmed.startsWith('Stable')) {
+          const entries = trimmed.split('\n').slice(1).filter(l => l.trim().startsWith('-'));
+          if (entries.length > 0) {
+            const title = SECTION_TITLES[filename] || filename;
+            stableParts.push(`## ${title} (Stable)\n${entries.join('\n')}`);
+          }
+        } else if (trimmed.startsWith('Adaptive')) {
+          const entries = trimmed.split('\n').slice(1).filter(l => l.trim().startsWith('-'));
+          if (entries.length > 0) {
+            const title = SECTION_TITLES[filename] || filename;
+            adaptiveParts.push(`## ${title} (Adaptive)\n${entries.join('\n')}`);
+          }
+        }
+      }
+    }
+
+    return {
+      stable: stableParts.length > 0 ? stableParts.join('\n\n') : null,
+      adaptive: adaptiveParts.length > 0 ? adaptiveParts.join('\n\n') : null,
+    };
+  } catch {
+    return { stable: null, adaptive: null };
+  }
+}
+
+/**
+ * Load the evolved index (stable + adaptive metadata) for /evolve commands.
+ * Returns { stableEntries: Map, adaptiveEntries: Map, version: object|null }
+ */
+export function loadEvolvedIndex() {
+  return {
+    stableEntries: loadStableEntries(),
+    adaptiveEntries: loadAdaptiveEntries(),
+    version: getEvolvedVersion(),
+  };
+}
+
+/**
+ * Promote an adaptive entry to stable.
+ * @param {string} slug - Entry slug to promote
+ * @returns {boolean} Success
+ */
+export function promoteEntry(slug) {
+  const adaptive = loadAdaptiveEntries();
+  const stable = loadStableEntries();
+
+  if (stable.has(slug)) return false; // Already stable
+
+  stable.set(slug, { promoted_at: new Date().toISOString(), manual: true });
+  saveStableEntries(stable);
+
+  // Log the promotion
+  const logLine = JSON.stringify({
+    action: 'promote',
+    slug,
+    timestamp: new Date().toISOString(),
+    manual: true,
+  });
+  try {
+    appendFileSync(join(EVOLVED_DIR, '_evolution-log.jsonl'), logLine + '\n', 'utf8');
+  } catch { /* best effort */ }
+
+  return true;
+}
+
+/**
+ * Demote a stable entry back to adaptive.
+ * @param {string} slug - Entry slug to demote
+ * @returns {boolean} Success
+ */
+export function demoteEntry(slug) {
+  const stable = loadStableEntries();
+  if (!stable.has(slug)) return false;
+
+  stable.delete(slug);
+  saveStableEntries(stable);
+
+  const logLine = JSON.stringify({
+    action: 'demote',
+    slug,
+    timestamp: new Date().toISOString(),
+  });
+  try {
+    appendFileSync(join(EVOLVED_DIR, '_evolution-log.jsonl'), logLine + '\n', 'utf8');
+  } catch { /* best effort */ }
+
+  return true;
+}
+
+/**
+ * Expire an adaptive entry (mark as permanently expired).
+ * @param {string} slug - Entry slug to expire
+ * @returns {boolean} Success
+ */
+export function expireEntry(slug) {
+  const adaptive = loadAdaptiveEntries();
+  const entry = adaptive.get(slug);
+  if (!entry) return false;
+
+  adaptive.set(slug, { ...entry, expired: true });
+  saveAdaptiveEntries(adaptive);
+
+  const logLine = JSON.stringify({
+    action: 'expire',
+    slug,
+    timestamp: new Date().toISOString(),
+  });
+  try {
+    appendFileSync(join(EVOLVED_DIR, '_evolution-log.jsonl'), logLine + '\n', 'utf8');
+  } catch { /* best effort */ }
+
+  return true;
 }
