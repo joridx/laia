@@ -134,9 +134,9 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
-| 1 | **Memòria Tipada** — 4 tipus: user/feedback/project/reference | 🔲 TODO | Ref: CC `src/memdir/memoryTypes.ts` |
-| 2 | **Session Memory/Notes** — template 9 seccions | 🔲 TODO | Ref: CC `src/services/SessionMemory/` |
-| 3 | **Context Compaction** — auto-compact al ~80% amb prompt 9 seccions | 🔲 TODO | Ref: CC `src/services/compact/` |
+| 1 | **Memòria Tipada** — 4 tipus: user/feedback/project/reference | ✅ DONE | Ref: CC `src/memdir/memoryTypes.ts` |
+| 2 | **Session Memory/Notes** — template 9 seccions | ✅ DONE | Ref: CC `src/services/SessionMemory/` |
+| 3 | **Context Compaction** — auto-compact al ~80% amb prompt 9 seccions | ✅ DONE | Ref: CC `src/services/compact/` |
 
 ### Phase 3: Skills & Commands ⚡ (pendent)
 
