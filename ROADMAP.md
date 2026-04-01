@@ -88,19 +88,31 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 
 ---
 
-## 🧬 V4 — Brain Evolution (planificat 2026-03-31)
+## 🧬 V4 — Brain Evolution (revisat post-V5 2026-04-01)
 
 > Inspirat en anàlisi de [ghostwright/phantom](https://github.com/ghostwright/phantom).
-> Revisat amb GPT-5.3-Codex (1 ronda). Document complet: `docs/2026-03-31-brain-evolution-plan.md`
+> **Revisat post-V5:** Codex ha identificat solapaments significatius amb les implementacions V5.
+> Restructurat en 4 integration tracks en lloc dels 5 sprints originals.
 
-| Sprint | Feature | Effort | Status |
-|--------|---------|--------|--------|
-| 1 | **Procedural Memory** — type `procedure`, trigger_intents, steps, outcome tracking | 8h | 🔲 TODO |
-| 1 | **Golden Suite Lite** — `protected: true`, decay immunity, auto-promotion, contradiction detection | 6h | 🔲 TODO |
-| 2 | **Post-Session Reflection** — `brain_reflect_session` tool, confidence-gated auto-save, Codex safeguards | 14h | 🔲 TODO |
-| 3 | **Quality Scorecard** — composite score, sparkline trends, alerts in brain_health | 8h | 🔲 TODO |
-| 4 | **Evolved System Prompt** — `~/.claudia/evolved/`, compiled dual-layer (stable+adaptive), `/evolve` | 16h | 🔲 TODO |
-| Future | **Evaluation Harness** — replay corpus, rubrics, regression detection | 20h+ | 🔲 DEFERRED |
+### Overlap Analysis (V4 vs V5)
+
+| V4 Original | Coverage per V5 | Status Revisat |
+|-------------|:-:|----------------|
+| Procedural Memory | ~95% | brain ja suporta `procedure` type + trigger_intents + steps. Falta: outcome tracking adapter. |
+| Golden Suite Lite | ~90% | brain ja suporta `protected: true` + decay immunity. Falta: auto-promotion + contradiction detection. |
+| Post-Session Reflection | ~85% | V5 session-notes + compaction cobreixen captura. brain_reflect_session ja existeix. Falta: dedupe pipeline. |
+| Quality Scorecard | ~85% | brain_health ja existeix. Falta: wiring a /review, /debug, regression alerts. |
+| Evolved System Prompt | ~75% | evolved-prompt.js + 4 fitxers ja existeixen. V5 compaction + typed-memory cobreixen part adaptativa. Falta: `/evolve` command + precedence stack. |
+| Evaluation Harness | ~25% | V5 dóna building blocks (session notes, coordinator traces). Falta: replay format + rubrics. |
+
+### Revised Tracks (post-V5)
+
+| Track | Scope | Effort | Status |
+|-------|-------|--------|--------|
+| 1 | **Memory Unification** — Define single source of truth per class: procedures/learnings→brain, user prefs/references→typed-memory. Sync bridge rules. Staleness vs protected policy. | 1-2d | 🔲 TODO |
+| 2 | **Reflection Pipeline** — Session notes → brain_reflect → curated learnings (no dupes). Confidence-gated auto-save. Dedupe hash/id per session. | 0.5-1d | 🔲 TODO |
+| 3 | **Prompt/Context Governance** — Deterministic precedence: 1) Safety/core, 2) Evolved stable, 3) Task context, 4) Compacted/session (bounded). `/evolve` command. | 0.5-1d | 🔲 TODO |
+| 4 | **Evaluation Harness** — Deterministic replay from V5 artifacts + scorecard rubric + regression gates. | 2-3d | 🔲 DEFERRED |
 
 ---
 
@@ -169,11 +181,12 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | Mètrica | Valor |
 |---------|-------|
 | Tests | 155 test cases (11 files) |
-| Fitxers src/ | 38 (26 core + 11 tools + 1 shared pkg) |
+| Fitxers src/ | ~50 (30 core + 14 tools + 3 coordinator + 2 memory + 7 services + 1 skills) |
 | Tools LLM | 14 (read, write, edit, bash, glob, grep, brain×3, run_command, git×3, agent) |
-| Slash commands | 28 (session×6, config×5, git×3, files×3, agents×2, skills×1, system×8) |
-| LOC (src/) | ~5000 |
-| Skills | 36 (`~/.claude/skills/*/SKILL.md`) — compatible Claude Code + Claudia |
+| Slash commands | 31 (session×6, config×5, git×5, files×3, agents×4, skills×1, system×7) |
+| Bundled skills | 5 (/batch, /simplify, /verify, /init, /skillify) |
+| LOC (src/) | ~7200 |
+| Skills | 36 (`~/.laia/skills/*/SKILL.md`) + 5 bundled |
 | Dependències extra | 2 (`fast-glob`, `@modelcontextprotocol/sdk`) |
 | Node.js | 24+ (ESM) |
 
@@ -198,3 +211,4 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | 2026-03-22 | +1 | **Subagents V2b** — persistent agent memory (memoryPrefetch, brain.search/remember gating, auto-tag agent:<profile>). **V3 Skills System** planned. |
 | 2026-03-22 | +1 | **`/agents` command** — list, validate, show. **V2 ROADMAP COMPLETE** (6/6 items done in one session). |
 | 2026-04-01 | +1 | **Phase 1 Quick Wins** (Claude Code adoption) — `/commit`, `/review`, `/debug`, `/style`, `/tip`, output styles, contextual tips. Reviewed by Codex. |
+| 2026-04-01 | +8 | **V5 Claude Code Adoption — ALL 4 PHASES DONE.** Phase 2: compaction, typed memory, session notes. Phase 3: 5 bundled skills (/batch, /simplify, /verify, /init, /skillify). Phase 4: coordinator mode, background agents, mailbox. Refactor: src/ reorganized from phase dirs to domain dirs (services/, memory/, coordinator/, skills/). V4 roadmap revised post-V5 overlap analysis. 25 Codex review issues fixed (11 CRITICAL + 14 WARNING). |
