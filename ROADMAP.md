@@ -109,7 +109,7 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 
 | Track | Scope | Effort | Status |
 |-------|-------|--------|--------|
-| 1 | **Memory Unification** — Define single source of truth per class: procedures/learnings→brain, user prefs/references→typed-memory. Sync bridge rules. Staleness vs protected policy. | 1-2d | 🔲 TODO |
+| 1 | **Memory Unification** — ownership matrix, one-way bridge, unified view, sanitization | ✅ DONE |
 | 2 | **Reflection Pipeline** — Session notes → brain_reflect → curated learnings (no dupes). Confidence-gated auto-save. Dedupe hash/id per session. | 0.5-1d | 🔲 TODO |
 | 3 | **Prompt/Context Governance** — Deterministic precedence: 1) Safety/core, 2) Evolved stable, 3) Task context, 4) Compacted/session (bounded). `/evolve` command. | 0.5-1d | 🔲 TODO |
 | 4 | **Evaluation Harness** — Deterministic replay from V5 artifacts + scorecard rubric + regression gates. | 2-3d | 🔲 DEFERRED |
