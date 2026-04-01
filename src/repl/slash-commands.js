@@ -11,6 +11,7 @@ import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buil
 import { buildCompactionRequest, formatCompactSummary, applyCompaction } from '../phase2/compaction.js';
 import { MEMORY_TYPES, saveMemory, loadMemories, loadAllMemories } from '../phase2/typed-memory.js';
 import { createCoordinator } from '../phase4/coordinator.js';
+import { listBackgroundAgents, getBackgroundResult } from '../phase4/agent-enhancements.js';
 import { normalizeEffort } from '../config.js';
 import { saveSession, autoSave, loadSession, listSessions, forkSession as forkSessionFn } from '../session.js';
 import { loadProfile, listProfiles } from '../profiles.js';
@@ -43,6 +44,7 @@ export const COMMAND_META = {
   '/tip':        { desc: 'Show a random tip',               cat: 'system',   subs: [] },
   '/memory':     { desc: 'Typed memories (user/feedback/project/ref)',  cat: 'system', subs: ['list', 'add', 'types'] },
   '/coordinator': { desc: 'Toggle coordinator mode (4-phase)',  cat: 'agents',   subs: ['on', 'off', 'status'] },
+  '/tasks':       { desc: 'List/check background agents',     cat: 'agents',   subs: ['get'] },
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
   '/reflect':    { desc: 'Reflect on session (brain LLM)',  cat: 'system',   subs: ['auto'] },
@@ -699,6 +701,50 @@ export async function handleSlashCommand(input, session) {
         stderr.write(`\n${tip.content}\n\n`);
       } else {
         stderr.write('\x1b[2mNo tips available.\x1b[0m\n');
+      }
+      return true;
+    }
+
+    case 'tasks': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const C = '\x1b[36m';
+      const G = '\x1b[32m';
+      const RED = '\x1b[31m';
+      const Y = '\x1b[33m';
+
+      const sub = args?.trim();
+
+      if (sub?.startsWith('get ')) {
+        // /tasks get <taskId>
+        const taskId = sub.slice(4).trim();
+        const result = getBackgroundResult(taskId);
+        if (result.error) {
+          stderr.write(`${RED}${result.error}${R}\n`);
+        } else if (result.status === 'running') {
+          stderr.write(`${Y}Task ${taskId} still running: ${result.description}${R}\n`);
+        } else {
+          stderr.write(`\n${B}Result of ${taskId}:${R}\n`);
+          const raw = result.text || result.error || '';
+          const text = (typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2))
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ''); // Strip control chars
+          stderr.write(`${text.slice(0, 2000)}\n\n`);
+        }
+      } else {
+        // /tasks — list all
+        const tasks = listBackgroundAgents();
+        if (tasks.length === 0) {
+          stderr.write(`${DIM}No background agents. Use agent({ run_in_background: true }) to start one.${R}\n`);
+        } else {
+          stderr.write(`\n${B}Background Agents (${tasks.length}):${R}\n\n`);
+          for (const t of tasks) {
+            const dur = (t.durationMs / 1000).toFixed(1);
+            const icon = t.status === 'completed' ? `${G}✅` : t.status === 'failed' ? `${RED}❌` : `${Y}⏳`;
+            stderr.write(`  ${icon} ${B}${t.taskId}${R} ${DIM}${t.description}${R} [${t.status}] ${DIM}${dur}s${R}\n`);
+          }
+          stderr.write(`\n${DIM}Use /tasks get <taskId> to see result.${R}\n\n`);
+        }
       }
       return true;
     }

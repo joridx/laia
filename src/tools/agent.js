@@ -11,6 +11,7 @@ import { buildWorkerSystemPrompt } from '../system-prompt.js';
 import { executeTool, getToolSchemas, getToolNames, registerTool } from './index.js';
 import { createPermissionContext } from '../permissions.js';
 import { loadProfile, resolveToolSet } from '../profiles.js';
+import { runInBackground, getEnhancedAgentParams } from '../phase4/agent-enhancements.js';
 
 const MAX_FILE_BYTES = 100_000;
 const MAX_TOTAL_BYTES = 500_000;
@@ -23,7 +24,13 @@ let workerCounter = 0;
 export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIMEOUT_MS, maxDepth = DEFAULT_MAX_DEPTH } = {}) {
   const runAgentTurnFn = _runAgentTurn ?? _runAgentTurnDefault;
 
-  async function execute({ prompt, files = [], model, timeout, allowedTools, profile: profileName, _depth = 0, _signal } = {}) {
+  async function execute({ prompt, files = [], model, timeout, allowedTools, profile: profileName, description, run_in_background, _depth = 0, _signal } = {}) {
+    // Background mode: fire-and-forget, return task ID
+    // CRITICAL: do NOT propagate _signal — background agents must survive parent abort
+    if (run_in_background) {
+      return runInBackground(execute, { prompt, files, model, timeout, allowedTools, profile: profileName, description, _depth });
+    }
+
     // Recursion guard
     if (_depth >= maxDepth) {
       return { success: false, error: `max recursion depth (${maxDepth}) exceeded`, workerId: 'blocked' };
@@ -189,6 +196,8 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
     }
   }
 
+  const enhancedParams = getEnhancedAgentParams();
+
   const schema = {
     type: 'function',
     name: 'agent',
@@ -197,6 +206,7 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
       type: 'object',
       properties: {
         prompt: { type: 'string', description: 'Task description and instructions for the worker' },
+        description: enhancedParams.description,
         profile: { type: 'string', description: 'Named agent profile from ~/.laia/agents/<name>.yml (overrides model, tools, timeout, prompt)' },
         files: {
           type: 'array',
@@ -210,6 +220,7 @@ export function createAgentTool({ config, _runAgentTurn, timeoutMs = DEFAULT_TIM
           items: { type: 'string' },
           description: 'Restrict worker to these tools only (optional, default: all tools). Example: ["read","grep","glob"] for read-only worker.',
         },
+        run_in_background: enhancedParams.run_in_background,
       },
       required: ['prompt'],
       additionalProperties: false,
