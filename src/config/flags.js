@@ -19,6 +19,7 @@ const DEFAULTS = {
   // V5 Sprint 2 (prepared, off by default)
   skill_hot_reload: false,        // Chokidar watcher for skills
   skill_auto_improvement: false,  // LLM side-channel skill improvement
+  skillify_enabled: true,         // /skillify command
 
   // V5 Sprint 3
   memory_rerank: 'auto',          // off | auto | always

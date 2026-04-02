@@ -56,6 +56,7 @@ export const COMMAND_META = {
   '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
   '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
   '/flags':      { desc: 'View/set feature flags',         cat: 'config',   subs: ['set'] },
+  '/skillify':   { desc: 'Capture session as reusable skill', cat: 'skills',   subs: ['--force'] },
   '/init':       { desc: 'Generate LAIA.md for project',   cat: 'system',   subs: ['--force', '--dry-run'] },
   '/reflect':    { desc: 'Reflect on session (brain LLM)',  cat: 'system',   subs: ['auto'] },
   '/exit':       { desc: 'Exit LAIA',                      cat: 'system',   subs: [] },
@@ -1030,6 +1031,42 @@ export async function handleSlashCommand(input, session) {
         } else {
           stderr.write(`\x1b[33mUnknown subcommand '${sub}'. Try: /memory list, /memory add, /memory types, /memory <type>${R}\n`);
         }
+      }
+      return true;
+    }
+
+    case 'skillify': {
+      const { buildSkillifyPrompt, extractUserMessages, getSkillifyBanner } = await import('../skills/skillify.js');
+      const { getRecentMessages } = await import('../skills/improvement.js');
+
+      // Gather user messages from session context + improvement ring buffer
+      let userMsgs = extractUserMessages(context);
+      if (userMsgs.length === 0) {
+        // Fallback: use the improvement module's recent messages ring buffer
+        userMsgs = getRecentMessages();
+      }
+
+      // Show banner
+      stderr.write(getSkillifyBanner(userMsgs.length));
+
+      // Build dynamic prompt with session context injected
+      const description = args || '';
+      const skillifyPrompt = buildSkillifyPrompt({ userMessages: userMsgs, description });
+
+      try {
+        const result = await executeTurn({
+          input: skillifyPrompt,
+          config,
+          logger,
+          context,
+          undoStack,
+          autoCommitter,
+          planMode: planCtrl.getPlanMode?.(),
+          effort: effortCtrl.getEffort?.(),
+        });
+        return { handled: true, turnResult: result };
+      } catch (err) {
+        stderr.write(`\x1b[31mError in /skillify: ${err.message}\x1b[0m\n`);
       }
       return true;
     }

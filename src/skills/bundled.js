@@ -150,58 +150,57 @@ Generate a LAIA.md file for this project based on codebase analysis.
 `;
 
 // ─── /skillify — Capture session as a skill ──────────────────────────────────
+// NOTE: skillify uses a dynamic prompt built at invocation time via
+// src/skills/skillify.js, which injects session messages and user description.
+// The static SKILLIFY_PROMPT below is the FALLBACK when no session context
+// is available (e.g. fresh session with 0 turns).
 
-const SKILLIFY_PROMPT = `# Skillify: Capture This Session as a Reusable Skill
+const SKILLIFY_PROMPT = `# Skillify: Capture a Workflow as a Reusable Skill
 
-You are capturing this session's repeatable process as a reusable SKILL.md file.
+You are creating a new reusable LAIA skill.
 
-## Steps
+Since there is no session context yet, interview the user to understand:
+1. What process/workflow they want to automate
+2. What the inputs and steps are
+3. What the success criteria are
+4. Where to save it (personal ~/.laia/skills/ or project laia-skills/)
 
-### 1. Analyze the Session
-Identify:
-- What repeatable process was performed
-- What the inputs/parameters were
-- The distinct steps (in order)
-- Success criteria for each step
-- Where the user corrected or steered you
-- What tools and permissions were needed
+Then generate a SKILL.md with frontmatter and write it to disk.
 
-### 2. Interview the User
-Ask about:
-- Skill name and description
-- Whether any steps should be confirmed before proceeding
-- Where to save: project (.laia/skills/) or personal (~/.laia/skills/)
-- Any additional rules or constraints
-
-### 3. Write SKILL.md
+Use this format:
 
 \`\`\`markdown
 ---
-name: <skill-name>
+name: <kebab-case-name>
 description: <one-line description>
 schema: 1
 invocation: user
+context: main
 arguments: true
-argument-hint: "<hint>"
+argument-hint: "<what to pass>"
 allowed-tools: [<tools needed>]
+intent-keywords: [<keywords for auto-invoke>]
 ---
 
-# <Skill Title>
+# <Skill Name>
 
 ## Goal
-<what this skill achieves>
+<What this skill achieves and when to use it>
 
 ## Steps
 
 ### 1. <Step Name>
-<what to do>
-**Success criteria**: <how to know it's done>
+<Detailed instructions>
+**Success:** <How to verify this step succeeded>
 
-### 2. ...
+### 2. <Step Name>
+...
+
+## Notes
+- <Edge cases, warnings, preferences>
 \`\`\`
 
-### 4. Save and Confirm
-Write the file, tell the user how to invoke it: \`/<skill-name> [arguments]\`
+After writing, confirm and remind the user to invoke with \`/<name>\`.
 `;
 
 // ─── Registration ────────────────────────────────────────────────────────────

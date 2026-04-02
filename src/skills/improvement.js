@@ -196,6 +196,14 @@ function parseAnalysisResponse(response) {
 
 // ─── Reset (for tests) ─────────────────────────────────────────────────────
 
+/**
+ * Get a copy of recent user messages (for skillify and other consumers).
+ * @returns {string[]}
+ */
+export function getRecentMessages() {
+  return [..._recentMessages];
+}
+
 export function _reset() {
   _messageCount = 0;
   _recentMessages = [];
