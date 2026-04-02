@@ -115,11 +115,11 @@ fi
 # Default models per provider
 case "$PROVIDER" in
     copilot)
-        MODEL="${MODEL:-claude-sonnet-4-20250514}"
+        MODEL="${MODEL:-claude-opus-4.6}"
         KEY_VAR="COPILOT"
         ;;
     anthropic)
-        MODEL="${MODEL:-claude-sonnet-4-20250514}"
+        MODEL="${MODEL:-claude-opus-4.6}"
         KEY_VAR="ANTHROPIC_API_KEY"
         ;;
     openai)

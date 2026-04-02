@@ -58,7 +58,7 @@ echo "[6/6] Testing connection..."
 RESULT=$(BRAIN_EMBEDDINGS_ENABLED=false node -e "
 import {detectProvider,isProviderAvailable} from '$HOME/laia/packages/providers/src/providers.js';
 import {getCopilotToken} from '$HOME/laia/src/auth.js';
-const d = detectProvider('claude-sonnet-4-20250514');
+const d = detectProvider('claude-opus-4.6');
 console.log('provider:', d.providerId);
 if (d.providerId !== 'copilot') { console.log('FAIL: expected copilot, got', d.providerId); process.exit(1); }
 const t = await getCopilotToken();
