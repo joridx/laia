@@ -28,8 +28,10 @@ MODEL="${2:-}"
 
 # ─── Step 1: Termux packages ─────────────────────────────────────────────────
 info "Step 1/8: Installing Termux packages..."
+# Use DEBIAN_FRONTEND to auto-accept config prompts (avoids stdin EOF errors)
+export DEBIAN_FRONTEND=noninteractive
 pkg update -y -q 2>/dev/null
-pkg upgrade -y -q 2>/dev/null
+pkg upgrade -y -o Dpkg::Options::="--force-confnew" 2>/dev/null
 pkg install -y git nodejs-lts python3 make 2>/dev/null
 ok "Base packages installed"
 
@@ -66,7 +68,9 @@ ok "LAIA source ready at ~/laia"
 
 # ─── Step 4: Install deps (skip native) ──────────────────────────────────────
 info "Step 4/8: Installing dependencies (skipping native modules)..."
-npm install --ignore-optional --ignore-scripts 2>&1 | tail -3
+# Termux reports os=android, but native optional deps only list linux/darwin/win32.
+# --force bypasses the os check; --ignore-optional skips native binaries entirely.
+npm install --ignore-optional --ignore-scripts --force 2>&1 | tail -5
 ok "Dependencies installed"
 
 # ─── Step 5: Config directory ─────────────────────────────────────────────────
