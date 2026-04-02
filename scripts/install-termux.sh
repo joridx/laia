@@ -97,21 +97,27 @@ if [ -z "$PROVIDER" ]; then
     echo ""
     echo "  Which provider do you want to use?"
     echo ""
-    echo "  1) Anthropic (Claude)     — recommended"
-    echo "  2) OpenAI (GPT)"
-    echo "  3) Google (Gemini)"
+    echo "  1) Copilot (GitHub)      — free with Copilot subscription"
+    echo "  2) Anthropic (Claude)"
+    echo "  3) OpenAI (GPT)"
+    echo "  4) Google (Gemini)"
     echo ""
     read -p "  Choice [1]: " CHOICE
     case "${CHOICE:-1}" in
-        1) PROVIDER="anthropic" ;;
-        2) PROVIDER="openai" ;;
-        3) PROVIDER="google" ;;
-        *) PROVIDER="anthropic" ;;
+        1) PROVIDER="copilot" ;;
+        2) PROVIDER="anthropic" ;;
+        3) PROVIDER="openai" ;;
+        4) PROVIDER="google" ;;
+        *) PROVIDER="copilot" ;;
     esac
 fi
 
 # Default models per provider
 case "$PROVIDER" in
+    copilot)
+        MODEL="${MODEL:-claude-sonnet-4-20250514}"
+        KEY_VAR="COPILOT"
+        ;;
     anthropic)
         MODEL="${MODEL:-claude-sonnet-4-20250514}"
         KEY_VAR="ANTHROPIC_API_KEY"
@@ -125,7 +131,7 @@ case "$PROVIDER" in
         KEY_VAR="GOOGLE_API_KEY"
         ;;
     *)
-        err "Unknown provider: $PROVIDER (use: anthropic, openai, google)"
+        err "Unknown provider: $PROVIDER (use: copilot, anthropic, openai, google)"
         ;;
 esac
 
@@ -138,21 +144,46 @@ cat > "$HOME/.laia/config.json" << CONF
 CONF
 ok "Provider: $PROVIDER, Model: $MODEL"
 
-# API Key
-EXISTING_KEY=$(eval echo "\${$KEY_VAR:-}")
-if [ -z "$EXISTING_KEY" ]; then
-    echo ""
-    read -sp "  Enter your $KEY_VAR: " API_KEY
-    echo ""
-    if [ -z "$API_KEY" ]; then
-        err "API key is required"
+# API Key — Copilot uses OAuth token from VS Code, others need manual key
+if [ "$KEY_VAR" = "COPILOT" ]; then
+    # Copilot: copy apps.json from PC or use GitHub device flow
+    COPILOT_DIR="$HOME/.config/github-copilot"
+    APPS_JSON="$COPILOT_DIR/apps.json"
+    if [ -f "$APPS_JSON" ]; then
+        ok "Copilot token found at $APPS_JSON"
+    else
+        mkdir -p "$COPILOT_DIR"
+        echo ""
+        warn "Copilot needs the OAuth token from your PC's VS Code."
+        echo ""
+        echo "  On your PC, run:"
+        echo "    cat ~/.config/github-copilot/apps.json"
+        echo ""
+        echo "  Then paste the full JSON content here (one line):"
+        echo ""
+        read -p "  apps.json content: " APPS_CONTENT
+        if [ -z "$APPS_CONTENT" ]; then
+            err "Copilot apps.json is required. Get it from your PC."
+        fi
+        echo "$APPS_CONTENT" > "$APPS_JSON"
+        ok "Copilot token saved to $APPS_JSON"
     fi
-    # Append to bashrc (not echoing the key)
-    echo "export $KEY_VAR=\"$API_KEY\"" >> "$HOME/.bashrc"
-    export "$KEY_VAR=$API_KEY"
-    ok "API key saved to ~/.bashrc"
 else
-    ok "API key already set ($KEY_VAR)"
+    EXISTING_KEY=$(eval echo "\${$KEY_VAR:-}")
+    if [ -z "$EXISTING_KEY" ]; then
+        echo ""
+        read -sp "  Enter your $KEY_VAR: " API_KEY
+        echo ""
+        if [ -z "$API_KEY" ]; then
+            err "API key is required"
+        fi
+        # Append to bashrc (not echoing the key)
+        echo "export $KEY_VAR=\"$API_KEY\"" >> "$HOME/.bashrc"
+        export "$KEY_VAR=$API_KEY"
+        ok "API key saved to ~/.bashrc"
+    else
+        ok "API key already set ($KEY_VAR)"
+    fi
 fi
 
 # ─── Step 7: Brain data ──────────────────────────────────────────────────────
