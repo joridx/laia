@@ -154,13 +154,14 @@ export function createRerankLlmCall(config) {
     const rerankModel = config.rerankModel || 'claude-haiku-4-20250414';
     const { providerId } = detectProvider(rerankModel);
     const provider = getProvider(providerId);
-    const baseUrl = provider.baseUrl;
-    const url = resolveUrl(baseUrl, '/chat/completions');
-    const headers = await buildAuthHeaders(providerId, rerankModel);
+    const { getProviderToken } = await import('../auth.js');
+    const token = await getProviderToken(providerId);
+    const url = resolveUrl(provider, '/chat/completions');
+    const headers = buildAuthHeaders(provider, token);
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers: { ...headers, ...provider.extraHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: rerankModel,
         messages: [{ role: 'user', content: prompt }],
