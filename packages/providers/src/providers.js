@@ -91,7 +91,12 @@ export const PROVIDERS = {
  * @param {string} [options.defaultProvider] - Fallback provider (default: 'copilot')
  * @returns {{ providerId: string, model: string }}
  */
-export function detectProvider(model, { defaultProvider } = {}) {
+export function detectProvider(model, { defaultProvider, forceProvider } = {}) {
+  // Force provider: skip all detection, use this provider directly
+  const forced = forceProvider || process.env.LAIA_FORCE_PROVIDER;
+  if (forced && PROVIDERS[forced]) {
+    return { providerId: forced, model: typeof model === 'string' ? model.replace(/^[a-z_]+:/, '') : model || '' };
+  }
   const fallback = defaultProvider || process.env.LAIA_DEFAULT_PROVIDER || 'copilot';
 
   if (typeof model !== 'string' || !model.trim()) {

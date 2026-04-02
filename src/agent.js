@@ -12,7 +12,7 @@ import { colorDiff } from './diff.js';
 const PLAN_MODE_EXCLUDED_TOOLS = ['write', 'edit', 'bash'];
 
 export function createClient(config) {
-  const { providerId } = detectProvider(config.model);
+  const { providerId } = detectProvider(config.model, { forceProvider: config.provider });
   return createLLMClient({
     getToken: () => getProviderToken(providerId),
     model: config.model,

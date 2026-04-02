@@ -6,10 +6,12 @@ set -e
 
 echo "=== LAIA Termux Fix ==="
 
-# 1. Remove stale ANTHROPIC_API_KEY from bashrc
-sed -i '/ANTHROPIC_API_KEY/d' ~/.bashrc 2>/dev/null || true
+# 1. Remove stale ANTHROPIC_API_KEY from ALL shell configs
+for f in ~/.bashrc ~/.bash_profile ~/.profile ~/.zshrc; do
+  sed -i '/ANTHROPIC_API_KEY/d' "$f" 2>/dev/null || true
+done
 unset ANTHROPIC_API_KEY
-echo "[1/6] Removed ANTHROPIC_API_KEY from bashrc ✓"
+echo "[1/6] Removed ANTHROPIC_API_KEY from all shell configs ✓"
 
 # 2. Ensure copilot apps.json exists
 COPILOT_DIR="$HOME/.config/github-copilot"
@@ -26,15 +28,16 @@ else
   echo "[2/6] apps.json already exists ✓"
 fi
 
-# 3. Ensure ~/.laia/config.json
+# 3. Ensure ~/.laia/config.json — FORCE copilot provider
 mkdir -p ~/.laia
 cat > ~/.laia/config.json << 'EOF'
 {
   "model": "claude-sonnet-4-20250514",
+  "provider": "copilot",
   "brainPath": "/data/data/com.termux/files/home/laia-data"
 }
 EOF
-echo "[3/6] Config written ✓"
+echo "[3/6] Config written (provider=copilot) ✓"
 
 # 4. Ensure flags (mobile-friendly)
 cat > ~/.laia/flags.json << 'EOF'
