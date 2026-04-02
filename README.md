@@ -18,7 +18,10 @@ Fork of [Claudia](https://github.developer.allianz.io/jordi-tribo/claudia) with 
 | **Quality** | No tracking | Composite scorecard (1-10) with sparkline trends and degradation alerts |
 | **Critical Knowledge** | Can be forgotten | Protected learnings immune to decay — auto-promoted when frequently accessed |
 | **Procedures** | Text blobs | Structured steps with trigger intents, preconditions, and success/failure tracking |
-| **Skills** | Manual invocation | Auto-invoke via keyword matching, project-level skills (`./laia-skills/`), context fork isolation |
+| **Skills** | Manual invocation | Auto-invoke via keyword matching, project-level skills (`./laia-skills/`), hot-reload with chokidar watcher |
+| **Planning** | Ad-hoc | Structured plan engine: plan → approve → execute step-by-step with per-step status |
+| **Extensibility** | Monolithic | 8-event hooks bus with feature flags, `/doctor` (13 checks), `/init` stack detection |
+| **Undo** | Single undo | `/undo --list` with diff stats, `/undo N` for multi-turn rewind |
 
 ---
 
@@ -37,7 +40,7 @@ node bin/laia.js
 node bin/laia.js -p "explain this codebase"
 
 # Run tests
-npm test  # 397 tests, 84 suites
+npm test  # 424 tests, 84 suites
 ```
 
 ### Requirements
@@ -146,7 +149,7 @@ laia/
 │   ├── skills/              # Skill loader, intent matcher (auto-invoke)
 │   ├── brain/client.js      # Brain MCP client (timeout, reconnect)
 │   ├── repl/turn-runner.js  # Modular turn execution
-│   └── ... (~65 files, ~12K LOC)
+│   └── ... (~65 files, ~14.4K LOC)
 ├── packages/brain/          # Brain MCP server
 │   ├── database.js          # SQLite schema v4
 │   ├── scoring.js           # 11-pass scoring engine
@@ -154,7 +157,7 @@ laia/
 │   ├── reflection-llm.js    # LLM bridge for reflection
 │   ├── tools/               # 16 brain tools
 │   └── ...
-├── tests/                   # 397 tests, 84 suites
+├── tests/                   # 424 tests, 84 suites
 └── docs/                    # Architecture, worker trust, evolution plan
 ```
 
@@ -164,7 +167,15 @@ laia/
 
 LAIA started as a fork of **Claudia** — a corporate CLI agent for Allianz — with the goal of adding self-evolution capabilities inspired by [ghostwright/phantom](https://github.com/ghostwright/phantom).
 
-The V4 Brain Evolution (Tracks 1-3) plus V5 Claude Code Adoption (4 phases) were designed collaboratively between Claude Opus 4.6 and GPT-5.3-Codex, reviewed bidirectionally, and implemented across multiple sessions (~2500 LOC, 15+ Codex criticals found and fixed).
+The V4 Brain Evolution (Tracks 1-3) plus V5–V6 were designed collaboratively between Claude Opus 4.6 and GPT-5.3-Codex, reviewed bidirectionally, and implemented across multiple sessions (~4900 LOC, 15+ Codex criticals found and fixed).
+
+### Version Highlights
+
+| Version | Date | Key additions |
+|---------|------|---------------|
+| **V4** | 2026-03 | Brain evolution: 3-system memory, reflection, evolved prompt, quality scorecard |
+| **V5** | 2026-04-01 | 8-event hooks bus, feature flags, `/doctor` (13 checks), `/init` stack detection, LLM memory rerank, suggestions |
+| **V6** | 2026-04-02 | Structured plan engine, enhanced `/undo` (multi-turn rewind, diff stats), skill hot-reload |
 
 ---
 

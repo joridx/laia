@@ -19,14 +19,31 @@ export function loadMemoryFiles({ workspaceRoot } = {}) {
     ...(workspaceRoot ? [workspaceRoot] : []),
   ];
 
+  // Project-level: LAIA.md preferred, CLAUDE.md as fallback
+  const projectCandidates = [];
+  if (workspaceRoot) {
+    const laiaRoot = join(workspaceRoot, 'LAIA.md');
+    const laiaDot  = join(workspaceRoot, '.laia', 'LAIA.md');
+    const claudeRoot = join(workspaceRoot, 'CLAUDE.md');
+    if (existsSync(laiaRoot) || existsSync(laiaDot)) {
+      // Prefer LAIA.md when it exists
+      projectCandidates.push(
+        { path: laiaRoot, level: 'project' },
+        { path: laiaDot,  level: 'project' },
+      );
+    } else if (existsSync(claudeRoot)) {
+      // Fallback to CLAUDE.md (e.g. Claude Code projects)
+      projectCandidates.push(
+        { path: claudeRoot, level: 'project' },
+      );
+    }
+  }
+
   const candidates = [
     // User-level (lowest priority)
     { path: join(HOME, '.laia', 'LAIA.md'), level: 'user' },
-    // Project-level
-    ...(workspaceRoot ? [
-      { path: join(workspaceRoot, 'LAIA.md'), level: 'project' },
-      { path: join(workspaceRoot, '.laia', 'LAIA.md'), level: 'project' },
-    ] : []),
+    // Project-level (LAIA.md or CLAUDE.md fallback)
+    ...projectCandidates,
     // Managed policy (highest priority — corporate, immutable by agent)
     { path: join(HOME, '.laia', 'LAIA-managed.md'), level: 'managed' },
   ];

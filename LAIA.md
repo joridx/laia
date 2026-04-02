@@ -25,7 +25,7 @@
 - **Claudia** = agent CLI corporatiu (Allianz). Repo origin a GitHub Enterprise.
 - **LAIA** = fork personal públic amb focus en **self-evolution** del brain i l'agent.
 - El codi base és idèntic al moment del fork (v1.1.0, commit `ed36af9`).
-- LAIA ha divergit amb les features de V4 (Brain Evolution Plan) — 4 sprints completats.
+- LAIA ha divergit amb les features de V4 (Brain Evolution Plan), V5 (DX & Hooks) i V6 (Plan Engine).
 
 ### Remotes al repo local de Claudia
 
@@ -49,18 +49,22 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 | Brain/Memory | **`packages/brain/`** — MCP server integrat, SQLite FTS + embeddings 384d + knowledge graph |
 | Brain Data | **`joridx/laia-data`** — repo independent (`~/laia-data/`) |
 | Tools | 16 built-in (read, write, edit, bash, glob, grep, brain×5, run_command, git×3, agent) |
+| Slash Commands | 36 |
 | Skills | 36 (.md-based, compatible Claude Code) |
-| Tests | 287 cases, 57 suites |
-| LOC | ~5200 (src/) + ~14800 (packages/brain/) |
+| Tests | 424 cases |
+| LOC | ~7400 (src/) + ~14800 (packages/brain/) |
 | Dependencies | Minimal: `fast-glob`, `@modelcontextprotocol/sdk`, `yaml`, `@huggingface/transformers`, `zod` |
 
 ---
 
-## Roadmap V4 — Brain Evolution
+## Roadmap
 
-> Document complet: [`docs/2026-03-31-brain-evolution-plan.md`](docs/2026-03-31-brain-evolution-plan.md)
 > Inspirat per: [ghostwright/phantom](https://github.com/ghostwright/phantom) (self-evolution engine)
 > Revisat per: GPT-5.3-Codex + Claude Opus 4.6
+
+### V4 — Brain Evolution
+
+> Document complet: [`docs/2026-03-31-brain-evolution-plan.md`](docs/2026-03-31-brain-evolution-plan.md)
 
 | Sprint | Feature | Commits | Tests | Status |
 |--------|---------|---------|-------|--------|
@@ -69,7 +73,40 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 | **2** | **Post-Session Reflection** — `brain_reflect_session`, LLM-powered, confidence-gated, evidence grounding, anti-spam | 2 | 254 | ✅ Done |
 | **3** | **Quality Scorecard** — composite score (1-10), sparkline trends, alerts, `session_quality` SQLite table | 2 | 281 | ✅ Done |
 | **4** | **Evolved System Prompt** — `~/.laia/evolved/`, compiled dual-layer (Stable + Adaptive), auto-expiry | 2 | 287 | ✅ Done |
-| **Future** | **Evaluation Harness** — replay corpus, rubrics, regression detection | — | — | 🔲 Deferred (needs 50+ sessions) |
+
+### V5 — DX & Hooks (2026-04-01)
+
+11 new files, ~1900 LOC, 22 Codex-reviewed fixes.
+
+| Feature | Description |
+|---------|-------------|
+| **Hooks Bus** | 8 lifecycle events (session:start, session:end, turn:before, turn:after, tool:before, tool:after, error, command) |
+| **/doctor** | 13 diagnostic checks (runtime, providers, brain, config, permissions…) |
+| **Feature Flags** | `~/.laia/flags.json` — toggle features without code changes |
+| **/init** | Stack detection + auto-scaffold LAIA.md per project |
+| **@include directive** | Compose skills/prompts from fragments |
+| **Skill Hot-Reload** | Edit .md skills without restart |
+| **Memory Rerank** | Re-score brain_search results with context-aware reranking |
+| **Away Summary** | Catch-up digest after idle period |
+| **Skill Auto-Improvement** | Track skill usage patterns, suggest refinements |
+| **Magic Docs** | Auto-generate context docs from codebase analysis |
+| **Contextual Suggestions** | Proactive next-step suggestions based on session state |
+
+### V6 — Plan Engine & Rewind (2026-04-02)
+
+~500 LOC, 9 Codex-reviewed fixes.
+
+| Feature | Description |
+|---------|-------------|
+| **Plan-Approve-Execute** | Structured JSON artifacts with SHA-256 hash versioning; user approves before execution |
+| **Enhanced Rewind** | `/undo --list`, `/undo N`, 25-turn history, diff stats per undo |
+| **Security Hardening** | `relative()` path prefix-attack defense, Codex-reviewed all new surfaces |
+
+### Future
+
+| Feature | Status |
+|---------|--------|
+| **Evaluation Harness** — replay corpus, rubrics, regression detection | 🔲 Deferred (needs 50+ sessions) |
 
 **All 4 sprints + all post-sprint tasks completed** on 2026-03-31. Ported to Claudia production same day.
 
@@ -96,13 +133,13 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 
 ---
 
-## V4 Architecture
+## Architecture (V4–V6)
 
 ```
 ┌────────────────────────────────────────────────┐
 │                  LAIA Agent                     │
 │                                                 │
-│  system-prompt.js (composable, 10 sections)     │
+│  system-prompt.js (composable, 12 sections)      │
 │    └── evolvedSection() ← ~/.laia/evolved/      │
 │         ├── user-preferences.md                 │
 │         ├── task-patterns.md                    │
@@ -119,6 +156,12 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 │    brainReflectSession()                        │
 │    brainCompileEvolved()                        │
 │    brainLogSession() + quality scorecard        │
+│                                                 │
+│  hooks.js (V5) — 8 lifecycle events             │
+│  flags.js (V5) — feature flag registry          │
+│  plan-engine.js (V6) — Plan-Approve-Execute     │
+│    JSON artifacts, SHA-256 hash versioning      │
+│  rewind.js (V6) — /undo with 25-turn history    │
 └─────────────┬──────────────────────────────────┘
               │ MCP (stdio)
 ┌─────────────┴──────────────────────────────────┐
@@ -164,6 +207,12 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 | 5-gate enterprise governance | ❌ | Complexitat innecessària |
 | Dynamic tool creation (MCP runtime) | ❌ | Skills .md ja cobreixen el cas d'ús |
 
+### V6 Plan Engine
+
+- Plan artifacts are **structured JSON** with SHA-256 hash versioning — deterministic, diffable, auditable.
+- `/undo` uses `path.relative()` prefix check to defend against path traversal / prefix attacks.
+- **All V5+V6 new code** was Codex-reviewed for security (22 fixes in V5, 9 in V6).
+
 ---
 
 ## Rebranding Status
@@ -193,3 +242,5 @@ El clone independent a `/home/yuri/laia/` treballa directament contra el remote 
 | 2026-03-31 | Port V4 complet a Claudia producció (brain server + agent) |
 | 2026-03-31 | C1 `/reflect` command + C3 brain_health evolved stats |
 | 2026-03-31 | Housekeeping: LAIA.md + README.md actualitzats |
+| 2026-04-01 | **V5 complete** — 11 new files, ~1900 LOC, hooks/flags/doctor/init/rerank/suggestions, 22 Codex-reviewed fixes |
+| 2026-04-02 | **V6 Sprint 1+2** — Plan-Approve-Execute engine, enhanced rewind (`/undo --list`, `/undo N`), Codex security review (9 fixes) |

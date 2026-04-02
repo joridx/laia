@@ -147,25 +147,25 @@ describe('createUndoStack', () => {
     assert.equal(undo.depth, 0);
   });
 
-  it('respects MAX_TURNS limit (10)', () => {
+  it('respects maxTurns limit (default 25)', () => {
     const file = join(dir, 'test.txt');
     writeFileSync(file, 'v0');
 
-    for (let i = 1; i <= 15; i++) {
+    for (let i = 1; i <= 30; i++) {
       undo.startTurn();
       undo.trackFile(file);
       writeFileSync(file, `v${i}`);
       undo.commitTurn();
     }
 
-    // Only last 10 turns kept
-    assert.equal(undo.depth, 10);
+    // Only last 25 turns kept
+    assert.equal(undo.depth, 25);
 
-    // Undo all 10
-    for (let i = 0; i < 10; i++) undo.undo();
+    // Undo all 25
+    for (let i = 0; i < 25; i++) undo.undo();
     assert.equal(undo.depth, 0);
 
-    // File should be at v5 (v15 - 10 undos = v5)
+    // File should be at v5 (v30 - 25 undos = v5)
     assert.equal(readFileSync(file, 'utf8'), 'v5');
   });
 

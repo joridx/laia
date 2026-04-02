@@ -21,6 +21,7 @@ import { executeTurn } from './turn-runner.js';
 import { loadEvolvedIndex, loadEvolvedSplit, promoteEntry, demoteEntry, expireEntry, compileEvolvedPrompt, getEvolvedVersion } from '../evolved-prompt.js';
 import { formatBudgetStats, detectConflicts } from '../memory/prompt-governance.js';
 import { getPromptStats } from '../system-prompt.js';
+import { createPlanEngine, displayPlan, displayProgress } from '../services/plan-engine.js';
 
 // --- Command metadata for autocomplete + help ---
 export const COMMAND_META = {
@@ -32,7 +33,8 @@ export const COMMAND_META = {
   '/compact':    { desc: 'Compact history',                cat: 'session',  subs: [] },
   '/model':      { desc: 'Change model',                   cat: 'config',   subs: ['auto'] },
   '/effort':     { desc: 'Set reasoning effort',           cat: 'config',   subs: ['low', 'medium', 'high', 'max'] },
-  '/plan':       { desc: 'Read-only mode (no writes)',     cat: 'config',   subs: [] },
+  '/plan':       { desc: 'Plan mode (generate structured plan)', cat: 'config', subs: ['show', 'edit', 'discard'] },
+  '/approve':    { desc: 'Approve and execute plan',       cat: 'config',   subs: [] },
   '/execute':    { desc: 'Back to normal mode',            cat: 'config',   subs: [] },
   '/tokens':     { desc: 'Token usage & context stats',    cat: 'config',   subs: [] },
   '/attach':     { desc: 'Attach file to context',         cat: 'files',    subs: [] },
@@ -53,7 +55,7 @@ export const COMMAND_META = {
   '/coordinator': { desc: 'Toggle coordinator mode (4-phase)',  cat: 'agents',   subs: ['on', 'off', 'status'] },
   '/tasks':       { desc: 'List/check background agents',     cat: 'agents',   subs: ['get'] },
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
-  '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
+  '/undo':       { desc: 'Revert changes (--list, N)',     cat: 'system',   subs: ['--list', '-l'] },
   '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
   '/flags':      { desc: 'View/set feature flags',         cat: 'config',   subs: ['set'] },
   '/skillify':   { desc: 'Capture session as reusable skill', cat: 'skills',   subs: ['--force'] },
@@ -87,7 +89,7 @@ export function formatTokenCount(n) {
  * @param {object} session - Session state bundle
  */
 export async function handleSlashCommand(input, session) {
-  const { config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, planCtrl, effortCtrl, sessionTokens } = session;
+  const { config, logger, context, fileCommands, attachManager, autoCommitter, undoStack, planCtrl, effortCtrl, sessionTokens, planEngine } = session;
 
   const spaceIdx = input.indexOf(' ');
   const name = (spaceIdx === -1 ? input.slice(1) : input.slice(1, spaceIdx)).toLowerCase();
@@ -305,11 +307,159 @@ export async function handleSlashCommand(input, session) {
     }
 
     case 'plan': {
-      if (planCtrl.getPlanMode?.()) {
-        stderr.write('\x1b[33mAlready in plan mode. Use /execute to switch back.\x1b[0m\n');
-      } else {
+      const normalizedArgs = String(args ?? '').trim();
+      const sub = normalizedArgs.length ? normalizedArgs.split(/\s+/)[0].toLowerCase() : '';
+
+      // /plan show — display current plan
+      if (sub === 'show') {
+        displayPlan(planEngine?.getPlan());
+        return true;
+      }
+
+      // /plan discard — discard active plan
+      if (sub === 'discard') {
+        if (planEngine?.discard()) {
+          stderr.write('\x1b[33m🗑️  Plan discarded.\x1b[0m\n');
+        } else {
+          stderr.write('\x1b[33mNo active plan to discard.\x1b[0m\n');
+        }
+        return true;
+      }
+
+      // /plan edit <text> — re-generate plan with modifications
+      if (sub === 'edit') {
+        if (!planEngine?.getPlan()) {
+          stderr.write('\x1b[33mNo active plan. Use /plan <prompt> to create one.\x1b[0m\n');
+          return true;
+        }
+        const editPrompt = args.slice(4).trim();
+        if (!editPrompt) {
+          stderr.write('\x1b[33mUsage: /plan edit <what to change>\x1b[0m\n');
+          return true;
+        }
+        const currentPlan = planEngine.getPlan();
+        const modifyInput = `Modify the following plan based on this request: "${editPrompt}"\n\nCurrent plan:\n${currentPlan.rawSource}\n\nOutput the full modified plan in the same JSON format.`;
         planCtrl.setPlanMode?.(true);
-        stderr.write('\x1b[33m🔒 Plan mode ON — read-only (write/edit/bash disabled)\x1b[0m\n');
+        const editResult = await executeTurn({
+          input: modifyInput, config, logger, context, undoStack, autoCommitter,
+          planMode: true, effort: null,
+        });
+        if (editResult?.text) {
+          const newPlan = planEngine.setPlan(editResult.text, currentPlan.title);
+          newPlan.version = currentPlan.version + 1;
+          stderr.write(`\x1b[32m📋 Plan updated to v${newPlan.version} (hash: ${newPlan.hash})\x1b[0m\n`);
+          displayPlan(newPlan);
+        }
+        planCtrl.setPlanMode?.(false);
+        return true;
+      }
+
+      // /plan (no args) — toggle read-only mode
+      if (!normalizedArgs) {
+        if (planCtrl.getPlanMode?.()) {
+          stderr.write('\x1b[33mAlready in plan mode. Use /execute to switch back.\x1b[0m\n');
+        } else {
+          planCtrl.setPlanMode?.(true);
+          stderr.write('\x1b[33m🔒 Plan mode ON — read-only (write/edit/bash disabled)\x1b[0m\n');
+        }
+        return true;
+      }
+
+      // /plan <prompt> — generate a structured plan
+      planCtrl.setPlanMode?.(true);
+      stderr.write('\x1b[33m🔒 Plan mode — generating structured plan...\x1b[0m\n');
+      const planResult = await executeTurn({
+        input: `Create a structured plan for: ${normalizedArgs}`, config, logger, context, undoStack, autoCommitter,
+        planMode: true, effort: null,
+      });
+      if (planResult?.text) {
+        const plan = planEngine?.setPlan(planResult.text, normalizedArgs);
+        if (plan) {
+          stderr.write('\n');
+          displayPlan(plan);
+        }
+      }
+      planCtrl.setPlanMode?.(false);
+      return true;
+    }
+
+    case 'approve': {
+      if (!planEngine?.getPlan()) {
+        stderr.write('\x1b[33mNo active plan. Use /plan <prompt> to create one.\x1b[0m\n');
+        return true;
+      }
+
+      const plan = planEngine.getPlan();
+      if (plan.status === 'done') {
+        stderr.write('\x1b[33mPlan already completed.\x1b[0m\n');
+        return true;
+      }
+      if (plan.status === 'executing') {
+        stderr.write('\x1b[33mPlan is already executing.\x1b[0m\n');
+        return true;
+      }
+
+      // Parse step range: /approve 1-3, /approve 2,4,5, /approve (all)
+      let stepIds = null;
+      if (args) {
+        stepIds = [];
+        for (const part of args.split(/[,\s]+/)) {
+          const range = part.match(/^(\d+)-(\d+)$/);
+          if (range) {
+            const start = parseInt(range[1], 10);
+            const end = parseInt(range[2], 10);
+            for (let i = start; i <= end; i++) stepIds.push(i);
+          } else if (/^\d+$/.test(part)) {
+            stepIds.push(parseInt(part, 10));
+          }
+        }
+        if (stepIds.length === 0) stepIds = null;
+      }
+
+      const result = planEngine.approve(stepIds);
+      if (result.error) {
+        stderr.write(`\x1b[33m${result.error}\x1b[0m\n`);
+        return true;
+      }
+
+      stderr.write(`\x1b[32m✅ Plan approved! Executing ${stepIds ? stepIds.length + ' steps' : 'all steps'}...\x1b[0m\n\n`);
+
+      // Execute steps sequentially
+      let step;
+      while ((step = planEngine.nextStep()) !== null) {
+        planEngine.startStep(step.id);
+        displayProgress(planEngine.getPlan());
+        stderr.write('\n');
+
+        const stepPrompt = planEngine.buildStepPrompt(step.id);
+        try {
+          const stepResult = await executeTurn({
+            input: stepPrompt, config, logger, context, undoStack, autoCommitter,
+            planMode: false, effort: null,
+          });
+
+          if (stepResult?.text) {
+            planEngine.completeStep(step.id);
+          } else {
+            planEngine.failStep(step.id, 'Empty response');
+            stderr.write(`\x1b[33m⚠️  Step ${step.id} failed. Continue? (use /approve to retry remaining)\x1b[0m\n`);
+            break;
+          }
+        } catch (err) {
+          planEngine.failStep(step.id, err.message?.slice(0, 100) || 'Unknown error');
+          stderr.write(`\x1b[31m❌ Step ${step.id} failed: ${err.message?.slice(0, 80)}\x1b[0m\n`);
+          break;
+        }
+      }
+
+      // Final summary
+      stderr.write('\n');
+      displayProgress(planEngine.getPlan());
+      const progress = planEngine.getProgress();
+      if (progress.failed > 0) {
+        stderr.write(`\n\x1b[33m⚠️  ${progress.done}/${progress.total} steps completed, ${progress.failed} failed.\x1b[0m\n`);
+      } else {
+        stderr.write(`\n\x1b[32m🎉 Plan completed! ${progress.done}/${progress.total} steps done.\x1b[0m\n`);
       }
       return true;
     }
@@ -475,21 +625,68 @@ export async function handleSlashCommand(input, session) {
         stderr.write('\x1b[33mNothing to undo\x1b[0m\n');
         return true;
       }
+
+      const undoArgs = String(args ?? '').trim();
+      const { relative: relPath } = await import('path');
+      const rel = (f) => relPath(config.workspaceRoot, f).split('\\').join('/');
+
+      // /undo --list — show all turns with diff stats
+      if (undoArgs === '--list' || undoArgs === '-l' || undoArgs === 'list') {
+        const turns = undoStack.list();
+        stderr.write(`\x1b[1m↩️  Undo history (${turns.length} turn${turns.length !== 1 ? 's' : ''}, max ${undoStack.maxTurns})\x1b[0m\n\n`);
+        for (const turn of turns) {
+          const ago = Math.round((Date.now() - turn.timestamp) / 1000);
+          const timeStr = ago < 60 ? `${ago}s ago` : ago < 3600 ? `${Math.round(ago / 60)}m ago` : `${Math.round(ago / 3600)}h ago`;
+          const totalAdd = turn.files.reduce((s, f) => s + f.additions, 0);
+          const totalDel = turn.files.reduce((s, f) => s + f.deletions, 0);
+          stderr.write(`  \x1b[1m#${turn.index}\x1b[0m  \x1b[2m${timeStr}\x1b[0m  \x1b[32m+${totalAdd}\x1b[0m/\x1b[31m-${totalDel}\x1b[0m  (${turn.files.length} file${turn.files.length !== 1 ? 's' : ''})\n`);
+          for (const file of turn.files) {
+            const stats = file.additions || file.deletions ? ` \x1b[32m+${file.additions}\x1b[0m/\x1b[31m-${file.deletions}\x1b[0m` : '';
+            stderr.write(`     ${file.path}${stats}\n`);
+          }
+        }
+        stderr.write(`\n\x1b[2mUsage: /undo (last), /undo N (undo N turns), /undo --list\x1b[0m\n`);
+        return true;
+      }
+
+      // /undo N — undo N turns from the top
+      const num = parseInt(undoArgs, 10);
+      if (!isNaN(num) && num > 0) {
+        const target = Math.min(num, undoStack.depth);
+        const result = undoStack.undoTo(target);
+        if (!result) {
+          stderr.write('\x1b[33mInvalid undo target.\x1b[0m\n');
+          return true;
+        }
+        stderr.write(`\x1b[33m↩️  Undid ${result.turnsUndone} turn${result.turnsUndone !== 1 ? 's' : ''}\x1b[0m\n`);
+        if (result.restored.length) {
+          stderr.write(`\x1b[32m✓ Restored: ${result.restored.map(rel).join(', ')}\x1b[0m\n`);
+        }
+        if (result.deleted.length) {
+          stderr.write(`\x1b[32m✓ Deleted (were new): ${result.deleted.map(rel).join(', ')}\x1b[0m\n`);
+        }
+        if (result.conflicts.length) {
+          stderr.write(`\x1b[33m⚠️  Conflicts: ${result.conflicts.map(rel).join(', ')}\x1b[0m\n`);
+        }
+        stderr.write(`\x1b[2m[${undoStack.depth} more undo${undoStack.depth !== 1 ? 's' : ''} available]\x1b[0m\n`);
+        return true;
+      }
+
+      // /undo — undo last turn (original behavior)
       const files = undoStack.peek();
-      const { relative } = await import('path');
       stderr.write(`\x1b[33m↩️  Undo last turn (${files.length} file${files.length > 1 ? 's' : ''}):\x1b[0m\n`);
       for (const f of files) {
-        stderr.write(`  ${relative(config.workspaceRoot, f).split('\\').join('/')}\n`);
+        stderr.write(`  ${rel(f)}\n`);
       }
       const result = undoStack.undo();
       if (result.restored.length) {
-        stderr.write(`\x1b[32m✓ Restored: ${result.restored.map(f => relative(config.workspaceRoot, f).split('\\').join('/')).join(', ')}\x1b[0m\n`);
+        stderr.write(`\x1b[32m✓ Restored: ${result.restored.map(rel).join(', ')}\x1b[0m\n`);
       }
       if (result.deleted.length) {
-        stderr.write(`\x1b[32m✓ Deleted (were new): ${result.deleted.map(f => relative(config.workspaceRoot, f).split('\\').join('/')).join(', ')}\x1b[0m\n`);
+        stderr.write(`\x1b[32m✓ Deleted (were new): ${result.deleted.map(rel).join(', ')}\x1b[0m\n`);
       }
       if (result.conflicts?.length) {
-        stderr.write(`\x1b[33m⚠️  Conflicts (files modified after agent edit): ${result.conflicts.map(f => relative(config.workspaceRoot, f).split('\\').join('/')).join(', ')}\x1b[0m\n`);
+        stderr.write(`\x1b[33m⚠️  Conflicts (files modified after agent edit): ${result.conflicts.map(rel).join(', ')}\x1b[0m\n`);
       }
       stderr.write(`\x1b[2m[${undoStack.depth} more undo${undoStack.depth !== 1 ? 's' : ''} available]\x1b[0m\n`);
       return true;

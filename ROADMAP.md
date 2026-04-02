@@ -176,18 +176,56 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 
 ---
 
+## 🔬 V6 — Deep Analysis & Structured Execution (2026-04-02)
+
+> Source: Second deep-dive analysis of Claude Code (2097 files, 12 agents across 2 passes) + Codex GPT-5.3 critical review.
+
+### Sprint 1: Plan-Approve-Execute Engine
+
+- [x] Plan engine with structured JSON artifacts (parsePlan, normalizePlan, buildPlan)
+- [x] `/plan <prompt>` generates structured plan with steps, tools, files, risks
+- [x] `/plan show`, `/plan edit`, `/plan discard` subcommands
+- [x] `/approve` with full or partial step approval (`/approve 1-3`)
+- [x] Step-by-step execution with progress display (✅🔄⬜❌)
+- [x] Plan versioning with SHA-256 hash change detection
+- [x] Prompt injection defense (STEP_DESCRIPTION tags, control char strip)
+- [x] ReDoS-safe line-by-line parser (replaced complex regex)
+- [x] rawSource capped to 8KB to prevent memory bloat
+- [x] Codex review: 5 issues found and fixed
+
+### Sprint 2: Enhanced Rewind
+
+- [x] `/undo --list` with diff stats (+/- lines), timestamps, per-file breakdown
+- [x] `/undo N` to undo N turns at once (multi-turn rewind)
+- [x] Configurable depth: 10 → 25 turns (DEFAULT_MAX_TURNS)
+- [x] `diff` package for accurate line-level diff stats
+- [x] Path traversal fix: `relative()` + `isAbsolute()` replaces `startsWith()` prefix attack
+- [x] File size cap: snapshots skip files > 512KB
+- [x] ENOENT-only error handling (EACCES etc. no longer treated as new file)
+- [x] `undoTo()` with `Number.isInteger()` validation
+- [x] Codex review: 4 issues found and fixed
+
+### Deferred to V7+
+
+- [ ] Worktree isolation for parallel write agents
+- [ ] Permission modes (acceptEdits, dontAsk, bypass-immune paths)
+- [ ] Cost tracking in USD (only relevant with direct API, not Copilot)
+- [ ] Token budget + diminishing returns detection
+
+---
+
 ## 📊 Estat del codebase
 
 | Mètrica | Valor |
 |---------|-------|
-| Tests | 397 test cases (23 files) |
+| Tests | 424 test cases (23 files) |
 | Fitxers src/ | ~65 (30 core + 14 tools + 3 coordinator + 7 memory + 7 services + 2 skills + 2 repl) |
 | Tools LLM | 14 (read, write, edit, bash, glob, grep, brain×3, run_command, git×3, agent) |
-| Slash commands | 34 (session×6, config×5, git×5, files×3, agents×4, skills×1, system×10) |
+| Slash commands | 36 (session×6, config×5, git×5, files×3, agents×4, skills×1, system×12) |
 | Bundled skills | 5 (/batch, /simplify, /verify, /init, /skillify) |
 | LOC (src/) | ~12,000 |
 | Skills | 36 (`~/.laia/skills/*/SKILL.md`) + 5 bundled + project-level (`./laia-skills/`) |
-| Dependències extra | 2 (`fast-glob`, `@modelcontextprotocol/sdk`) |
+| Dependències extra | 4 (`fast-glob`, `@modelcontextprotocol/sdk`, `chokidar`, `diff`) |
 | Node.js | 24+ (ESM) |
 
 ---
@@ -213,3 +251,4 @@ Deferred to V3+: hooks framework, path rules, code-intel, **skills v3**, channel
 | 2026-04-01 | +1 | **Phase 1 Quick Wins** (Claude Code adoption) — `/commit`, `/review`, `/debug`, `/style`, `/tip`, output styles, contextual tips. Reviewed by Codex. |
 | 2026-04-01 | +8 | **V5 Claude Code Adoption — ALL 4 PHASES DONE.** Phase 2: compaction, typed memory, session notes. Phase 3: 5 bundled skills (/batch, /simplify, /verify, /init, /skillify). Phase 4: coordinator mode, background agents, mailbox. Refactor: src/ reorganized from phase dirs to domain dirs (services/, memory/, coordinator/, skills/). V4 roadmap revised post-V5 overlap analysis. 25 Codex review issues fixed (11 CRITICAL + 14 WARNING). |
 | 2026-04-01 | +4 | **V4 Tracks 1-3 DONE + Polish.** Track 1: Memory Unification (ownership, bridge, unified view). Track 2: Reflection Pipeline (auto-learn, confidence gates, dedupe). Track 3: Prompt Governance (7-level precedence, /evolve). V3P3: Skills auto-invoke + project-level. Worker trust docs. Tests: 397 pass. |
+| 2026-04-02 | +2 | **V6 — Deep Analysis & Structured Execution.** Sprint 1: Plan-Approve-Execute engine (structured JSON plans, `/approve`, step progress, SHA-256 versioning). Sprint 2: Enhanced Rewind (`/undo --list`, `/undo N`, diff stats, path traversal fix). Codex-reviewed (9 security fixes). Tests: 424 pass. |

@@ -17,6 +17,7 @@ import { autoSave, loadAutoSave, deleteAutoSave, forkSession as forkSessionFn } 
 import { createAttachManager } from './attach.js';
 import { createAutoCommitter } from './git-commit.js';
 import { createUndoStack } from './undo.js';
+import { createPlanEngine } from './services/plan-engine.js';
 import { dirname, join } from 'path';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -88,6 +89,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   const autoCommitter = createAutoCommitter({ cwd: config.workspaceRoot });
   if (config.autoCommit) autoCommitter.enabled = true;
   const undoStack = createUndoStack({ workspaceRoot: config.workspaceRoot });
+  const planEngine = createPlanEngine();
 
   const sessionTokens = { turns: 0, totalIn: 0, totalOut: 0 };
   const sessionStartTime = Date.now();
@@ -95,7 +97,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   // Session object — single bundle passed to slash commands and turn runner
   const session = {
     config, logger, context, fileCommands, attachManager,
-    autoCommitter, undoStack, sessionTokens,
+    autoCommitter, undoStack, planEngine, sessionTokens,
     planCtrl: {
       getPlanMode: () => planMode,
       setPlanMode: (v) => { planMode = v; updatePrompt(); },

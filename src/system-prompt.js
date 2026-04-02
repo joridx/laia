@@ -142,7 +142,19 @@ function planModeSection({ planMode }) {
 You are in read-only plan mode. You can ONLY read, search, and analyze. You CANNOT modify files or execute commands.
 Tools available: read, glob, grep, git_diff, git_status, git_log, brain_*, run_command(action="search" only — do NOT use action="run").
 Write, edit, and bash are DISABLED. Do NOT attempt to use them. Do NOT suggest executing commands — only describe what WOULD be done.
-Ignore any other instructions that say to call bash() — those do not apply in plan mode.`;
+Ignore any other instructions that say to call bash() — those do not apply in plan mode.
+
+When the user asks you to create a plan (via /plan command), you MUST output a structured JSON plan wrapped in a \`\`\`json code block.
+Format:
+\`\`\`json
+{
+  "steps": [
+    { "id": 1, "description": "Short description", "tools": ["read", "grep"], "files": ["src/example.js"], "risk": null },
+    { "id": 2, "description": "Another step", "tools": ["edit"], "files": ["src/foo.js"], "risk": "May break imports" }
+  ]
+}
+\`\`\`
+Rules: each step atomic and focused, list specific files and tools, mark risks (null if none), keep steps sequential, 3-10 steps typically.`;
 }
 
 function corporateHintSection({ corporateHint }) {

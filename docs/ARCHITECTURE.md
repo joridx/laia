@@ -1,7 +1,7 @@
 # LAIA — Architecture Deep Dive
 
 > Document generat per auto-exploració del codebase el 2026-03-31.
-> Actualitzat 2026-04-01 (post V4 Tracks 1-3 + V5 + polish).
+> Actualitzat 2026-04-02 (post V4 Tracks 1-3 + V5 + V6).
 > Objectiu: servir com a input per a una LLM externa que analitzi punts forts, debilitats i oportunitats.
 
 ---
@@ -12,13 +12,13 @@
 
 | Mètrica | Valor |
 |---------|-------|
-| LOC agent (`src/`) | ~12.000 |
+| LOC agent (`src/`) | ~14.400 |
 | LOC brain (`packages/brain/`) | ~14.700 |
 | LOC providers (`packages/providers/`) | ~300 |
-| LOC total | ~27.000 |
-| Tests | 397 cases, 84 suites |
+| LOC total | ~29.400 |
+| Tests | 424 cases, 84 suites |
 | Temps tests | ~3s |
-| Dependències directes | 6 (`fast-glob`, `@modelcontextprotocol/sdk`, `yaml`, `@huggingface/transformers`, `zod`, `better-sqlite3`) |
+| Dependències directes | 8 (`fast-glob`, `@modelcontextprotocol/sdk`, `yaml`, `@huggingface/transformers`, `zod`, `better-sqlite3`, `chokidar`, `diff`) |
 | Node.js runtime | ≥24 (ESM, global fetch, native test runner) |
 
 ---
@@ -36,7 +36,7 @@
       │                │     Delegant a mòduls extractats:
       │  repl/         │
       │  ├─ turn-runner.js    Execució unificada d'un torn (pre/post hooks V4)
-      │  ├─ slash-commands.js 28 slash commands (/save, /load, /model, /reflect...)
+      │  ├─ slash-commands.js 36 slash commands (/save, /load, /model, /reflect, /doctor...)
       │  ├─ ui.js             Banner animat, follow-up suggestions
       │  └─ feedback.js       Post-turn brain relevance feedback
       └───────┬───────┘
@@ -93,6 +93,8 @@ Auto-router per torn que selecciona el model basat en el contingut de l'input:
 
 **Registre dinàmic** amb `createToolRegistry()`: Map<name, {schema, execute}>, congel·lable post-bootstrap.
 
+**Plan Engine** (`src/plan-engine.js`): Structured plan artifacts with JSON parsing from LLM output, step-by-step execution with approval gate, and prompt injection defense (STEP_DESCRIPTION tags, control character stripping).
+
 | Tool | Fitxer | LOC | Tier |
 |------|--------|-----|------|
 | `read` | read.js | ~80 | Auto |
@@ -112,7 +114,38 @@ Auto-router per torn que selecciona el model basat en el contingut de l'input:
 - **Tier 2 (Session)**: write, edit, bash, brain_remember, agent — ask once, remember per session
 - **Tier 3 (Confirm)**: reservat per futures high-risk
 
-### 2.5 Swarm System (`src/swarm.js` — 76 LOC + `src/tools/agent.js` — 269 LOC)
+### 2.5 Undo System (`src/undo.js`)
+
+- **25-turn configurable depth** (upgraded from 10)
+- **Diff stats** via `diff` package for human-readable change summaries
+- **Enhanced CLI**: `/undo --list` to inspect stack, `/undo N` to revert N turns
+- **Security**: `relative()` path check to defend against prefix attacks (replaces `startsWith()`)
+- **512KB file size cap** for snapshots to prevent memory bloat
+
+### 2.6 Hooks & Events (`src/hooks/bus.js`)
+
+Event bus for extensibility and lifecycle integration:
+
+- **8 events**: `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `PreCompact`, `PostCompact`, `TaskStarted`, `TaskCompleted`
+- **5s timeout** per handler (prevents runaway hooks)
+- **`Object.freeze` payloads** (immutable event data)
+- **Trust security**: workspace hooks require explicit opt-in
+
+### 2.7 Feature Flags (`src/config/flags.js`)
+
+Runtime feature flag system with layered resolution:
+
+- **Resolution order**: defaults < `~/.laia/config.json` < `LAIA_FLAG_*` env vars
+- **Validated keys** (unknown flags rejected)
+- **Current flags**: `hooks_enabled`, `memory_rerank`, `skill_watcher`, `skill_improve`, `magic_docs`
+
+### 2.8 Diagnostics (`src/services/doctor.js`)
+
+- **13 diagnostic checks** covering brain connectivity, SQLite health, provider auth, embedding model, disk space, config validity, etc.
+- Exposed via `/doctor` slash command
+- Returns structured pass/warn/fail per check
+
+### 2.9 Swarm System (`src/swarm.js` — 76 LOC + `src/tools/agent.js` — 269 LOC)
 
 - **Semàfor** amb concurrència 4 per `agent()` calls en paral·lel
 - **Batch dispatcher**: si totes les tool calls d'un batch són `agent` → parallel. Mixed → sequential.
@@ -120,7 +153,7 @@ Auto-router per torn que selecciona el model basat en el contingut de l'input:
 - **Profiles** (`~/.laia/agents/*.yml`): model override, allowed tools, timeout, custom prompt
 - **Memory prefetch**: opcionalment injecta learnings rellevants al worker context
 
-### 2.6 System Prompt (`src/system-prompt.js` + `src/memory/prompt-governance.js` + `src/evolved-prompt.js`)
+### 2.10 System Prompt (`src/system-prompt.js` + `src/memory/prompt-governance.js` + `src/evolved-prompt.js`)
 
 **V4 Track 3: 7-Level Governed Prompt** amb precedence stack determinista i budget enforcement:
 
@@ -145,7 +178,7 @@ P7 — OUTPUT STYLE               [🎨 OPTIONAL, first to drop]
 - **4 fitxers**: `user-preferences.md`, `task-patterns.md`, `error-recovery.md`, `domain-knowledge.md`
 - **Audit trail**: `_evolution-log.jsonl`
 
-### 2.7 Memory System (V4 Track 1: Memory Unification)
+### 2.11 Memory System (V4 Track 1: Memory Unification)
 
 Tres sistemes de memòria unificats amb single-owner matrix:
 
@@ -170,7 +203,7 @@ Modules:
 - `memory/unified-view.js` — `buildUnifiedMemoryContext()` for prompt injection (budget-limited, sanitized)
 - `memory/typed-memory.js` — `.md` files with frontmatter at `~/.laia/memories/`
 
-### 2.8 Reflection Pipeline (V4 Track 2)
+### 2.12 Reflection Pipeline (V4 Track 2)
 
 Automatic post-session learning:
 
@@ -187,7 +220,7 @@ Session End (≥3 turns)
 - Triggered automatically on `/exit` or manually via `/reflect`
 - Module: `memory/reflection.js` (335 lines)
 
-### 2.9 Context Management (`src/context.js` — 155 LOC)
+### 2.13 Context Management (`src/context.js` — 155 LOC)
 
 - **Turn-based**: almacena transcripcions completes (tool calls + results + reply)
 - **Compaction**: últims 6 torns en full detail; antics → only user+assistant text
@@ -195,7 +228,7 @@ Session End (≥3 turns)
 - **Truncation**: tool results capped a 3000 chars
 - **Serialization**: serialize/deserialize per session persistence
 
-### 2.8 Session Persistence (`src/session.js` — 183 LOC)
+### 2.14 Session Persistence (`src/session.js` — 183 LOC)
 
 - **Autosave**: cada torn guarda a `~/.laia/sessions/_autosave.json`
 - **Named saves**: `/save <name>` → `~/.laia/sessions/2026-03-31T15-10_name.json`
@@ -203,7 +236,7 @@ Session End (≥3 turns)
 - **Atomic writes**: write to tmpfile + rename (anti-corruption)
 - **Restore**: per index, partial name match, o path directe
 
-### 2.12 Skills System (`src/skills.js` + `src/skills/intent-matcher.js`)
+### 2.15 Skills System (`src/skills.js` + `src/skills/intent-matcher.js`)
 
 - **V3 Skills**: `~/.laia/skills/*/SKILL.md` (directory-based with frontmatter)
 - **Project-level skills**: `./laia-skills/*/SKILL.md` (highest priority, shadows user skills)
@@ -484,17 +517,17 @@ Defaults (src/config.js)
 | **Brain tools** | MCP tool modules | `packages/brain/tools/` |
 | **LLM config** | JSON config | `packages/brain/llm-config.json` |
 
-### 5.3 REPL Slash Commands (34)
+### 5.3 REPL Slash Commands (36)
 
 | Category | Commands |
 |----------|----------|
 | Session | `/save`, `/load`, `/sessions`, `/fork`, `/clear`, `/compact` |
-| Config | `/model`, `/effort`, `/plan`, `/execute`, `/tokens` |
+| Config | `/model`, `/effort`, `/plan`, `/execute`, `/tokens`, `/flags` |
 | Git | `/commit`, `/review`, `/debug`, `/autocommit`, `/undo` |
 | Files | `/attach`, `/detach`, `/attached` |
 | Agents | `/agents`, `/swarm`, `/coordinator`, `/tasks` |
 | Skills | `/skills` |
-| System | `/help`, `/style`, `/tip`, `/reflect`, `/evolve`, `/memory`, `/exit`, `/quit` |
+| System | `/help`, `/style`, `/tip`, `/reflect`, `/evolve`, `/memory`, `/doctor`, `/exit`, `/quit` |
 
 ---
 
@@ -514,7 +547,7 @@ Defaults (src/config.js)
 | Agent (`tests/unit/`) | 17 | ~250 | Edit, diff, SSE, swarm, permissions, registry, sessions, ownership, governance, bridge, intent |
 | Agent (`tests/`) | 6 | ~50 | Evolved prompt, git-commit, paste, providers, quality, undo |
 | Brain (`packages/brain/tests/`) | 42 | ~100 | Scoring, search, embeddings, database, regression, integration |
-| **Total** | **84** | **397** | |
+| **Total** | **84** | **424** | |
 
 ### 6.3 Test Highlights
 
@@ -532,11 +565,15 @@ Defaults (src/config.js)
 |-------|-----------|
 | **Tool permissions** | 3-tier (auto/session/confirm), serialized prompt queue |
 | **Evolved prompt** | Anti-injection sanitization, line/char caps |
+| **Plan engine** | Prompt injection defense (STEP_DESCRIPTION tags, control char strip) |
 | **Plan mode** | Server-side enforcement, blocks write/edit/bash even if model emits |
+| **Undo** | Prefix attack defense via `relative()` instead of `startsWith()` |
+| **@include** | `allowedRoots`, `realpathSync`, `.md` only, 50KB size guard |
 | **Brain** | Isolated process (crash doesn't kill agent) |
 | **Auth** | Token never exposed; Copilot token cached 25min, rotated |
 | **Sessions** | Atomic writes (tmpfile + rename) |
 | **DB** | Self-healing corruption detection + delete+recreate |
+| **V5+V6 audit** | All V5+V6 code reviewed by GPT-5.3 Codex (31 total security fixes) |
 
 ---
 
@@ -551,7 +588,7 @@ Defaults (src/config.js)
 | Embedding init | ~5-15s | First load only (ONNX model) |
 | Single embedding | ~20-50ms | After init |
 | FTS5 query | ~5ms | SQLite BM25 |
-| Test suite | ~3s | 397 tests, 84 suites |
+| Test suite | ~3s | 424 tests, 84 suites |
 | LLM first token | 1-5s | Depends on provider + model |
 
 ---
@@ -570,7 +607,9 @@ laia (root)
 │   └── better-sqlite3 (optional)    ← SQLite + FTS5
 ├── @modelcontextprotocol/sdk        ← MCP client
 ├── fast-glob                        ← File discovery
-└── yaml                             ← YAML parsing (skills)
+├── yaml                             ← YAML parsing (skills)
+├── chokidar                         ← File watcher (skill_watcher flag)
+└── diff                             ← Diff stats for undo system
 ```
 
 **Total node_modules footprint**: primarily `@huggingface/transformers` (ONNX runtime) and `better-sqlite3` (native C++ addon). Everything else is minimal.
@@ -626,11 +665,11 @@ Integracions amb 30+ serveis corporatius definides com a fitxers `.md` amb front
 
 | Mètrica | Valor |
 |---------|-------|
-| Fitxers JS (src/) | 65 |
+| Fitxers JS (src/) | ~77 |
 | Fitxers JS (brain/) | 48 |
 | Brain MCP tools | 16 |
 | Agent tools | 14 |
-| REPL slash commands | 34 |
+| REPL slash commands | 36 |
 | Skills disponibles | ~36 + project-level |
 | Scoring signals | 11 |
 | Providers suportats | 7 |
@@ -650,4 +689,4 @@ Integracions amb 30+ serveis corporatius definides com a fitxers `.md` amb front
 
 ---
 
-*Document generat automàticament per LAIA. Actualitzat manualment el 2026-04-01 amb V4 Tracks 1-3, V5, i polish items.*
+*Document generat automàticament per LAIA. Actualitzat manualment el 2026-04-02 amb V4 Tracks 1-3, V5, V6, i polish items.*

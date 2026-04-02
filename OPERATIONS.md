@@ -1,7 +1,7 @@
 # LAIA — Operations Manual
 
 > **LAIA** (Local AI Agent) — CLI coding agent with self-evolving memory.
-> Version 4.0 · Node.js 24+ · Last updated: 2026-04-01
+> Version 6.0 · Node.js 24+ · Last updated: 2026-04-02
 
 ---
 
@@ -20,16 +20,17 @@
 11. [Skills & Custom Commands](#skills--custom-commands)
 12. [Skills Auto-Invoke (V3P3)](#skills-auto-invoke-v3p3)
 13. [Agent Profiles & Swarm](#agent-profiles--swarm)
-14. [Output Styles](#output-styles)
-15. [Tips System](#tips-system)
-16. [Git Integration](#git-integration)
-17. [MCP Server Mode](#mcp-server-mode)
-18. [Memory Unification (Track 1)](#memory-unification-track-1)
-19. [Reflection Pipeline (Track 2)](#reflection-pipeline-track-2)
-20. [Prompt & Context Governance (Track 3)](#prompt--context-governance-track-3)
-21. [Environment Variables](#environment-variables)
-22. [File Structure](#file-structure)
-23. [Troubleshooting](#troubleshooting)
+14. [Plan Engine](#plan-engine)
+15. [Output Styles](#output-styles)
+16. [Tips System](#tips-system)
+17. [Git Integration](#git-integration)
+18. [MCP Server Mode](#mcp-server-mode)
+19. [Memory Unification (Track 1)](#memory-unification-track-1)
+20. [Reflection Pipeline (Track 2)](#reflection-pipeline-track-2)
+21. [Prompt & Context Governance (Track 3)](#prompt--context-governance-track-3)
+22. [Environment Variables](#environment-variables)
+23. [File Structure](#file-structure)
+24. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -58,6 +59,8 @@ laia --version
 | **GitHub Copilot Business** | Default LLM provider (via Copilot API) |
 | **gh CLI** | Optional — needed for `/review` command |
 | **git** | Optional — needed for `/commit`, auto-commit, git tools |
+| **chokidar** | Bundled — file watching for undo snapshots |
+| **diff** | Bundled — line-level diff stats for `/undo --list` |
 | AWS Bedrock / Ollama | Alternative providers (via `--genai`) |
 
 ---
@@ -117,7 +120,7 @@ laia --mcp
 
 ## Slash Commands Reference
 
-All commands start with `/` and can be typed in the REPL.
+All 36 commands start with `/` and can be typed in the REPL.
 
 ### 📦 Session
 
@@ -136,10 +139,16 @@ All commands start with `/` and can be typed in the REPL.
 |---------|-------------|-------|
 | `/model [id\|auto]` | Change model mid-session | `/model gpt-5.3-codex` or `/model auto` |
 | `/effort <level>` | Set reasoning effort | `/effort low`, `/effort high`, `/effort max` |
-| `/plan` | Enter read-only mode (no writes) | `/plan` |
+| `/plan <prompt>` | Generate structured plan with steps, risks, files | `/plan refactor auth module` |
+| `/plan show` | Display current plan artifact | `/plan show` |
+| `/plan edit <text>` | Modify current plan | `/plan edit add logging step` |
+| `/plan discard` | Discard active plan | `/plan discard` |
+| `/approve [N-M]` | Approve and execute plan (all or specific steps) | `/approve` or `/approve 1-3` |
 | `/execute` | Back to normal mode (writes allowed) | `/execute` |
 | `/tokens` | Show token usage & context stats | `/tokens` |
 | `/style [name\|list\|off]` | Set/list output styles | `/style concise`, `/style list`, `/style off` |
+| `/flags [set key=val]` | View or set feature flags | `/flags` or `/flags set plan=true` |
+| `/init` | Generate project LAIA.md with stack detection | `/init` |
 
 ### 🔀 Git
 
@@ -197,7 +206,8 @@ All commands start with `/` and can be typed in the REPL.
 | `/help` | Show all commands | `/help` |
 | `/tip` | Show a random contextual tip | `/tip` |
 | `/debug [issue]` | Diagnose session issues (reads logs) | `/debug brain not connecting` |
-| `/undo` | Revert last turn's file changes | `/undo` |
+| `/doctor` | Run 13 diagnostic checks (system health) | `/doctor` |
+| `/undo` | Revert changes (last, N turns, --list with diff stats) | `/undo`, `/undo 3`, `/undo --list` |
 | `/reflect [auto]` | Reflect on session (brain LLM analysis) | `/reflect` or `/reflect auto` |
 | `/exit` | Exit LAIA (triggers brain session log) | `/exit` |
 | `/quit` | Exit LAIA (alias) | `/quit` |
@@ -532,6 +542,50 @@ Toggle with `/swarm`. When enabled, the `agent()` tool spawns parallel workers:
 
 ---
 
+## Plan Engine
+
+The plan engine (V6) lets you generate, review, and execute structured implementation plans before any code changes happen.
+
+### Generating a Plan
+
+```
+/plan refactor the auth module to use JWT
+```
+
+LAIA generates a structured JSON plan containing:
+- **Steps** — ordered list of implementation tasks
+- **Risks** — potential issues or side effects
+- **Affected files** — files that will be created, modified, or deleted
+
+### Reviewing a Plan
+
+```
+/plan show             # Display the current plan artifact
+```
+
+The plan is displayed with numbered steps, risk assessments, and the full list of affected files so you can review before execution.
+
+### Executing a Plan
+
+```
+/approve               # Approve and execute all steps
+/approve 1-3           # Approve and execute only steps 1 through 3
+/approve 5             # Approve and execute only step 5
+```
+
+Execution proceeds step-by-step with progress reporting. Each step runs as an agent turn with full tool access. If a step fails, execution pauses and reports the error.
+
+### Modifying or Discarding
+
+```
+/plan edit add a migration step after step 2
+/plan discard          # Discard the active plan entirely
+```
+
+`/plan edit` sends your modification request to the LLM which regenerates the plan with your changes applied.
+
+---
+
 ## Output Styles
 
 Control how LAIA formats responses by creating `.md` files.
@@ -646,7 +700,15 @@ Requires `gh` CLI installed and authenticated.
 
 ### /undo
 
-Reverts all file changes from the last turn. Maintains a 10-turn stack with conflict detection.
+Reverts file changes with flexible scope:
+
+```
+/undo               # Undo last turn
+/undo 3             # Undo last 3 turns at once
+/undo --list        # Show all turns with diff stats (+/- lines, timestamps)
+```
+
+Maintains a 25-turn stack (configurable) with conflict detection. Files larger than 512KB are skipped from snapshot tracking. Uses `chokidar` for file watching and `diff` for computing line-level stats.
 
 ---
 
@@ -675,7 +737,7 @@ laia --mcp --mcp-stdout-policy redirect
 
 ## Memory Unification (Track 1)
 
-V4 unifies all memory sources into a single ownership-aware view.
+Unifies all memory sources into a single ownership-aware view.
 
 ### Ownership Matrix
 
@@ -702,7 +764,7 @@ Conflicts between owners are resolved by precedence (system > corporate > user >
 
 ## Reflection Pipeline (Track 2)
 
-V4 adds an automated reflection pipeline that learns from sessions without user intervention.
+Automated reflection pipeline that learns from sessions without user intervention.
 
 ### Auto-Learn
 
@@ -727,7 +789,7 @@ The `/reflect auto` variant runs the same pipeline as the automatic post-session
 
 ## Prompt & Context Governance (Track 3)
 
-V4 introduces a 7-level precedence system for prompt assembly and a token budget for evolved content.
+7-level precedence system for prompt assembly and a token budget for evolved content.
 
 ### 7-Level Precedence
 
