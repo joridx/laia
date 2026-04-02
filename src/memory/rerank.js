@@ -150,9 +150,10 @@ export function createRerankLlmCall(config) {
     // Dynamic import to avoid circular deps
     const { detectProvider, getProvider, resolveUrl, buildAuthHeaders } = await import('@laia/providers');
 
-    // Use the cheapest model available — configurable with fallback chain
+    // Use the cheapest model available — always route through the same provider as main model
     const rerankModel = config.rerankModel || 'claude-haiku-4-20250414';
-    const { providerId } = detectProvider(rerankModel);
+    const { providerId: mainProvider } = detectProvider(config.model || rerankModel);
+    const providerId = mainProvider;  // reuse main provider (e.g. copilot) to avoid auth mismatch
     const provider = getProvider(providerId);
     const { getProviderToken } = await import('../auth.js');
     const token = await getProviderToken(providerId);

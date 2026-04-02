@@ -144,7 +144,7 @@ export function isProviderAvailable(providerId) {
   if (!p) return false;
   if (p.auth === 'none') return true;
   if (p.auth === 'copilot') return findCopilotAppsJson() !== null;
-  return !!process.env[p.tokenEnv];
+  return !!process.env[p.tokenEnv]?.trim();
 }
 
 // ─── Provider Lookup ─────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ export async function resolveToken(provider, { getCopilotToken } = {}) {
     if (!getCopilotToken) throw new Error('getCopilotToken callback required for Copilot provider');
     return getCopilotToken();
   }
-  const key = process.env[provider.tokenEnv];
+  const key = process.env[provider.tokenEnv]?.trim();
   if (!key) throw new Error(`Missing env var ${provider.tokenEnv} for provider ${provider.id}`);
   return key;
 }

@@ -3,6 +3,7 @@
 //
 // Protocol:
 //   stdin  ← {"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}
+//   stdin  ← {"type":"abort"}
 //   stdout → {"type":"assistant","content":[{"type":"text","text":"..."}]}
 //   stdout → {"type":"assistant","content":[{"type":"tool_use","id":"...","name":"...","input":{...}}]}
 //   stdout → {"type":"user","content":[{"type":"tool_result","tool_use_id":"...","content":"..."}]}
@@ -190,14 +191,7 @@ function createStepEmitter() {
           });
           break;
 
-        default:
-          // Unknown step type — emit as LAIA extension for debugging
-          emit({
-            type: `laia:${step.type}`,
-            content: step,
-            session_id: SESSION_ID,
-          });
-          break;
+        // Unknown step types: silently ignore (forward-compatible)
       }
     },
 
@@ -226,7 +220,7 @@ function emitResult(result, error = null) {
       type: 'result',
       subtype: 'success',
       session_id: SESSION_ID,
-      usage: result?.usage ?? {},
+      usage: result?.usage ?? null,
       ...(result?.turnMessages ? { laia_turn_messages: result.turnMessages.length } : {}),
     });
   }
@@ -319,6 +313,9 @@ export async function runStreamJson({ config, logger }) {
     return new Promise((resolve) => { lineResolve = resolve; });
   }
 
+  // Shared ref for aborting the current turn during shutdown
+  let activeTurnAbort = null;
+
   // Graceful shutdown
   let shuttingDown = false;
   const shutdown = async () => {
@@ -332,6 +329,9 @@ export async function runStreamJson({ config, logger }) {
       process.exit(1);
     }, 10_000);
     watchdog.unref?.();
+
+    // Abort any running turn
+    activeTurnAbort?.abort();
 
     rl.close();
     try { await stopBrain(); } catch {}
@@ -367,10 +367,7 @@ export async function runStreamJson({ config, logger }) {
       continue;
     }
 
-    // Handle abort signal
-    // NOTE: abort during a running turn is a known limitation — it's only
-    // processed between turns. For mid-turn abort, the consumer should send
-    // SIGTERM to the process. TODO: concurrent stdin reader with AbortController.
+    // Handle abort signal (when no turn is running)
     if (msg.type === 'abort') {
       emit({
         type: 'result',
@@ -396,8 +393,24 @@ export async function runStreamJson({ config, logger }) {
     // Add to context
     context.addUser(userText);
 
-    // Run agent turn
+    // Run agent turn with abort support
     const stepEmitter = createStepEmitter();
+    const turnAbort = new AbortController();
+    activeTurnAbort = turnAbort;
+
+    // During the turn, listen for abort messages on stdin
+    const origLineHandler = rl.listeners('line')[0];
+    rl.removeAllListeners('line');
+    rl.on('line', (line) => {
+      const t = line.trim();
+      if (!t) return;
+      try {
+        const m = JSON.parse(t);
+        if (m.type === 'abort') { turnAbort.abort(); return; }
+      } catch { /* not JSON — queue it */ }
+      lineQueue.push(line);
+    });
+
     try {
       logger.startTurn?.();
       const result = await runTurn({
@@ -407,6 +420,7 @@ export async function runStreamJson({ config, logger }) {
         onStep: stepEmitter.onStep,
         history: context.getHistory(),
         planMode: config.planMode || false,
+        signal: turnAbort.signal,
       });
 
       // Flush any remaining buffered content
@@ -425,7 +439,21 @@ export async function runStreamJson({ config, logger }) {
       stepEmitter.resetTokensSeen();
     } catch (err) {
       stepEmitter.flush();
-      emitResult(null, err);
+      if (turnAbort.signal.aborted) {
+        emit({
+          type: 'result',
+          subtype: 'error',
+          error: 'Aborted by user',
+          session_id: SESSION_ID,
+        });
+      } else {
+        emitResult(null, err);
+      }
+    } finally {
+      activeTurnAbort = null;
+      // Restore the normal line handler
+      rl.removeAllListeners('line');
+      if (origLineHandler) rl.on('line', origLineHandler);
     }
   }
 
