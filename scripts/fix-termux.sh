@@ -32,7 +32,7 @@ fi
 mkdir -p ~/.laia
 cat > ~/.laia/config.json << 'EOF'
 {
-  "model": "claude-sonnet-4-20250514",
+  "model": "claude-opus-4.6",
   "provider": "copilot",
   "brainPath": "/data/data/com.termux/files/home/laia-data"
 }

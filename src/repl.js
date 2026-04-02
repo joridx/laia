@@ -184,7 +184,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   function buildPrompt() {
     const parts = [];
     if (planMode) parts.push('\x1b[33mPLAN\x1b[0m');
-    const m = (lastModel || config.model || '').replace(/^claude-/, '');
+    const m = (config.model || '').replace(/^claude-/, '');
     if (m) parts.push(`\x1b[2m${m}\x1b[0m`);
     const pct = context.usagePercent();
     if (pct > 0) {
