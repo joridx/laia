@@ -7,7 +7,7 @@ import { loadConfig, migrateLegacyConfig } from '../src/config.js';
 migrateLegacyConfig();
 
 function parseArgv(argv) {
-  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: true, mcp: false, mcpStdoutPolicy: 'strict', autoCommit: false, plan: false, genai: null, effort: null, fork: null };
+  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: true, mcp: false, mcpStdoutPolicy: 'strict', streamJson: false, autoCommit: false, plan: false, genai: null, effort: null, fork: null };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-p' || a === '--prompt') args.prompt = argv[++i];
@@ -18,6 +18,8 @@ function parseArgv(argv) {
     else if (a === '--swarm') args.swarm = true;
     else if (a === '--no-swarm') args.swarm = false;
     else if (a === '--mcp') args.mcp = true;
+    else if (a === '--stream-json' || (a === '--input-format' && argv[i+1] === 'stream-json')) { args.streamJson = true; if (a === '--input-format') i++; }
+    else if (a === '--output-format' && argv[i+1] === 'stream-json') { args.streamJson = true; i++; }
     else if (a === '--mcp-stdout-policy') args.mcpStdoutPolicy = argv[++i];
     else if (a === '--auto-commit') args.autoCommit = true;
     else if (a === '--plan') args.plan = true;
@@ -49,6 +51,11 @@ Options:
   --mcp                 Run as MCP server over stdio (exposes agent tool)
   --mcp-stdout-policy <strict|redirect>
                         Stdout safety policy in MCP mode (default: strict)
+  --stream-json         NDJSON bidirectional protocol over stdin/stdout
+                        (compatible with Claude Code stream-json format)
+  --input-format stream-json
+  --output-format stream-json
+                        Aliases for --stream-json (Claude Code compatibility)
   --auto-commit           Enable git auto-commit after each turn
   --plan                Read-only plan mode (no write/edit/bash)
   --effort <level>      Reasoning effort: low, medium, high, max (default: none)
@@ -74,6 +81,9 @@ const logger = createLogger(config);
 if (args.mcp) {
   const { startMcpServer } = await import('../src/mcp-server.js');
   await startMcpServer({ config, logger, stdoutPolicy: args.mcpStdoutPolicy });
+} else if (args.streamJson) {
+  const { runStreamJson } = await import('../src/stream-json.js');
+  await runStreamJson({ config, logger });
 } else if (args.prompt) {
   const { runOneShot } = await import('../src/agent.js');
   await runOneShot({ prompt: args.prompt, config, logger, json: args.json });
