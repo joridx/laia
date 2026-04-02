@@ -1368,7 +1368,7 @@ export async function handleSlashCommand(input, session) {
 export async function handleModelCommand(args, config) {
   if (!args) {
     try {
-      const { providerId } = detectProvider(config.model);
+      const { providerId } = detectProvider(config.model, { forceProvider: config.provider });
       const provider = getProvider(providerId);
 
       if (!provider.supports?.listModels) {

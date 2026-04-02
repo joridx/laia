@@ -53,7 +53,7 @@ export async function runDoctor({ config, hookStats, flags, skillCount }) {
   // ─── 4. API connectivity ─────────────────────────────────────────────
   try {
     const { detectProvider, getProvider } = await import('@laia/providers');
-    const { providerId } = detectProvider(config.model);
+    const { providerId } = detectProvider(config.model, { forceProvider: config.provider });
     const provider = getProvider(providerId);
     checks.push({
       name: 'API Provider',
