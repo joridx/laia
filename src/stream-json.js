@@ -4,12 +4,11 @@
 // Protocol:
 //   stdin  ← {"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}
 //   stdin  ← {"type":"abort"}
-//   stdout → {"type":"assistant","content":[{"type":"text","text":"..."}]}
-//   stdout → {"type":"assistant","content":[{"type":"tool_use","id":"...","name":"...","input":{...}}]}
+//   stdout → {"type":"assistant","message":{"id":"...","type":"message","role":"assistant","model":"...","content":[...]}}
 //   stdout → {"type":"user","content":[{"type":"tool_result","tool_use_id":"...","content":"..."}]}
-//   stdout → {"type":"result","subtype":"success","session_id":"...","usage":{...}}
+//   stdout → {"type":"result","subtype":"success","session_id":"...","usage":{...},"duration_ms":...}
 //
-// Usage: laia --stream-json [-m model] [--mcp-config path] [--dangerously-skip-permissions]
+// Usage: laia --stream-json [-m model] [--dangerously-skip-permissions]
 
 import { randomBytes } from 'crypto';
 import { createInterface } from 'readline';
@@ -20,6 +19,17 @@ import { runTurn } from './agent.js';
 import { setAutoApprove } from './permissions.js';
 import { registerBuiltinTools } from './tools/index.js';
 import { startBrain, stopBrain } from './brain/client.js';
+
+// Read version from package.json at startup
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+let PKG_VERSION = '2.0.0';
+try {
+  const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+  PKG_VERSION = pkg.version || PKG_VERSION;
+} catch {}
 
 const SESSION_ID = randomBytes(16).toString('hex');
 
@@ -75,8 +85,9 @@ function guardStdout() {
 }
 
 // --- onStep → stream-json translator ---
+// Emits Claude Code-compatible messages with content INSIDE message object.
 
-function createStepEmitter() {
+function createStepEmitter(model) {
   let pendingText = '';
   let messageIdCounter = 0;
   let tokensSeen = false;
@@ -85,14 +96,24 @@ function createStepEmitter() {
     return `msg_${SESSION_ID.slice(0, 8)}_${++messageIdCounter}`;
   }
 
-  function flushText() {
-    if (!pendingText) return;
+  function emitAssistant(content, stopReason = null) {
     emit({
       type: 'assistant',
-      message: { id: nextMsgId(), role: 'assistant' },
-      content: [{ type: 'text', text: pendingText }],
+      message: {
+        id: nextMsgId(),
+        type: 'message',
+        role: 'assistant',
+        model: model || 'unknown',
+        content,
+        stop_reason: stopReason,
+      },
       session_id: SESSION_ID,
     });
+  }
+
+  function flushText(stopReason = null) {
+    if (!pendingText) return;
+    emitAssistant([{ type: 'text', text: pendingText }], stopReason);
     pendingText = '';
   }
 
@@ -120,17 +141,12 @@ function createStepEmitter() {
         case 'tool_call':
           // Flush any accumulated text first, then emit tool_use in its own message
           flushText();
-          emit({
-            type: 'assistant',
-            message: { id: nextMsgId(), role: 'assistant' },
-            content: [{
-              type: 'tool_use',
-              id: step.callId,
-              name: step.name,
-              input: step.args || {},
-            }],
-            session_id: SESSION_ID,
-          });
+          emitAssistant([{
+            type: 'tool_use',
+            id: step.callId,
+            name: step.name,
+            input: step.args || {},
+          }], 'tool_use');
           break;
 
         case 'tool_result': {
@@ -156,11 +172,11 @@ function createStepEmitter() {
 
         case 'final':
           // Flush any remaining streamed text
-          flushText();
+          flushText('end_turn');
           // If no tokens were streamed (non-streaming provider), emit final text directly
           if (step.text && !tokensSeen) {
             pendingText = step.text;
-            flushText();
+            flushText('end_turn');
           }
           break;
 
@@ -191,36 +207,41 @@ function createStepEmitter() {
           });
           break;
 
-        // Unknown step types: silently ignore (forward-compatible)
+        default:
+          // Unknown step type — emit as LAIA extension for debugging
+          emit({
+            type: `laia:${step.type}`,
+            content: step,
+            session_id: SESSION_ID,
+          });
+          break;
       }
     },
 
     flush() {
-      flushText();
-    },
-
-    resetTokensSeen() {
-      tokensSeen = false;
+      flushText('end_turn');
     },
   };
 }
 
 // --- Result emitter ---
 
-function emitResult(result, error = null) {
+function emitResult(result, error = null, durationMs = 0) {
   if (error) {
     emit({
       type: 'result',
       subtype: 'error',
       error: error.message || String(error),
       session_id: SESSION_ID,
+      duration_ms: durationMs,
     });
   } else {
     emit({
       type: 'result',
       subtype: 'success',
       session_id: SESSION_ID,
-      usage: result?.usage ?? null,
+      usage: result?.usage ?? {},
+      duration_ms: durationMs,
       ...(result?.turnMessages ? { laia_turn_messages: result.turnMessages.length } : {}),
     });
   }
@@ -266,13 +287,14 @@ export async function runStreamJson({ config, logger }) {
   // Register tools
   await registerBuiltinTools(config);
 
-  // Emit initial system message
+  // Emit initial system message (includes model for consumer identification)
   emit({
     type: 'system',
     subtype: 'init',
     session_id: SESSION_ID,
     message: 'LAIA stream-json mode ready',
-    version: '2.0.0',
+    version: PKG_VERSION,
+    model: config.model,
   });
 
   // Conversation context (multi-turn)
@@ -285,10 +307,29 @@ export async function runStreamJson({ config, logger }) {
     terminal: false,
   });
 
+  // Unified line queue — single handler, mode flag for abort interception
   const lineQueue = [];
   let lineResolve = null;
+  let stdinClosed = false;
+  let turnAbortController = null;
 
   rl.on('line', (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    // During a turn, intercept abort messages
+    if (turnAbortController) {
+      try {
+        const msg = JSON.parse(trimmed);
+        if (msg.type === 'abort') {
+          turnAbortController.abort();
+          return;
+        }
+      } catch {
+        // Not JSON or not abort — queue for later
+      }
+    }
+
     if (lineResolve) {
       const r = lineResolve;
       lineResolve = null;
@@ -299,6 +340,8 @@ export async function runStreamJson({ config, logger }) {
   });
 
   rl.on('close', () => {
+    if (stdinClosed) return;
+    stdinClosed = true;
     if (lineResolve) {
       const r = lineResolve;
       lineResolve = null;
@@ -312,9 +355,6 @@ export async function runStreamJson({ config, logger }) {
     if (lineQueue.length > 0) return Promise.resolve(lineQueue.shift());
     return new Promise((resolve) => { lineResolve = resolve; });
   }
-
-  // Shared ref for aborting the current turn during shutdown
-  let activeTurnAbort = null;
 
   // Graceful shutdown
   let shuttingDown = false;
@@ -330,9 +370,6 @@ export async function runStreamJson({ config, logger }) {
     }, 10_000);
     watchdog.unref?.();
 
-    // Abort any running turn
-    activeTurnAbort?.abort();
-
     rl.close();
     try { await stopBrain(); } catch {}
 
@@ -341,6 +378,13 @@ export async function runStreamJson({ config, logger }) {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+
+  // Catch unhandled rejections to ensure brain cleanup
+  process.on('unhandledRejection', async (err) => {
+    process.stderr.write(`[stream-json] unhandled rejection: ${err}\n`);
+    await shutdown();
+    process.exit(1);
+  });
 
   // Main message loop
   while (running) {
@@ -367,7 +411,13 @@ export async function runStreamJson({ config, logger }) {
       continue;
     }
 
-    // Handle abort signal (when no turn is running)
+    // Handle ping/pong (liveness check)
+    if (msg.type === 'ping') {
+      emit({ type: 'pong', session_id: SESSION_ID });
+      continue;
+    }
+
+    // Handle abort between turns (during turn, handled via rl.on('line') above)
     if (msg.type === 'abort') {
       emit({
         type: 'result',
@@ -394,22 +444,9 @@ export async function runStreamJson({ config, logger }) {
     context.addUser(userText);
 
     // Run agent turn with abort support
-    const stepEmitter = createStepEmitter();
-    const turnAbort = new AbortController();
-    activeTurnAbort = turnAbort;
-
-    // During the turn, listen for abort messages on stdin
-    const origLineHandler = rl.listeners('line')[0];
-    rl.removeAllListeners('line');
-    rl.on('line', (line) => {
-      const t = line.trim();
-      if (!t) return;
-      try {
-        const m = JSON.parse(t);
-        if (m.type === 'abort') { turnAbort.abort(); return; }
-      } catch { /* not JSON — queue it */ }
-      lineQueue.push(line);
-    });
+    const stepEmitter = createStepEmitter(config.model);
+    turnAbortController = new AbortController();
+    const turnStart = Date.now();
 
     try {
       logger.startTurn?.();
@@ -420,7 +457,8 @@ export async function runStreamJson({ config, logger }) {
         onStep: stepEmitter.onStep,
         history: context.getHistory(),
         planMode: config.planMode || false,
-        signal: turnAbort.signal,
+        effort: config.effort,
+        signal: turnAbortController.signal,
       });
 
       // Flush any remaining buffered content
@@ -432,28 +470,23 @@ export async function runStreamJson({ config, logger }) {
         turnMessages: result.turnMessages,
       });
 
-      // Emit result (turn complete, ready for next input)
-      emitResult(result);
+      // Compact context if needed to stay within model budget
+      if (context.needsCompaction()) {
+        context.compact();
+      }
 
-      // Reset for next turn
-      stepEmitter.resetTokensSeen();
+      const durationMs = Date.now() - turnStart;
+      emitResult(result, null, durationMs);
+
+      // Check if EPIPE happened during emitResult
+      if (!running) break;
     } catch (err) {
       stepEmitter.flush();
-      if (turnAbort.signal.aborted) {
-        emit({
-          type: 'result',
-          subtype: 'error',
-          error: 'Aborted by user',
-          session_id: SESSION_ID,
-        });
-      } else {
-        emitResult(null, err);
-      }
+      const durationMs = Date.now() - turnStart;
+      emitResult(null, err, durationMs);
+      if (!running) break;
     } finally {
-      activeTurnAbort = null;
-      // Restore the normal line handler
-      rl.removeAllListeners('line');
-      if (origLineHandler) rl.on('line', origLineHandler);
+      turnAbortController = null;
     }
   }
 

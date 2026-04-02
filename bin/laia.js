@@ -21,6 +21,7 @@ function parseArgv(argv) {
     else if (a === '--stream-json' || (a === '--input-format' && argv[i+1] === 'stream-json')) { args.streamJson = true; if (a === '--input-format') i++; }
     else if (a === '--output-format' && argv[i+1] === 'stream-json') { args.streamJson = true; i++; }
     else if (a === '--mcp-stdout-policy') args.mcpStdoutPolicy = argv[++i];
+    else if (a === '--dangerously-skip-permissions') { /* accepted for Claude Code compat, stream-json always auto-approves */ }
     else if (a === '--auto-commit') args.autoCommit = true;
     else if (a === '--plan') args.plan = true;
     else if (a === '--effort') args.effort = argv[++i];
