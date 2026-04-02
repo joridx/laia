@@ -87,7 +87,7 @@ function guardStdout() {
 // --- onStep → stream-json translator ---
 // Emits Claude Code-compatible messages with content INSIDE message object.
 
-function createStepEmitter(model) {
+export function createStepEmitter(model, _emit = emit) {
   let pendingText = '';
   let messageIdCounter = 0;
   let tokensSeen = false;
@@ -97,7 +97,7 @@ function createStepEmitter(model) {
   }
 
   function emitAssistant(content, stopReason = null) {
-    emit({
+    _emit({
       type: 'assistant',
       message: {
         id: nextMsgId(),
@@ -131,7 +131,7 @@ function createStepEmitter(model) {
         case 'reasoning':
           // Emit as a LAIA extension (consumers can ignore)
           flushText();
-          emit({
+          _emit({
             type: 'laia:reasoning',
             content: step.summary,
             session_id: SESSION_ID,
@@ -157,7 +157,7 @@ function createStepEmitter(model) {
           const isError = (typeof step.result === 'object' && step.result !== null)
             ? (Boolean(step.result.error) || (step.name === 'bash' && Number(step.result.exitCode) !== 0))
             : false;
-          emit({
+          _emit({
             type: 'user',
             content: [{
               type: 'tool_result',
@@ -182,7 +182,7 @@ function createStepEmitter(model) {
 
         case 'error':
           flushText();
-          emit({
+          _emit({
             type: 'laia:error',
             error: step.error,
             retriable: step.retriable ?? false,
@@ -192,7 +192,7 @@ function createStepEmitter(model) {
 
         case 'request':
           // API call lifecycle — emit as extension
-          emit({
+          _emit({
             type: 'laia:request',
             phase: step.phase,
             session_id: SESSION_ID,
@@ -200,7 +200,7 @@ function createStepEmitter(model) {
           break;
 
         case 'debug':
-          emit({
+          _emit({
             type: 'laia:debug',
             content: step,
             session_id: SESSION_ID,
@@ -209,7 +209,7 @@ function createStepEmitter(model) {
 
         default:
           // Unknown step type — emit as LAIA extension for debugging
-          emit({
+          _emit({
             type: `laia:${step.type}`,
             content: step,
             session_id: SESSION_ID,
@@ -249,7 +249,7 @@ function emitResult(result, error = null, durationMs = 0) {
 
 // --- Stdin reader (NDJSON) ---
 
-function parseUserMessage(msg) {
+export function parseUserMessage(msg) {
   // Accept Claude Code format: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}
   if (msg.type !== 'user') return null;
 
