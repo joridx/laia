@@ -7,7 +7,13 @@ import { loadConfig, migrateLegacyConfig } from '../src/config.js';
 migrateLegacyConfig();
 
 function parseArgv(argv) {
-  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: true, mcp: false, mcpStdoutPolicy: 'strict', streamJson: false, autoCommit: false, plan: false, genai: null, effort: null, fork: null };
+  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: true, mcp: false, mcpStdoutPolicy: 'strict', streamJson: false, outputFormat: null, autoCommit: false, plan: false, genai: null, effort: null, fork: null, subcommand: null, mcpConfig: null, maxTurns: null };
+  // Check for subcommands (e.g. "auth status") before flag parsing
+  if (argv[2] && !argv[2].startsWith('-')) {
+    const sub = argv.slice(2).join(' ');
+    if (sub.startsWith('auth ') || sub === 'auth') { args.subcommand = sub; return args; }
+    if (sub.startsWith('mcp ')) { args.subcommand = sub; return args; }
+  }
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-p' || a === '--prompt') args.prompt = argv[++i];
@@ -20,6 +26,13 @@ function parseArgv(argv) {
     else if (a === '--mcp') args.mcp = true;
     else if (a === '--stream-json' || (a === '--input-format' && argv[i+1] === 'stream-json')) { args.streamJson = true; if (a === '--input-format') i++; }
     else if (a === '--output-format' && argv[i+1] === 'stream-json') { args.streamJson = true; i++; }
+    else if (a === '--output-format') { args.outputFormat = argv[++i]; }
+    else if (a === '--mcp-config') args.mcpConfig = argv[++i];
+    else if (a === '--max-turns') args.maxTurns = parseInt(argv[++i], 10);
+    // Claude Code compat: accepted silently (no-op)
+    else if (a === '--setting-sources' || a === '--disallowedTools' || a === '--permission-prompt-tool') { i++; /* skip value */ }
+    else if (a === '--no-session-persistence' || a === '--worktree') { if (argv[i+1] && !argv[i+1].startsWith('-')) i++; /* skip optional value */ }
+    else if (a === '--permission-mode') { i++; /* skip value */ }
     else if (a === '--mcp-stdout-policy') args.mcpStdoutPolicy = argv[++i];
     else if (a === '--dangerously-skip-permissions') { /* accepted for Claude Code compat, stream-json always auto-approves */ }
     else if (a === '--auto-commit') args.autoCommit = true;
@@ -74,6 +87,22 @@ if (args.version) {
   process.exit(0);
 }
 
+// Subcommands (Claude Code compatibility)
+if (args.subcommand) {
+  if (args.subcommand.startsWith('auth')) {
+    // Check if any API key is configured
+    const hasKey = !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY);
+    console.log(JSON.stringify({ loggedIn: hasKey, authMethod: hasKey ? 'api_key' : null }));
+    process.exit(0);
+  }
+  if (args.subcommand.startsWith('mcp ')) {
+    console.error(`LAIA does not support '${args.subcommand}' yet.`);
+    process.exit(1);
+  }
+  console.error(`Unknown subcommand: ${args.subcommand}`);
+  process.exit(1);
+}
+
 // Dynamic imports — loaded AFTER migrateLegacyConfig() has run
 const { createLogger } = await import('../src/logger.js');
 const config = await loadConfig({ modelOverride: args.model, verbose: args.verbose, swarm: args.swarm, autoCommit: args.autoCommit, planMode: args.plan, effort: args.effort, genai: args.genai });
@@ -84,10 +113,14 @@ if (args.mcp) {
   await startMcpServer({ config, logger, stdoutPolicy: args.mcpStdoutPolicy });
 } else if (args.streamJson) {
   const { runStreamJson } = await import('../src/stream-json.js');
-  await runStreamJson({ config, logger });
+  await runStreamJson({ config, logger, mcpConfig: args.mcpConfig, maxTurns: args.maxTurns });
+} else if (args.prompt && args.outputFormat === 'text') {
+  // One-shot text mode (Claude Code preflight compat: -p "..." --output-format text)
+  const { runOneShot } = await import('../src/agent.js');
+  await runOneShot({ prompt: args.prompt, config, logger, json: false, maxTurns: args.maxTurns ?? 1 });
 } else if (args.prompt) {
   const { runOneShot } = await import('../src/agent.js');
-  await runOneShot({ prompt: args.prompt, config, logger, json: args.json });
+  await runOneShot({ prompt: args.prompt, config, logger, json: args.json, maxTurns: args.maxTurns });
 } else {
   const { runRepl } = await import('../src/repl.js');
   await runRepl({ config, logger, planMode: args.plan, forkSession: args.fork });

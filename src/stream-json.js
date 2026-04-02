@@ -129,13 +129,8 @@ export function createStepEmitter(model, _emit = emit) {
           break;
 
         case 'reasoning':
-          // Emit as a LAIA extension (consumers can ignore)
-          flushText();
-          _emit({
-            type: 'laia:reasoning',
-            content: step.summary,
-            session_id: SESSION_ID,
-          });
+          // Suppress laia:* extension events in stream-json mode (Claude Code UI logs them as 'Unhandled')
+          // Reasoning info is still visible via stderr logs for debugging.
           break;
 
         case 'tool_call':
@@ -182,38 +177,25 @@ export function createStepEmitter(model, _emit = emit) {
 
         case 'error':
           flushText();
+          // Emit as system error (Claude Code compatible) instead of laia:error
           _emit({
-            type: 'laia:error',
+            type: 'system',
+            subtype: 'error',
             error: step.error,
-            retriable: step.retriable ?? false,
             session_id: SESSION_ID,
           });
           break;
 
         case 'request':
-          // API call lifecycle — emit as extension
-          _emit({
-            type: 'laia:request',
-            phase: step.phase,
-            session_id: SESSION_ID,
-          });
+          // Suppress laia:request in stream-json (API lifecycle noise)
           break;
 
         case 'debug':
-          _emit({
-            type: 'laia:debug',
-            content: step,
-            session_id: SESSION_ID,
-          });
+          // Suppress laia:debug in stream-json
           break;
 
         default:
-          // Unknown step type — emit as LAIA extension for debugging
-          _emit({
-            type: `laia:${step.type}`,
-            content: step,
-            session_id: SESSION_ID,
-          });
+          // Unknown step types — suppress in stream-json (no laia:* emission)
           break;
       }
     },
@@ -225,6 +207,16 @@ export function createStepEmitter(model, _emit = emit) {
 }
 
 // --- Result emitter ---
+
+function normalizeUsage(raw) {
+  if (!raw || typeof raw !== 'object') return { input_tokens: 0, output_tokens: 0 };
+  return {
+    input_tokens: raw.input_tokens ?? raw.prompt_tokens ?? 0,
+    output_tokens: raw.output_tokens ?? raw.completion_tokens ?? 0,
+    cache_creation_input_tokens: raw.cache_creation_input_tokens ?? 0,
+    cache_read_input_tokens: raw.cache_read_input_tokens ?? 0,
+  };
+}
 
 function emitResult(result, error = null, durationMs = 0) {
   if (error) {
@@ -240,9 +232,8 @@ function emitResult(result, error = null, durationMs = 0) {
       type: 'result',
       subtype: 'success',
       session_id: SESSION_ID,
-      usage: result?.usage ?? {},
+      usage: normalizeUsage(result?.usage),
       duration_ms: durationMs,
-      ...(result?.turnMessages ? { laia_turn_messages: result.turnMessages.length } : {}),
     });
   }
 }
@@ -271,7 +262,7 @@ export function parseUserMessage(msg) {
 
 // --- Main loop ---
 
-export async function runStreamJson({ config, logger }) {
+export async function runStreamJson({ config, logger, mcpConfig, maxTurns }) {
   // Protect stdout: redirect console, guard process.stdout.write, use fd 1 for protocol
   redirectConsoleToStderr();
   guardStdout();
@@ -285,7 +276,18 @@ export async function runStreamJson({ config, logger }) {
   }
 
   // Register tools
-  await registerBuiltinTools(config);
+  await registerBuiltinTools({ ...config, freeze: false });
+
+  // Connect to external MCP servers if --mcp-config provided
+  let mcpCleanup = null;
+  if (mcpConfig) {
+    try {
+      const { connectMcpServers } = await import('./mcp-client.js');
+      mcpCleanup = await connectMcpServers(mcpConfig, config);
+    } catch (err) {
+      process.stderr.write(`[stream-json] mcp-config load failed: ${err.message}\n`);
+    }
+  }
 
   // Emit initial system message (includes model for consumer identification)
   emit({
@@ -299,6 +301,7 @@ export async function runStreamJson({ config, logger }) {
 
   // Conversation context (multi-turn)
   const context = createContext();
+  let turnCount = 0;
 
   // Read stdin line by line (NDJSON)
   const rl = createInterface({
@@ -372,6 +375,7 @@ export async function runStreamJson({ config, logger }) {
 
     rl.close();
     try { await stopBrain(); } catch {}
+    try { if (mcpCleanup) await mcpCleanup(); } catch {}
 
     clearTimeout(watchdog);
     process.exitCode = 0;
@@ -428,6 +432,17 @@ export async function runStreamJson({ config, logger }) {
       continue;
     }
 
+    // Handle control_request: auto-approve (graceful fallback for Claude Code compat)
+    if (msg.type === 'control_request') {
+      emit({
+        type: 'control_response',
+        request_id: msg.request_id || msg.id,
+        permission: 'allow',
+        session_id: SESSION_ID,
+      });
+      continue;
+    }
+
     // Parse user message
     const userText = parseUserMessage(msg);
     if (!userText) {
@@ -477,6 +492,13 @@ export async function runStreamJson({ config, logger }) {
 
       const durationMs = Date.now() - turnStart;
       emitResult(result, null, durationMs);
+
+      // Check max-turns limit
+      turnCount++;
+      if (maxTurns != null && turnCount >= maxTurns) {
+        running = false;
+        break;
+      }
 
       // Check if EPIPE happened during emitResult
       if (!running) break;

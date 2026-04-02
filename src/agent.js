@@ -79,7 +79,7 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
   return result;
 }
 
-export async function runOneShot({ prompt, config, logger, json }) {
+export async function runOneShot({ prompt, config, logger, json, maxTurns }) {
   // One-shot mode: auto-approve all tools (no interactive stdin)
   setAutoApprove(true);
 
@@ -97,6 +97,7 @@ export async function runOneShot({ prompt, config, logger, json }) {
       config,
       logger,
       planMode: config.planMode || false,
+      maxTurns: maxTurns ?? undefined,
       onStep: json ? undefined : (step) => {
         if (step.type === 'token') streamed = true;
         printStep(step);

@@ -115,20 +115,29 @@ export function detectProvider(model, { defaultProvider, forceProvider } = {}) {
   const detected = detectByPattern(m);
 
   // 3. Availability guard: if detected provider's token env is not set,
-  //    fall back to default provider. Prevents breaking existing users
-  //    who have model=claude-opus-4.6 routed through Copilot.
+  //    fall back to default provider. Preserves resolved model from aliases.
   if (detected && !isProviderAvailable(detected.providerId)) {
+    const resolvedModel = detected.model; // Keep alias-resolved model name
     // Validate fallback is available too; cascade: fallback → copilot → ollama
-    if (isProviderAvailable(fallback)) return { providerId: fallback, model };
-    if (fallback !== 'copilot' && isProviderAvailable('copilot')) return { providerId: 'copilot', model };
-    if (isProviderAvailable('ollama')) return { providerId: 'ollama', model };
-    return { providerId: fallback, model }; // let it fail at token resolution
+    if (isProviderAvailable(fallback)) return { providerId: fallback, model: resolvedModel };
+    if (fallback !== 'copilot' && isProviderAvailable('copilot')) return { providerId: 'copilot', model: resolvedModel };
+    if (isProviderAvailable('ollama')) return { providerId: 'ollama', model: resolvedModel };
+    return { providerId: fallback, model: resolvedModel }; // let it fail at token resolution
   }
 
   return detected || { providerId: fallback, model };
 }
 
+// Claude Code model aliases (short names used by Teams UI preflight, etc.)
+const MODEL_ALIASES = {
+  'haiku': 'claude-3-5-haiku-latest',
+  'sonnet': 'claude-sonnet-4-20250514',
+  'opus': 'claude-opus-4-20250514',
+};
+
 function detectByPattern(m) {
+  // Resolve aliases first
+  if (MODEL_ALIASES[m]) return { providerId: 'anthropic', model: MODEL_ALIASES[m] };
   if (m.startsWith('claude-'))                          return { providerId: 'anthropic', model: m };
   if (m.startsWith('gpt-') || /^o[134]-/.test(m))      return { providerId: 'openai', model: m };
   if (m.includes('codex'))                              return { providerId: 'openai', model: m };
