@@ -3,6 +3,8 @@
 // Replaces the naive "drop old turns" with a 9-section LLM summary.
 
 import { stderr } from 'process';
+import { emit } from '../hooks/bus.js';
+import { getFlag } from '../config/flags.js';
 
 // ─── Compaction Prompt (adapted from Claude Code) ──────────────────────────
 
@@ -149,6 +151,11 @@ export async function runCompaction({ context, config, runCompactionTurn, silent
 
   const { messages, stats } = buildCompactionRequest(context);
 
+  // V5: PreCompact hook
+  if (getFlag('hooks_enabled')) {
+    await emit('PreCompact', { turns: stats.turnsBefore, tokens: stats.tokensBefore }).catch(() => {});
+  }
+
   log(`\x1b[2m[compact] ${stats.turnsBefore} turns, ~${stats.tokensBefore} tokens → compacting...\x1b[0m\n`);
 
   try {
@@ -166,6 +173,11 @@ export async function runCompaction({ context, config, runCompactionTurn, silent
 
     log(`\x1b[32m[compact] Done: ${stats.tokensBefore} → ${tokensAfter} tokens (${reduction}% reduction)\x1b[0m\n`);
 
+    // V5: PostCompact hook
+    if (getFlag('hooks_enabled')) {
+      emit('PostCompact', { success: true, stats: { ...stats, tokensAfter, reductionPercent: reduction } }).catch(() => {});
+    }
+
     return {
       success: true,
       summary,
@@ -178,6 +190,10 @@ export async function runCompaction({ context, config, runCompactionTurn, silent
     };
   } catch (err) {
     log(`\x1b[31m[compact] Failed: ${err.message}\x1b[0m\n`);
+    // V5: PostCompact hook (failure)
+    if (getFlag('hooks_enabled')) {
+      emit('PostCompact', { success: false, error: err.message }).catch(() => {});
+    }
     return { success: false, error: err.message };
   }
 }

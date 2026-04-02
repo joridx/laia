@@ -54,6 +54,9 @@ export const COMMAND_META = {
   '/tasks':       { desc: 'List/check background agents',     cat: 'agents',   subs: ['get'] },
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert last turn changes',       cat: 'system',   subs: [] },
+  '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
+  '/flags':      { desc: 'View/set feature flags',         cat: 'config',   subs: ['set'] },
+  '/init':       { desc: 'Generate LAIA.md for project',   cat: 'system',   subs: ['--force', '--dry-run'] },
   '/reflect':    { desc: 'Reflect on session (brain LLM)',  cat: 'system',   subs: ['auto'] },
   '/exit':       { desc: 'Exit LAIA',                      cat: 'system',   subs: [] },
   '/quit':       { desc: 'Exit LAIA',                      cat: 'system',   subs: [] },
@@ -1027,6 +1030,74 @@ export async function handleSlashCommand(input, session) {
         } else {
           stderr.write(`\x1b[33mUnknown subcommand '${sub}'. Try: /memory list, /memory add, /memory types, /memory <type>${R}\n`);
         }
+      }
+      return true;
+    }
+
+    case 'doctor': {
+      const { runDoctor } = await import('../services/doctor.js');
+      const { getHookStats } = await import('../hooks/bus.js');
+      const { loadFlags } = await import('../config/flags.js');
+      const { listSkills } = await import('../skills.js');
+      const skills = listSkills({ force: true });
+      await runDoctor({
+        config,
+        hookStats: getHookStats(),
+        flags: loadFlags(),
+        skillCount: skills.length,
+      });
+      return true;
+    }
+
+    case 'init': {
+      const { runInit } = await import('../services/init-project.js');
+      const dryRun = args.includes('--dry-run');
+      const force = args.includes('--force');
+      // Remove flags from args
+      const target = args.includes('--project') ? 'project' : 'dotlaia';
+      await runInit({ workspaceRoot: config.workspaceRoot, dryRun, target, force });
+      return true;
+    }
+
+    case 'flags': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const G = '\x1b[32m';
+      const Y = '\x1b[33m';
+
+      const { getFlagsWithSource, setFlag } = await import('../config/flags.js');
+
+      if (args.startsWith('set ')) {
+        // /flags set <key> <value>
+        const parts = args.slice(4).trim().split(/\s+/);
+        const key = parts[0];
+        let value = parts.slice(1).join(' ');
+        if (!key || !value) {
+          stderr.write(`${Y}Usage: /flags set <key> <value>${R}\n`);
+          return true;
+        }
+        // Parse value
+        if (value === 'true') value = true;
+        else if (value === 'false') value = false;
+        else if (!isNaN(Number(value))) value = Number(value);
+        try {
+          setFlag(key, value);
+          stderr.write(`${G}✅ Flag ${key} = ${JSON.stringify(value)} (saved to disk)${R}\n`);
+        } catch (err) {
+          stderr.write(`${Y}${err.message}${R}\n`);
+        }
+      } else {
+        // /flags — list all
+        const flagsInfo = getFlagsWithSource();
+        stderr.write(`\n${B}🚩 Feature Flags${R}\n\n`);
+        const maxKey = Math.max(6, ...flagsInfo.map(f => f.key.length));
+        for (const f of flagsInfo) {
+          const srcColor = f.source === 'env' ? Y : f.source === 'file' ? G : DIM;
+          const val = JSON.stringify(f.value);
+          stderr.write(`  ${B}${f.key.padEnd(maxKey)}${R}  ${val.padEnd(8)}  ${srcColor}[${f.source}]${R}\n`);
+        }
+        stderr.write(`\n${DIM}Use: /flags set <key> <value>  |  Env: LAIA_FLAG_<KEY>=value${R}\n\n`);
       }
       return true;
     }

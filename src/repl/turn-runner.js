@@ -7,6 +7,8 @@ import { renderMarkdown } from '../render.js';
 import { resolve as resolvePath } from 'path';
 import { stderr } from 'process';
 import { getRandomTip } from '../services/tips.js';
+import { emit, emitSync } from '../hooks/bus.js';
+import { getFlag } from '../config/flags.js';
 
 // Spinner helper with contextual tips
 function createSpinner() {
@@ -102,6 +104,18 @@ export async function executeTurn({
           spinner.start();
         } else {
           if (step.type === 'tool_call') spinner.stop();
+          // V5: Emit PreToolUse / PostToolUse hooks
+          if (getFlag('hooks_enabled')) {
+            if (step.type === 'tool_call') {
+              emitSync('PreToolUse', { name: step.name, args: step.args, turnId });
+            }
+            if (step.type === 'tool_result') {
+              emitSync('PostToolUse', {
+                name: step.name, args: step.args,
+                result: step.result, success: !step.result?.error, turnId,
+              });
+            }
+          }
           // Track files for auto-commit + undo
           if (step.type === 'tool_result' && (step.name === 'write' || step.name === 'edit') && step.result?.path) {
             autoCommitter.trackFile(step.result.path);

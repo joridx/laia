@@ -35,6 +35,12 @@ import { syncOnSessionEnd } from './memory/bridge.js';
 import { runReflectionPipeline } from './memory/reflection.js';
 import { brainSearch, brainRemember, brainLogSession } from './brain/client.js';
 import { createClient } from './agent.js';
+import { emit, loadUserHooks, getHookStats } from './hooks/bus.js';
+import { loadFlags, getFlag, getFlagsWithSource, initFlagsFile } from './config/flags.js';
+import { startSkillWatcher, stopSkillWatcher } from './skills/watcher.js';
+import { recordUserInput, snapshotState, checkAndShowAwaySummary } from './services/away-summary.js';
+import { recordMessage as recordSkillMessage, shouldCheckImprovement } from './skills/improvement.js';
+import { gatherSuggestions, displaySuggestions } from './services/suggestions.js';
 
 // Simple Y/n prompt using raw mode (default Y)
 async function askYesNo(rl) {
@@ -311,6 +317,16 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   // Tools failure is fatal — rethrow
   if (toolsS.status === 'rejected') throw toolsS.reason;
 
+  // V5: Initialize feature flags + load user hooks + skill watcher
+  initFlagsFile();
+  if (getFlag('hooks_enabled')) {
+    await loadUserHooks(config.workspaceRoot);
+  }
+  startSkillWatcher({
+    workspaceRoot: config.workspaceRoot,
+    onReload: () => discoverSkills({ force: true, workspaceRoot: config.workspaceRoot }),
+  });
+
   // Report brain status (resolved during banner animation)
   const brainResult = brainS.status === 'fulfilled' ? brainS.value : { ok: false, error: brainS.reason?.message ?? 'unknown' };
   if (brainResult.ok) {
@@ -324,11 +340,23 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   process.on('exit', disablePaste);
   process.on('SIGINT', disablePaste);
   process.on('SIGTERM', disablePaste);
+
+  // V5: Emit SessionStart hook
+  if (getFlag('hooks_enabled')) {
+    emit('SessionStart', { config, sessionId: logger.sessionId }).catch(() => {});
+  }
+
   rl.prompt();
 
   rl.on('close', async () => {
     if (stdin.isTTY) pasteStream.off('keypress', onEscKeypress);
     disablePaste();
+
+    // V5: Emit SessionEnd hook
+    if (getFlag('hooks_enabled')) {
+      try { await emit('SessionEnd', { sessionId: logger.sessionId, turns: context.turnCount() }); } catch {}
+    }
+
     if (context.turnCount() > 0) {
       try {
         autoSave(context.serialize(), sessionMeta);
@@ -392,12 +420,18 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
       }
     }
 
+    await stopSkillWatcher();
     await stopBrain();
     process.exit(0);
   });
 
   // === Main loop ===
   for await (const line of rl) {
+    // V5: Away summary — show before processing input
+    const awaySummary = checkAndShowAwaySummary();
+    if (awaySummary) stderr.write(awaySummary);
+    recordUserInput();
+
     let input = line.replace(SENTINEL_RE, '\n').trim();
 
     if (!input && selectedSuggestion >= 0 && suggestions[selectedSuggestion]) {
@@ -406,6 +440,8 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
     }
     clearSuggestions();
     if (!input) { rl.prompt(); continue; }
+
+    recordSkillMessage(input);  // V5: track for skill improvement
 
     // Bang commands — execute shell directly without LLM roundtrip
     if (input.startsWith('!')) {
@@ -642,6 +678,14 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
     }
 
     updatePrompt();
+    snapshotState(); // V5: snapshot for away summary
+
+    // V5: Contextual suggestions (zero LLM cost)
+    try {
+      const hints = await gatherSuggestions({ workspaceRoot: config.workspaceRoot, context });
+      displaySuggestions(hints);
+    } catch {}
+
     rl.prompt();
   }
 }
