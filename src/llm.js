@@ -71,15 +71,17 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 3
 
         const url = resolveUrl(provider, endpoint);
         const authHeaders = buildAuthHeaders(provider, token);
+        const allHeaders = {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          ...provider.extraHeaders,
+        };
+        console.error(`[LAIA FETCH DEBUG] url=${url} provider=${provider.id} auth=${provider.auth} headers=${JSON.stringify(Object.keys(allHeaders))}`);
 
         const res = await fetch(url, {
           method: 'POST',
           signal,
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders,
-            ...provider.extraHeaders,
-          },
+          headers: allHeaders,
           body: JSON.stringify(body),
         });
 
@@ -126,15 +128,17 @@ export function createLLMClient({ getToken, model = DEFAULT_MODEL, timeoutMs = 3
       try {
         const url = resolveUrl(provider, endpoint);
         const authHeaders = buildAuthHeaders(provider, token);
+        const allHeaders = {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          ...provider.extraHeaders,
+        };
+        console.error(`[LAIA FETCH DEBUG stream] url=${url} provider=${provider.id} auth=${provider.auth} headers=${JSON.stringify(Object.keys(allHeaders))}`);
 
         const res = await fetch(url, {
           method: 'POST',
           signal,
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders,
-            ...provider.extraHeaders,
-          },
+          headers: allHeaders,
           body: JSON.stringify({
             ...body,
             stream: true,

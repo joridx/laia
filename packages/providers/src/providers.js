@@ -174,13 +174,26 @@ export function getBaseUrl(provider) {
  * is in how the token is obtained (token exchange vs env var).
  */
 export function buildAuthHeaders(provider, token) {
-  switch (provider.auth) {
+  const authType = typeof provider === 'string' ? provider : provider?.auth;
+  const providerId = typeof provider === 'string' ? provider : provider?.id;
+  // auth=none doesn't need a token
+  if (authType === 'none') return {};
+  if (!token || (typeof token === 'string' && !token.trim())) {
+    const err = new Error(`[LAIA AUTH DEBUG] buildAuthHeaders called with empty/null token. provider=${providerId}, auth=${authType}, caller=${new Error().stack.split('\n')[2]?.trim()}`);
+    console.error(err.message);
+    throw err;
+  }
+  if (authType === 'anthropic') {
+    console.error(`[LAIA AUTH DEBUG] x-api-key path selected! provider=${providerId}, auth=${authType}, token=${String(token).substring(0,10)}..., caller=${new Error().stack.split('\n')[2]?.trim()}`);
+  }
+  switch (authType) {
     case 'bearer':    return { Authorization: `Bearer ${token}` };
     case 'copilot':   return { Authorization: `Bearer ${token}` };
     case 'api-key':   return { 'api-key': token };
     case 'anthropic': return { 'x-api-key': token };
-    case 'none':      return {};
-    default:          return {};
+    default:
+      console.error(`[LAIA AUTH DEBUG] Unknown auth type: ${authType}, provider=${providerId}`);
+      return {};
   }
 }
 
