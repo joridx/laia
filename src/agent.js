@@ -1,7 +1,7 @@
 // Agent turn loop: user input -> LLM -> tool calls -> LLM -> final text
 import { createLLMClient, runAgentTurn } from './llm.js';
 import { getCopilotToken, getProviderToken } from './auth.js';
-import { detectProvider } from '@laia/providers';
+import { detectProvider, isProviderAvailable } from '@laia/providers';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getToolSchemas, executeTool as dispatchTool } from './tools/index.js';
 import { checkPermission, setAutoApprove } from './permissions.js';
@@ -10,6 +10,19 @@ import { colorDiff } from './diff.js';
 
 // Tools excluded in plan mode (mutating operations)
 const PLAN_MODE_EXCLUDED_TOOLS = ['write', 'edit', 'bash'];
+
+// Fallback chain for rate-limited free-tier models
+// Order: best intelligence first, then speed, then backup
+const FALLBACK_CHAIN = [
+  { provider: 'groq', model: 'openai/gpt-oss-120b' },
+  { provider: 'groq', model: 'moonshotai/kimi-k2-instruct' },
+  { provider: 'groq', model: 'meta-llama/llama-4-scout-17b-16e-instruct' },
+  { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+  { provider: 'cerebras', model: 'qwen-3-235b-a22b-instruct-2507' },
+  { provider: 'google', model: 'gemini-2.5-flash' },
+  { provider: 'google', model: 'gemini-3.1-flash-lite-preview' },
+  { provider: 'copilot', model: 'claude-sonnet-4' },
+];
 
 export function createClient(config) {
   const { providerId, model } = detectProvider(config.model, { forceProvider: config.provider });
@@ -20,8 +33,15 @@ export function createClient(config) {
   });
 }
 
+function createClientForFallback(provider, model) {
+  return createLLMClient({
+    getToken: () => getProviderToken(provider),
+    model,
+    providerId: provider,
+  });
+}
+
 export async function runTurn({ input, config, logger, onStep, history = [], corporateHint, planMode = false, effort, signal } = {}) {
-  const llmClient = createClient(config);
   const systemPrompt = buildSystemPrompt({
     workspaceRoot: config.workspaceRoot,
     model: config.model,
@@ -47,8 +67,8 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
       })
     : undefined;
 
-  const result = await runAgentTurn({
-    client: llmClient,
+  const makeTurnArgs = (client) => ({
+    client,
     systemPrompt,
     userInput: input,
     history,
@@ -60,7 +80,6 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
       const t0 = Date.now();
       const result = await dispatchTool(name, args, callId);
       const durationMs = Date.now() - t0;
-      // Log tool output stats for context consumption analysis (lightweight: use .length on known string fields)
       const bytesOut = (result.stdout?.length || 0) + (result.stderr?.length || 0) + (result.error ? 100 : 0);
       const bytesIn = JSON.stringify(args ?? {}).length;
       logger.logToolStats?.({ tool: name, bytesIn, bytesOut, truncated: !!result.rawFile, rawFile: result.rawFile, exitCode: result.exitCode, durationMs });
@@ -75,8 +94,35 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
     },
   });
 
-  // result includes { text, usage, turnMessages } — turnMessages is the full tool transcript
-  return result;
+  // Try primary model, then fallback chain on 429 rate limits
+  const primaryClient = createClient(config);
+  try {
+    return await runAgentTurn(makeTurnArgs(primaryClient));
+  } catch (err) {
+    if (err?.status !== 429) throw err;
+
+    // Build fallback candidates: skip the current model, skip unavailable providers
+    const currentKey = `${primaryClient.providerId}:${primaryClient.model}`;
+    const candidates = FALLBACK_CHAIN.filter(f =>
+      `${f.provider}:${f.model}` !== currentKey && isProviderAvailable(f.provider)
+    );
+
+    for (const fb of candidates) {
+      const tag = `${fb.provider}:${fb.model}`;
+      onStep?.({ type: 'error', error: `Rate limited — falling back to ${tag}`, retriable: true });
+      logger.info('fallback_model', { from: currentKey, to: tag, reason: '429' });
+      try {
+        const fbClient = createClientForFallback(fb.provider, fb.model);
+        return await runAgentTurn(makeTurnArgs(fbClient));
+      } catch (fbErr) {
+        if (fbErr?.status === 429) continue; // this one is also rate limited, try next
+        throw fbErr; // non-rate-limit error, propagate
+      }
+    }
+
+    // All fallbacks exhausted
+    throw err;
+  }
 }
 
 export async function runOneShot({ prompt, config, logger, json, maxTurns }) {
