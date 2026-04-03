@@ -25,7 +25,7 @@
 | Provider | Endpoint | Free Tier | Variable d'entorn | Velocitat |
 |----------|----------|-----------|-------------------|-----------|
 | **Copilot** | `api.business.githubcopilot.com` | ✅ (subscripció GitHub) | apps.json (auto) | Variable |
-| **Google** | `generativelanguage.googleapis.com` | ✅ 1500 req/dia | `GOOGLE_API_KEY` | Mitjana |
+| **Google** | `generativelanguage.googleapis.com` | ✅ 20 req/dia/model | `GOOGLE_API_KEY` | Mitjana |
 | **Groq** | `api.groq.com` | ✅ 6000 req/dia, 6M tok/dia | `GROQ_API_KEY` | 🚀 Ràpid |
 | **Cerebras** | `api.cerebras.ai` | ✅ 30 req/min, 1M tok/min | `CEREBRAS_API_KEY` | 🚀🚀 Ultràpid |
 | **OpenAI** | `api.openai.com` | 💰 De pagament | `OPENAI_API_KEY` | Mitjana |
@@ -85,13 +85,18 @@ CEREBRAS_API_KEY=csk-...
 |-------|--------|------|-----------|-----------|--------|---------|
 | **gemini-3.1-flash-lite-preview** | ~MoE | ✅ 640ms | ✅ 1348ms | ✅ 586ms | ✅ 1268ms | **961ms** |
 | **gemini-2.5-flash** | ~MoE | ✅ 3313ms | ✅ 1044ms | ✅ 1285ms | ✅ 4228ms | **2468ms** |
-| gemini-3-flash-preview | ~MoE | ✅ 26288ms | ❌ 12491ms | ✅ 14846ms | ✅ 48212ms | 25459ms |
+| **gemini-3-flash-preview** | ~MoE | ✅ 26288ms | ❌ 12491ms | ✅ 14846ms | ✅ 48212ms | 25459ms |
 | gemini-2.5-flash-lite-preview | ~MoE | ❌ 91ms | ❌ 88ms | ❌ 90ms | ❌ 92ms | — |
 
+> ⚠️ **Free tier: 20 requests/dia per model** (no 1500 com diu la doc antiga). Cada model té comptador independent,
+> així que repartint entre 3 models (2.5-flash + 3-flash-preview + 3.1-flash-lite) tens ~60 req/dia.
+>
 > 💡 **gemini-2.5-flash** és el rei del raonament: el "thinking" intern fa que encert sempre, però triga.
 > **gemini-3.1-flash-lite-preview** és sorprenentment bo i molt més ràpid.
-> ⚠️ **gemini-3-flash-preview** és massa lent (12-48s). No recomanat.
+> ⚠️ **gemini-3-flash-preview** funciona però és massa lent (12-48s). No recomanat.
 > ⚠️ **gemini-2.5-flash-lite** no funciona (respostes buides).
+> ❌ **Tots els models "Pro"** (2.5-pro, 3-pro, 3.1-pro) tenen quota 0 — requereixen pagament.
+> ❌ **gemini-2.0-flash / 2.0-flash-lite** — eliminats del free tier (quota 0).
 
 #### 🏅 Copilot (GitHub — inclòs amb subscripció)
 
@@ -209,7 +214,7 @@ Qualsevol provider OpenAI-compatible es pot afegir en 2 minuts:
 |----------|-----|-----|-----------|-------|
 | **Cerebras** | 30 | ~43K | 1M/min | Molt generós |
 | **Groq** | 30 | 6000 | 6M | El més generós |
-| **Google** | 10 | 1500 | 250K input | Thinking models consumeixen més |
+| **Google** | 10 | **20 per model** | 250K input | Cada model té comptador independent. Repartir entre 3 models = ~60 req/dia |
 | **Copilot** | — | — | — | Flat rate (subscripció) |
 
 ---
