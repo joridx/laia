@@ -160,15 +160,30 @@ export function detectProvider(model, { defaultProvider, forceProvider } = {}) {
 }
 
 // Claude Code model aliases (short names used by Teams UI preflight, etc.)
-const MODEL_ALIASES = {
-  'haiku': 'claude-3-5-haiku-latest',
-  'sonnet': 'claude-sonnet-4-20250514',
-  'opus': 'claude-opus-4-20250514',
+// Resolved dynamically: if the target provider is available, use the native model;
+// otherwise fall back to a universally-available equivalent.
+const MODEL_ALIASES_BY_PROVIDER = {
+  'haiku':  { native: { providerId: 'anthropic', model: 'claude-3-5-haiku-latest' },
+              fallback: { providerId: 'openai', model: 'gpt-4o-mini' } },
+  'sonnet': { native: { providerId: 'anthropic', model: 'claude-sonnet-4-20250514' } },
+  'opus':   { native: { providerId: 'anthropic', model: 'claude-opus-4-20250514' } },
 };
 
 function detectByPattern(m, original) {
-  // Resolve aliases first (aliases replace the model name)
-  if (MODEL_ALIASES[m]) return { providerId: 'anthropic', model: MODEL_ALIASES[m] };
+  // Resolve aliases first (with provider-aware fallback)
+  const alias = MODEL_ALIASES_BY_PROVIDER[m];
+  if (alias) {
+    // If native provider is available, use it directly
+    if (isProviderAvailable(alias.native.providerId)) {
+      return { providerId: alias.native.providerId, model: alias.native.model };
+    }
+    // Otherwise use fallback if defined
+    if (alias.fallback) {
+      return { providerId: alias.fallback.providerId, model: alias.fallback.model };
+    }
+    // No fallback — return native (will cascade through availability guard)
+    return { providerId: alias.native.providerId, model: alias.native.model };
+  }
   // For non-alias matches, preserve the original case
   if (m.startsWith('claude-'))                          return { providerId: 'anthropic', model: original };
   if (m.startsWith('gpt-') || /^o[134]-/.test(m))      return { providerId: 'openai', model: original };

@@ -280,12 +280,12 @@ async function runResponsesTurn({ client, model, systemPrompt, userInput, histor
     for (const r of parsed.reasoning) onStep?.({ type: 'reasoning', summary: r });
 
     if (parsed.text) {
-      onStep?.({ type: 'final', text: parsed.text });
+      onStep?.({ type: 'final', text: parsed.text, usage: response.usage });
       turnChat.push({ role: 'assistant', content: parsed.text });
       return { text: parsed.text, usage: response.usage, turnMessages: turnChat };
     }
     if (!parsed.toolCalls.length) {
-      onStep?.({ type: 'final', text: '' });
+      onStep?.({ type: 'final', text: '', usage: response.usage });
       return { text: '', usage: response.usage, turnMessages: turnChat };
     }
     if (i === maxIterations) throw makeError(`Max tool iterations (${maxIterations}) reached`);
@@ -408,18 +408,18 @@ async function runChatTurn({ client, model, systemPrompt, userInput, history, to
         response = await chatCall();
         continue;
       }
-      onStep?.({ type: 'final', text: finalText });
+      onStep?.({ type: 'final', text: finalText, usage: response.usage });
       return { text: finalText, usage: response.usage, turnMessages: buildTurnMessages(finalText) };
     }
 
     if (parsed.text && !parsed.toolCalls.length) {
-      onStep?.({ type: 'final', text: parsed.text });
+      onStep?.({ type: 'final', text: parsed.text, usage: response.usage });
       // Append the final assistant message so it's captured in turnMessages
       messages.push({ role: 'assistant', content: parsed.text });
       return { text: parsed.text, usage: response.usage, turnMessages: buildTurnMessages(parsed.text) };
     }
     if (!parsed.toolCalls.length) {
-      onStep?.({ type: 'final', text: parsed.text || '' });
+      onStep?.({ type: 'final', text: parsed.text || '', usage: response.usage });
       return { text: parsed.text || '', usage: response.usage, turnMessages: buildTurnMessages(parsed.text || '') };
     }
     if (i === maxIterations) throw makeError(`Max tool iterations (${maxIterations}) reached`);

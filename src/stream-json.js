@@ -96,8 +96,8 @@ export function createStepEmitter(model, _emit = emit) {
     return `msg_${SESSION_ID.slice(0, 8)}_${++messageIdCounter}`;
   }
 
-  function emitAssistant(content, stopReason = null) {
-    _emit({
+  function emitAssistant(content, stopReason = null, usage = null) {
+    const msg = {
       type: 'assistant',
       message: {
         id: nextMsgId(),
@@ -108,12 +108,15 @@ export function createStepEmitter(model, _emit = emit) {
         stop_reason: stopReason,
       },
       session_id: SESSION_ID,
-    });
+    };
+    // Attach usage at top level (Claude Code UI reads msg.usage)
+    if (usage) msg.usage = normalizeUsage(usage);
+    _emit(msg);
   }
 
-  function flushText(stopReason = null) {
+  function flushText(stopReason = null, usage = null) {
     if (!pendingText) return;
-    emitAssistant([{ type: 'text', text: pendingText }], stopReason);
+    emitAssistant([{ type: 'text', text: pendingText }], stopReason, usage);
     pendingText = '';
   }
 
@@ -165,18 +168,30 @@ export function createStepEmitter(model, _emit = emit) {
           break;
         }
 
-        case 'final':
-          // Flush any remaining streamed text
-          flushText('end_turn');
+        case 'final': {
+          // Usage propagated from LLM response via the step
+          const usage = step.usage || null;
+          // Flush any remaining streamed text (with usage attached)
+          flushText('end_turn', usage);
           // If no tokens were streamed (non-streaming provider), emit final text directly
           if (step.text && !tokensSeen) {
             pendingText = step.text;
-            flushText('end_turn');
+            flushText('end_turn', usage);
           }
+          // If no text at all but usage exists, emit an empty assistant message with usage
+          // so the UI can track token consumption even for tool-only turns
+          if (!pendingText && !tokensSeen && !step.text && usage) {
+            emitAssistant([{ type: 'text', text: '' }], 'end_turn', usage);
+          }
+          // Reset for next turn
+          tokensSeen = false;
           break;
+        }
 
         case 'error':
           flushText();
+          // Reset state on error to avoid cross-turn contamination
+          tokensSeen = false;
           // Emit as system error (Claude Code compatible) instead of laia:error
           _emit({
             type: 'system',
