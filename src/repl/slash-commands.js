@@ -1377,6 +1377,8 @@ export async function handleModelCommand(args, config) {
       const provider = getProvider(pid);
       if (!provider.supports?.listModels) continue;
       if (!isProviderAvailable(pid)) continue;
+      // OpenRouter hidden from /model list — too slow and unreliable vs Groq/Cerebras
+      if (pid === 'openrouter') continue;
 
       try {
         const token = await getProviderToken(pid);
