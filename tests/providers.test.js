@@ -22,8 +22,8 @@ function withEnv(overrides, fn) {
 // ─── PROVIDERS registry ──────────────────────────────────────────────────────
 
 describe('@laia/providers — registry', () => {
-  it('has all 5 providers', () => {
-    assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'copilot', 'ollama', 'openai']);
+  it('has all 6 providers', () => {
+    assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'copilot', 'google', 'ollama', 'openai']);
   });
 
   it('each provider has required fields', () => {
@@ -98,6 +98,29 @@ describe('@laia/providers — detectProvider', () => {
     assert.equal(detectProvider('gemma-2b').providerId, 'ollama');
   });
 
+  it('routes gemini models to google (when available)', () => {
+    withEnv({ GOOGLE_API_KEY: 'test' }, () => {
+      assert.equal(detectProvider('gemini-2.5-flash').providerId, 'google');
+      assert.equal(detectProvider('gemini-2.5-pro').providerId, 'google');
+      assert.equal(detectProvider('gemini-2.0-flash').providerId, 'google');
+    });
+  });
+
+  it('falls back to copilot when google key not set', () => {
+    withEnv({ GOOGLE_API_KEY: undefined }, () => {
+      const r = detectProvider('gemini-2.5-flash');
+      assert.equal(r.providerId, 'copilot');
+      assert.equal(r.model, 'gemini-2.5-flash');
+    });
+  });
+
+  it('distinguishes gemini (google) from gemma (ollama)', () => {
+    withEnv({ GOOGLE_API_KEY: 'test' }, () => {
+      assert.equal(detectProvider('gemini-2.5-flash').providerId, 'google');
+      assert.equal(detectProvider('gemma-3-27b-it').providerId, 'ollama');
+    });
+  });
+
   it('explicit prefix overrides auto-detection', () => {
     const r = detectProvider('copilot:claude-opus-4.6');
     assert.equal(r.providerId, 'copilot');
@@ -133,8 +156,8 @@ describe('@laia/providers — detectProvider', () => {
     withEnv({ ANTHROPIC_API_KEY: 'test' }, () => {
       const r = detectProvider('  Claude-Opus-4.6  ');
       assert.equal(r.providerId, 'anthropic');
-      // Model is lowercased+trimmed (internal normalization for pattern matching)
-      assert.equal(r.model, 'claude-opus-4.6');
+      // Model is trimmed but original case is preserved (APIs need exact model names)
+      assert.equal(r.model, 'Claude-Opus-4.6');
     });
   });
 

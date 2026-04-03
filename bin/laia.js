@@ -90,9 +90,13 @@ if (args.version) {
 // Subcommands (Claude Code compatibility)
 if (args.subcommand) {
   if (args.subcommand.startsWith('auth')) {
-    // Check if any API key is configured
-    const hasKey = !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY);
-    console.log(JSON.stringify({ loggedIn: hasKey, authMethod: hasKey ? 'api_key' : null }));
+    // Check all auth sources: env vars + Copilot token
+    const { isProviderAvailable } = await import('@laia/providers');
+    const hasEnvKey = !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY);
+    const hasCopilot = isProviderAvailable('copilot');
+    const hasKey = hasEnvKey || hasCopilot;
+    const method = hasEnvKey ? 'api_key' : hasCopilot ? 'copilot' : null;
+    console.log(JSON.stringify({ loggedIn: hasKey, authMethod: method }));
     process.exit(0);
   }
   if (args.subcommand.startsWith('mcp ')) {

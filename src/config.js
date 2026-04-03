@@ -7,6 +7,10 @@ import { homedir } from 'os';
 // No side effects at import time.
 
 export function migrateLegacyConfig() {
+  // Load ~/.laia/.env (API keys, secrets) into process.env — before anything reads env vars.
+  // Simple key=value parser, no dependencies. Existing env vars are NOT overwritten.
+  loadDotEnv(join(homedir(), '.laia', '.env'));
+
   if (process.env.CLAUDE_BRAIN_PATH && !process.env.LAIA_BRAIN_PATH) {
     process.stderr.write(
       '⚠️  CLAUDE_BRAIN_PATH is deprecated. Set LAIA_BRAIN_PATH instead.\n' +
@@ -71,4 +75,29 @@ export async function loadConfig({ modelOverride, verbose, swarm, autoCommit, pl
     ...(effort ? { effort: normalizeEffort(effort) } : {}),
     ...(genai ? { genai } : {}),
   };
+}
+
+// ─── .env loader ─────────────────────────────────────────────────────────────
+// Minimal KEY=VALUE parser. Does NOT overwrite existing env vars.
+// Supports: comments (#), quoted values, empty lines. No interpolation.
+
+export function loadDotEnv(filePath) {
+  let content;
+  try { content = readFileSync(filePath, 'utf8'); } catch { return; }
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    // Strip surrounding quotes (single or double)
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    // Don't overwrite existing env vars (explicit export takes precedence)
+    if (key && !(key in process.env)) {
+      process.env[key] = val;
+    }
+  }
 }

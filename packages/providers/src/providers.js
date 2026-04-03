@@ -70,6 +70,16 @@ export const PROVIDERS = {
     extraHeaders: {},
     quirks: {},
   },
+  google: {
+    id: 'google',
+    baseUrlEnv: 'GOOGLE_BASE_URL',
+    baseUrlDefault: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    auth: 'bearer',            // Authorization: Bearer <key>
+    tokenEnv: 'GOOGLE_API_KEY',
+    supports: { chat: true, responses: false, listModels: true },
+    extraHeaders: {},
+    quirks: {},
+  },
   ollama: {
     id: 'ollama',
     baseUrlEnv: 'OLLAMA_BASE_URL',
@@ -112,7 +122,8 @@ export function detectProvider(model, { defaultProvider, forceProvider } = {}) {
   }
 
   // 2. Auto-detect by model name pattern
-  const detected = detectByPattern(m);
+  const originalModel = model.trim();
+  const detected = detectByPattern(m, originalModel);
 
   // 3. Availability guard: if detected provider's token env is not set,
   //    fall back to default provider. Preserves resolved model from aliases.
@@ -135,13 +146,16 @@ const MODEL_ALIASES = {
   'opus': 'claude-opus-4-20250514',
 };
 
-function detectByPattern(m) {
-  // Resolve aliases first
+function detectByPattern(m, original) {
+  // Resolve aliases first (aliases replace the model name)
   if (MODEL_ALIASES[m]) return { providerId: 'anthropic', model: MODEL_ALIASES[m] };
-  if (m.startsWith('claude-'))                          return { providerId: 'anthropic', model: m };
-  if (m.startsWith('gpt-') || /^o[134]-/.test(m))      return { providerId: 'openai', model: m };
-  if (m.includes('codex'))                              return { providerId: 'openai', model: m };
-  if (/^(llama|mistral|qwen|deepseek|gemma)/.test(m))  return { providerId: 'ollama', model: m };
+  // For non-alias matches, preserve the original case
+  if (m.startsWith('claude-'))                          return { providerId: 'anthropic', model: original };
+  if (m.startsWith('gpt-') || /^o[134]-/.test(m))      return { providerId: 'openai', model: original };
+  if (m.includes('codex'))                              return { providerId: 'openai', model: original };
+  if (m.startsWith('gemini-'))                          return { providerId: 'google', model: original };
+  if (/^(llama|mistral|qwen|deepseek)/.test(m))          return { providerId: 'ollama', model: original };
+  if (m.startsWith('gemma'))                              return { providerId: 'ollama', model: original };
   return null;
 }
 
