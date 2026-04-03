@@ -7,7 +7,7 @@ import { loadConfig, migrateLegacyConfig } from '../src/config.js';
 migrateLegacyConfig();
 
 function parseArgv(argv) {
-  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: true, mcp: false, mcpStdoutPolicy: 'strict', streamJson: false, outputFormat: null, autoCommit: false, plan: false, genai: null, effort: null, fork: null, subcommand: null, mcpConfig: null, maxTurns: null };
+  const args = { prompt: null, model: null, json: false, help: false, version: false, verbose: false, swarm: true, mcp: false, mcpStdoutPolicy: 'strict', streamJson: false, outputFormat: null, autoCommit: false, plan: false, genai: null, effort: null, fork: null, subcommand: null, mcpConfig: null, maxTurns: null, resume: null, disallowedTools: null };
   // Check for subcommands (e.g. "auth status") before flag parsing
   if (argv[2] && !argv[2].startsWith('-')) {
     const sub = argv.slice(2).join(' ');
@@ -30,7 +30,9 @@ function parseArgv(argv) {
     else if (a === '--mcp-config') args.mcpConfig = argv[++i];
     else if (a === '--max-turns') args.maxTurns = parseInt(argv[++i], 10);
     // Claude Code compat: accepted silently (no-op)
-    else if (a === '--setting-sources' || a === '--disallowedTools' || a === '--permission-prompt-tool') { i++; /* skip value */ }
+    else if (a === '--setting-sources' || a === '--permission-prompt-tool') { i++; /* skip value */ }
+    else if (a === '--disallowedTools' || a === '--disallowed-tools') { args.disallowedTools = argv[++i]?.split(',').map(s => s.trim()).filter(Boolean) || []; }
+    else if (a === '--resume') { args.resume = argv[++i]; }
     else if (a === '--no-session-persistence' || a === '--worktree') { if (argv[i+1] && !argv[i+1].startsWith('-')) i++; /* skip optional value */ }
     else if (a === '--permission-mode') { i++; /* skip value */ }
     else if (a === '--mcp-stdout-policy') args.mcpStdoutPolicy = argv[++i];
@@ -117,7 +119,7 @@ if (args.mcp) {
   await startMcpServer({ config, logger, stdoutPolicy: args.mcpStdoutPolicy });
 } else if (args.streamJson) {
   const { runStreamJson } = await import('../src/stream-json.js');
-  await runStreamJson({ config, logger, mcpConfig: args.mcpConfig, maxTurns: args.maxTurns });
+  await runStreamJson({ config, logger, mcpConfig: args.mcpConfig, maxTurns: args.maxTurns, resume: args.resume, disallowedTools: args.disallowedTools });
 } else if (args.prompt && args.outputFormat === 'text') {
   // One-shot text mode (Claude Code preflight compat: -p "..." --output-format text)
   const { runOneShot } = await import('../src/agent.js');

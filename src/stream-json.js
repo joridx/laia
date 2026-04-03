@@ -31,7 +31,10 @@ try {
   PKG_VERSION = pkg.version || PKG_VERSION;
 } catch {}
 
-const SESSION_ID = randomBytes(16).toString('hex');
+let SESSION_ID = randomBytes(16).toString('hex');
+
+// Allow overriding SESSION_ID for resume (set from runStreamJson before any emit)
+function setSessionId(id) { SESSION_ID = id; }
 
 // Module-level flag for clean shutdown on EPIPE or abort
 let running = true;
@@ -277,7 +280,7 @@ export function parseUserMessage(msg) {
 
 // --- Main loop ---
 
-export async function runStreamJson({ config, logger, mcpConfig, maxTurns }) {
+export async function runStreamJson({ config, logger, mcpConfig, maxTurns, resume, disallowedTools }) {
   // Protect stdout: redirect console, guard process.stdout.write, use fd 1 for protocol
   redirectConsoleToStderr();
   guardStdout();
@@ -290,8 +293,8 @@ export async function runStreamJson({ config, logger, mcpConfig, maxTurns }) {
     process.stderr.write(`[stream-json] brain start failed: ${err.message}\n`);
   }
 
-  // Register tools
-  await registerBuiltinTools({ ...config, freeze: false });
+  // Register tools (with optional disallowedTools filter)
+  await registerBuiltinTools({ ...config, freeze: false, disallowedTools });
 
   // Connect to external MCP servers if --mcp-config provided
   let mcpCleanup = null;
@@ -301,6 +304,29 @@ export async function runStreamJson({ config, logger, mcpConfig, maxTurns }) {
       mcpCleanup = await connectMcpServers(mcpConfig, config);
     } catch (err) {
       process.stderr.write(`[stream-json] mcp-config load failed: ${err.message}\n`);
+    }
+  }
+
+  // Resume: restore session ID and context from a previous session
+  let resumedData = null;
+  if (resume) {
+    try {
+      const { loadSessionById } = await import('./session.js');
+      const saved = loadSessionById(resume);
+      if (saved) {
+        const testCtx = createContext();
+        if (testCtx.deserialize(saved)) {
+          resumedData = saved;
+          setSessionId(saved.sessionId || resume);  // Use canonical ID from saved data
+          process.stderr.write(`[stream-json] resumed session ${SESSION_ID.slice(0, 8)}... (${saved.turns?.length ?? 0} turns)\n`);
+        } else {
+          process.stderr.write(`[stream-json] session ${resume.slice(0, 8)}... failed to deserialize, starting fresh\n`);
+        }
+      } else {
+        process.stderr.write(`[stream-json] session ${resume.slice(0, 8)}... not found, starting fresh\n`);
+      }
+    } catch (err) {
+      process.stderr.write(`[stream-json] resume failed: ${err.message}, starting fresh\n`);
     }
   }
 
@@ -316,6 +342,12 @@ export async function runStreamJson({ config, logger, mcpConfig, maxTurns }) {
 
   // Conversation context (multi-turn)
   const context = createContext();
+  if (resumedData) {
+    const ok = context.deserialize(resumedData);
+    if (!ok) {
+      process.stderr.write('[stream-json] warning: context deserialize failed after validation\n');
+    }
+  }
   let turnCount = 0;
 
   // Read stdin line by line (NDJSON)
@@ -387,6 +419,20 @@ export async function runStreamJson({ config, logger, mcpConfig, maxTurns }) {
       process.exit(1);
     }, 10_000);
     watchdog.unref?.();
+
+    // Persist session for --resume support
+    try {
+      const { saveSession } = await import('./session.js');
+      const serialized = context.serialize();
+      saveSession(serialized, {
+        sessionId: SESSION_ID,
+        model: config.model,
+        workspaceRoot: config.workspaceRoot,
+      });
+      process.stderr.write(`[stream-json] session saved (${SESSION_ID.slice(0, 8)}...)\n`);
+    } catch (err) {
+      process.stderr.write(`[stream-json] session save failed: ${err.message}\n`);
+    }
 
     rl.close();
     try { await stopBrain(); } catch {}

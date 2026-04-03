@@ -86,6 +86,18 @@ export function loadSession(nameOrIndex) {
     return null;
   }
 
+  // Search by sessionId first (hex string from stream-json)
+  if (typeof nameOrIndex === 'string' && /^[a-f0-9]{8,}$/i.test(nameOrIndex)) {
+    const files = listSessionFiles();
+    for (const f of files.reverse()) {  // newest first
+      try {
+        const raw = readFileSync(join(SESSIONS_DIR, f), 'utf8');
+        const data = JSON.parse(raw);
+        if (data.sessionId?.toLowerCase() === nameOrIndex.toLowerCase()) return data;
+      } catch { /* skip corrupt files */ }
+    }
+  }
+
   // Search by partial name in sessions dir
   const files = listSessionFiles();
   const query = nameOrIndex.toLowerCase();
@@ -181,3 +193,20 @@ export function forkSession(nameOrIndex) {
 }
 
 export { SESSIONS_DIR, AUTOSAVE_FILE, sanitizeName };
+
+// Strict session lookup by sessionId only (no name/partial fallback).
+// Used by --resume to avoid accidentally loading wrong session.
+export function loadSessionById(sessionId) {
+  if (!sessionId || typeof sessionId !== 'string') return null;
+  ensureDir();
+  const files = listSessionFiles();
+  const needle = sessionId.toLowerCase();
+  for (const f of files.reverse()) {  // newest first
+    try {
+      const raw = readFileSync(join(SESSIONS_DIR, f), 'utf8');
+      const data = JSON.parse(raw);
+      if (data.sessionId?.toLowerCase() === needle) return data;
+    } catch { /* skip corrupt files */ }
+  }
+  return null;
+}

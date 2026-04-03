@@ -100,6 +100,16 @@ export async function registerBuiltinTools(config, registry = defaultRegistry) {
     registerAgentTool(config, registry);
   }
 
+  // Remove disallowed tools BEFORE freeze (Claude Code --disallowedTools compat)
+  if (config.disallowedTools?.length) {
+    for (const name of config.disallowedTools) {
+      if (registry.has(name)) {
+        registry.delete(name);
+        process.stderr.write(`[tools] disallowed: ${name}\n`);
+      }
+    }
+  }
+
   // Freeze: no more registrations after bootstrap (architecture review finding #1)
   // Exception: REPL /swarm toggle needs to add/remove agent tool → only freeze in non-REPL modes
   if (config.freeze !== false) registry.freeze();
