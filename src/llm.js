@@ -600,8 +600,14 @@ async function withRetries(fn, { maxRetries, onStep }) {
 }
 
 function parseRetryAfter(json) {
+  // Explicit field (OpenAI, Groq)
   const ra = json?.error?.retry_after ?? json?.retry_after;
-  return typeof ra === 'number' ? (ra < 1000 ? ra * 1000 : ra) : undefined;
+  if (typeof ra === 'number') return ra < 1000 ? ra * 1000 : ra;
+  // Google embeds "Please retry in 10.2s" in the error message
+  const msg = json?.error?.message ?? json?.message ?? '';
+  const match = msg.match(/retry in ([\d.]+)s/i);
+  if (match) return Math.ceil(parseFloat(match[1]) * 1000);
+  return undefined;
 }
 
 function makeError(message, props = {}) {
