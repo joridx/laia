@@ -574,7 +574,12 @@ function classifyHttpError(status, json) {
   const msg = json?.error?.message || `HTTP ${status}`;
   const code = json?.error?.code;
   if (status === 401) return makeError(`Unauthorized: ${msg}`, { status, retriable: true, reauth: true });
-  if (status === 429) return makeError(`Rate limited: ${msg}`, { status, retriable: true, retryAfterMs: parseRetryAfter(json) });
+  if (status === 429) {
+    // Distinguish daily quota exhaustion (no point retrying) from per-minute rate limits
+    const isDailyQuota = /PerDay|daily/i.test(msg);
+    if (isDailyQuota) return makeError(`Daily quota exhausted for this model. Try another model with /model`, { status, retriable: false });
+    return makeError(`Rate limited: ${msg}`, { status, retriable: true, retryAfterMs: parseRetryAfter(json) });
+  }
   if (code === 'context_length_exceeded') return makeError(`Context too long: ${msg}`, { status, retriable: false, contextExceeded: true });
   return makeError(msg, { status, retriable: status >= 500 });
 }
