@@ -90,6 +90,16 @@ export const PROVIDERS = {
     extraHeaders: {},
     quirks: {},
   },
+  cerebras: {
+    id: 'cerebras',
+    baseUrlEnv: 'CEREBRAS_BASE_URL',
+    baseUrlDefault: 'https://api.cerebras.ai/v1',
+    auth: 'bearer',            // Authorization: Bearer <key>
+    tokenEnv: 'CEREBRAS_API_KEY',
+    supports: { chat: true, responses: false, listModels: true },
+    extraHeaders: {},
+    quirks: {},
+  },
   ollama: {
     id: 'ollama',
     baseUrlEnv: 'OLLAMA_BASE_URL',

@@ -22,8 +22,8 @@ function withEnv(overrides, fn) {
 // ─── PROVIDERS registry ──────────────────────────────────────────────────────
 
 describe('@laia/providers — registry', () => {
-  it('has all 7 providers', () => {
-    assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'copilot', 'google', 'groq', 'ollama', 'openai']);
+  it('has all 8 providers', () => {
+    assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'cerebras', 'copilot', 'google', 'groq', 'ollama', 'openai']);
   });
 
   it('each provider has required fields', () => {
@@ -112,6 +112,14 @@ describe('@laia/providers — detectProvider', () => {
       assert.equal(detectProvider('meta-llama/llama-4-scout-17b-16e-instruct').providerId, 'groq');
       assert.equal(detectProvider('moonshotai/kimi-k2-instruct').providerId, 'groq');
       assert.equal(detectProvider('openai/gpt-oss-120b').providerId, 'groq');
+    });
+  });
+
+  it('routes explicit cerebras: prefix to cerebras provider', () => {
+    withEnv({ CEREBRAS_API_KEY: 'test' }, () => {
+      assert.equal(detectProvider('cerebras:llama3.1-8b').providerId, 'cerebras');
+      assert.equal(detectProvider('cerebras:llama3.1-8b').model, 'llama3.1-8b');
+      assert.equal(detectProvider('cerebras:qwen-3-235b-a22b-instruct-2507').providerId, 'cerebras');
     });
   });
 
