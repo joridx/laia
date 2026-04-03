@@ -3,7 +3,7 @@
 // Each command handler returns true (handled) or false.
 
 import { stderr } from 'process';
-import { detectProvider, getProvider, resolveUrl, buildAuthHeaders } from '@laia/providers';
+import { detectProvider, getProvider, isProviderAvailable, PROVIDERS, resolveUrl, buildAuthHeaders } from '@laia/providers';
 import { getProviderToken } from '../auth.js';
 import { expandCommand, listSkills, loadSkill } from '../skills.js';
 import { stopBrain, brainReflectSession } from '../brain/client.js';
@@ -31,7 +31,7 @@ export const COMMAND_META = {
   '/fork':       { desc: 'Fork current session',           cat: 'session',  subs: [] },
   '/clear':      { desc: 'Clear history',                  cat: 'session',  subs: [] },
   '/compact':    { desc: 'Compact history',                cat: 'session',  subs: [] },
-  '/model':      { desc: 'Change model',                   cat: 'config',   subs: ['auto', 'gemini-2.5-flash', 'gemini-2.5-pro', 'claude-opus-4.6', 'gpt-5.3-codex'] },
+  '/model':      { desc: 'Change model',                   cat: 'config',   subs: ['auto', 'gemini-2.5-flash', 'cerebras:qwen-3-235b-a22b-instruct-2507', 'llama-3.3-70b-versatile', 'meta-llama/llama-4-scout-17b-16e-instruct', 'claude-opus-4.6', 'gpt-5.3-codex'] },
   '/effort':     { desc: 'Set reasoning effort',           cat: 'config',   subs: ['low', 'medium', 'high', 'max'] },
   '/plan':       { desc: 'Plan mode (generate structured plan)', cat: 'config', subs: ['show', 'edit', 'discard'] },
   '/approve':    { desc: 'Approve and execute plan',       cat: 'config',   subs: [] },
@@ -1367,43 +1367,54 @@ export async function handleSlashCommand(input, session) {
 
 export async function handleModelCommand(args, config) {
   if (!args) {
-    try {
-      const { providerId } = detectProvider(config.model, { forceProvider: config.provider });
-      const provider = getProvider(providerId);
+    // List models from ALL available providers
+    const { providerId: currentProvider } = detectProvider(config.model, { forceProvider: config.provider });
+    const providerIds = Object.keys(PROVIDERS);
+    let anyListed = false;
 
-      if (!provider.supports?.listModels) {
-        stderr.write(`\x1b[33mProvider '${providerId}' does not support model listing\x1b[0m\n`);
-        console.log(`Current model: ${config.model} (via ${providerId})`);
-        return;
+    for (const pid of providerIds) {
+      const provider = getProvider(pid);
+      if (!provider.supports?.listModels) continue;
+      if (!isProviderAvailable(pid)) continue;
+
+      try {
+        const token = await getProviderToken(pid);
+        const url = resolveUrl(provider, 'models');
+        const authHeaders = buildAuthHeaders(provider, token);
+
+        const res = await fetch(url, {
+          headers: { 'Content-Type': 'application/json', ...authHeaders, ...provider.extraHeaders },
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        const models = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+        if (!models.length) continue;
+
+        const marker = pid === currentProvider ? ' \x1b[32m◀ active\x1b[0m' : '';
+        console.log(`\n\x1b[1m${pid}\x1b[0m${marker}`);
+        for (const m of models) {
+          if (m.policy && m.policy.state !== 'enabled') continue;
+          const id = m.id?.replace?.(/^models\//, '') ?? m.id;
+          const current = config.model === id ? ' \x1b[32m← current\x1b[0m' : '';
+          const ctx = m.capabilities?.limits?.max_context_window_tokens || m.context_window;
+          const out = m.capabilities?.limits?.max_output_tokens;
+          const info = ctx || out
+            ? `  \x1b[2m(${ctx ? Math.round(ctx/1000)+'K ctx' : '?'}${out ? ', '+(out/1000)+'K out' : ''})\x1b[0m`
+            : (m.display_name ? `  \x1b[2m${m.display_name}\x1b[0m` : '');
+          // Show prefix hint for non-auto-detected providers
+          const prefix = pid === currentProvider ? '' : `\x1b[2m${pid}:\x1b[0m`;
+          console.log(`  ${prefix}${id}${info}${current}`);
+        }
+        anyListed = true;
+      } catch {
+        // skip provider if it fails
       }
-
-      const token = await getProviderToken(providerId);
-      const url = resolveUrl(provider, 'models');
-      const authHeaders = buildAuthHeaders(provider, token);
-
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...authHeaders, ...provider.extraHeaders },
-      });
-      const data = await res.json();
-      const models = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
-
-      console.log(`\nAvailable models (${providerId}):\n`);
-      for (const m of models) {
-        // Copilot uses policy.state, others list all
-        if (m.policy && m.policy.state !== 'enabled') continue;
-        const id = m.id?.replace?.(/^models\//, '') ?? m.id; // Google prefixes with "models/"
-        const current = config.model === id ? ' \x1b[32m← current\x1b[0m' : '';
-        const ctx = m.capabilities?.limits?.max_context_window_tokens;
-        const out = m.capabilities?.limits?.max_output_tokens;
-        const info = ctx || out
-          ? `  (${ctx ? (ctx/1000)+'K ctx' : '?'}, ${out ? (out/1000)+'K out' : '?'})`
-          : (m.display_name ? `  ${m.display_name}` : '');
-        console.log(`  ${id}${info}${current}`);
-      }
-      console.log('\nUse: /model <id>\n');
-    } catch (err) {
-      stderr.write(`\x1b[31mFailed to list models: ${err.message}\x1b[0m\n`);
     }
+
+    if (!anyListed) {
+      console.log('No providers available. Configure API keys in ~/.laia/.env');
+    }
+    console.log('\nUse: /model <id>  or  /model <provider>:<id>\n');
     return;
   }
 
