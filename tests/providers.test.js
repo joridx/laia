@@ -22,8 +22,8 @@ function withEnv(overrides, fn) {
 // ─── PROVIDERS registry ──────────────────────────────────────────────────────
 
 describe('@laia/providers — registry', () => {
-  it('has all 6 providers', () => {
-    assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'copilot', 'google', 'ollama', 'openai']);
+  it('has all 7 providers', () => {
+    assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'copilot', 'google', 'groq', 'ollama', 'openai']);
   });
 
   it('each provider has required fields', () => {
@@ -90,12 +90,38 @@ describe('@laia/providers — detectProvider', () => {
     assert.notEqual(r.providerId, 'openai');
   });
 
-  it('routes llama/mistral/qwen/deepseek to ollama', () => {
-    assert.equal(detectProvider('llama-3.3-70b').providerId, 'ollama');
-    assert.equal(detectProvider('mistral-7b').providerId, 'ollama');
-    assert.equal(detectProvider('qwen-2.5').providerId, 'ollama');
-    assert.equal(detectProvider('deepseek-coder').providerId, 'ollama');
-    assert.equal(detectProvider('gemma-2b').providerId, 'ollama');
+  it('routes llama/mistral/qwen/deepseek to groq (when available) or ollama', () => {
+    withEnv({ GROQ_API_KEY: 'test' }, () => {
+      assert.equal(detectProvider('llama-3.3-70b').providerId, 'groq');
+      assert.equal(detectProvider('mistral-7b').providerId, 'groq');
+      assert.equal(detectProvider('qwen-2.5').providerId, 'groq');
+      assert.equal(detectProvider('deepseek-coder').providerId, 'groq');
+      assert.equal(detectProvider('gemma-2b').providerId, 'groq');
+    });
+    withEnv({ GROQ_API_KEY: undefined }, () => {
+      assert.equal(detectProvider('llama-3.3-70b').providerId, 'ollama');
+      assert.equal(detectProvider('mistral-7b').providerId, 'ollama');
+      assert.equal(detectProvider('qwen-2.5').providerId, 'ollama');
+      assert.equal(detectProvider('deepseek-coder').providerId, 'ollama');
+      assert.equal(detectProvider('gemma-2b').providerId, 'ollama');
+    });
+  });
+
+  it('routes org-prefixed models to groq (meta-llama/, moonshotai/, openai/)', () => {
+    withEnv({ GROQ_API_KEY: 'test' }, () => {
+      assert.equal(detectProvider('meta-llama/llama-4-scout-17b-16e-instruct').providerId, 'groq');
+      assert.equal(detectProvider('moonshotai/kimi-k2-instruct').providerId, 'groq');
+      assert.equal(detectProvider('openai/gpt-oss-120b').providerId, 'groq');
+    });
+  });
+
+  it('distinguishes openai/ org prefix (groq) from openai: provider prefix', () => {
+    withEnv({ GROQ_API_KEY: 'test', OPENAI_API_KEY: 'test' }, () => {
+      // openai/gpt-oss-120b → groq (org prefix with /)
+      assert.equal(detectProvider('openai/gpt-oss-120b').providerId, 'groq');
+      // openai:gpt-5 → openai (explicit provider prefix with :)
+      assert.equal(detectProvider('openai:gpt-5').providerId, 'openai');
+    });
   });
 
   it('routes gemini models to google (when available)', () => {
@@ -114,10 +140,14 @@ describe('@laia/providers — detectProvider', () => {
     });
   });
 
-  it('distinguishes gemini (google) from gemma (ollama)', () => {
-    withEnv({ GOOGLE_API_KEY: 'test' }, () => {
+  it('distinguishes gemini (google) from gemma (groq/ollama)', () => {
+    withEnv({ GOOGLE_API_KEY: 'test', GROQ_API_KEY: undefined }, () => {
       assert.equal(detectProvider('gemini-2.5-flash').providerId, 'google');
       assert.equal(detectProvider('gemma-3-27b-it').providerId, 'ollama');
+    });
+    withEnv({ GOOGLE_API_KEY: 'test', GROQ_API_KEY: 'test' }, () => {
+      assert.equal(detectProvider('gemini-2.5-flash').providerId, 'google');
+      assert.equal(detectProvider('gemma-3-27b-it').providerId, 'groq');
     });
   });
 

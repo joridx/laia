@@ -80,6 +80,16 @@ export const PROVIDERS = {
     extraHeaders: {},
     quirks: {},
   },
+  groq: {
+    id: 'groq',
+    baseUrlEnv: 'GROQ_BASE_URL',
+    baseUrlDefault: 'https://api.groq.com/openai/v1',
+    auth: 'bearer',            // Authorization: Bearer <key>
+    tokenEnv: 'GROQ_API_KEY',
+    supports: { chat: true, responses: false, listModels: true },
+    extraHeaders: {},
+    quirks: {},
+  },
   ollama: {
     id: 'ollama',
     baseUrlEnv: 'OLLAMA_BASE_URL',
@@ -154,8 +164,11 @@ function detectByPattern(m, original) {
   if (m.startsWith('gpt-') || /^o[134]-/.test(m))      return { providerId: 'openai', model: original };
   if (m.includes('codex'))                              return { providerId: 'openai', model: original };
   if (m.startsWith('gemini-'))                          return { providerId: 'google', model: original };
-  if (/^(llama|mistral|qwen|deepseek)/.test(m))          return { providerId: 'ollama', model: original };
-  if (m.startsWith('gemma'))                              return { providerId: 'ollama', model: original };
+  // Groq-hosted models: use groq provider if available, fallback to ollama
+  if (/^(llama|mistral|qwen|deepseek)/.test(m))          return { providerId: isProviderAvailable('groq') ? 'groq' : 'ollama', model: original };
+  if (m.startsWith('gemma'))                              return { providerId: isProviderAvailable('groq') ? 'groq' : 'ollama', model: original };
+  // Org-prefixed open models (Groq-hosted: meta-llama/, moonshotai/, openai/gpt-oss, etc.)
+  if (/^(meta-llama|moonshotai|openai)\//.test(m))        return { providerId: isProviderAvailable('groq') ? 'groq' : 'ollama', model: original };
   return null;
 }
 
