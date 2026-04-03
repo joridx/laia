@@ -588,12 +588,15 @@ async function withRetries(fn, { maxRetries, onStep }) {
   for (let attempt = 0; ; attempt++) {
     try { return await fn(attempt); }
     catch (err) {
-      if (!err?.retriable || attempt >= maxRetries) {
+      // Rate limits (429) get extra retries — free tier APIs need patience
+      const effectiveMax = err?.status === 429 ? Math.max(maxRetries, 6) : maxRetries;
+      if (!err?.retriable || attempt >= effectiveMax) {
         onStep?.({ type: 'error', error: err.message, status: err.status, retriable: false });
         throw err;
       }
       const delay = err.retryAfterMs ?? Math.min(500 * 2 ** attempt + Math.random() * 250, 10000);
-      onStep?.({ type: 'error', error: err.message, retriable: true, retryInMs: delay });
+      const secs = (delay / 1000).toFixed(1);
+      onStep?.({ type: 'error', error: `Rate limited — retry ${attempt + 1}/${effectiveMax} in ${secs}s...`, retriable: true, retryInMs: delay });
       await new Promise(r => setTimeout(r, delay));
     }
   }
