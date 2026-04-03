@@ -61,6 +61,7 @@ export const COMMAND_META = {
   '/skillify':   { desc: 'Capture session as reusable skill', cat: 'skills',   subs: ['--force'] },
   '/init':       { desc: 'Generate LAIA.md for project',   cat: 'system',   subs: ['--force', '--dry-run'] },
   '/reflect':    { desc: 'Reflect on session (brain LLM)',  cat: 'system',   subs: ['auto'] },
+  '/paste':      { desc: 'Multi-line input (BPM fallback)', cat: 'system',  subs: [] },
   '/exit':       { desc: 'Exit LAIA',                      cat: 'system',   subs: [] },
   '/quit':       { desc: 'Exit LAIA',                      cat: 'system',   subs: [] },
 };

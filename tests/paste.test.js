@@ -111,6 +111,30 @@ describe('paste.js — PasteTransform', () => {
     assert.equal(result, `a${SENTINEL}b${SENTINEL}c${SENTINEL}d`);
   });
 
+  // --- Test 7b: Bare \r (old Mac CR-only line ending) ---
+  it('converts bare \\r mid-chunk (not followed by \\n) to sentinel', async () => {
+    const result = await feedAndCollect(`${START}line1\rline2${END}`);
+    assert.equal(result, `line1${SENTINEL}line2`);
+  });
+
+  it('handles mixed \\r, \\n, and \\r\\n in the same paste', async () => {
+    const result = await feedAndCollect(`${START}a\rb\nc\r\nd${END}`);
+    assert.equal(result, `a${SENTINEL}b${SENTINEL}c${SENTINEL}d`);
+  });
+
+  // --- Flush with buffered \r in PASTING state ---
+  it('emits sentinel (not literal \\r) when stream ends with buffered \\r in PASTING state', async () => {
+    const { mockStdin, mockStdout } = createTestEnv();
+    const { stream } = createPasteStream(mockStdin, mockStdout);
+    const outputPromise = collectOutput(stream);
+    mockStdin.write(`${START}line1\r`);
+    await new Promise(r => setTimeout(r, 20));
+    mockStdin.end();
+    const result = await outputPromise;
+    assert.ok(result.includes(SENTINEL), 'trailing bare \\r should become a sentinel, not literal \\r');
+    assert.ok(!result.includes('\r'), 'no literal \\r should remain in output');
+  });
+
   // --- Test 8: Non-TTY passthrough ---
   it('returns stdin unchanged for non-TTY', () => {
     const mockStdin = new PassThrough({ encoding: 'utf8' });

@@ -139,6 +139,13 @@ export function createPasteStream(stdinStream, stdoutStream) {
             tail = '\r';
             break;
           }
+          // Bare \r in middle of chunk (not followed by \n) → sentinel (old Mac CR-only line ending)
+          if (data[i] === '\r') {
+            this.push(SENTINEL);
+            nlCount++;
+            i++;
+            continue;
+          }
           // Bare \n → sentinel
           if (data[i] === '\n') {
             this.push(SENTINEL);
@@ -156,11 +163,13 @@ export function createPasteStream(stdinStream, stdoutStream) {
     },
 
     flush(callback) {
-      // Stream ending — flush any remaining tail
-      if (tail) {
+      // A buffered \r in PASTING state is a bare CR line ending — emit sentinel, not literal \r
+      if (tail === '\r' && state === PASTING) {
+        this.push(SENTINEL);
+      } else if (tail) {
         this.push(tail);
-        tail = '';
       }
+      tail = '';
       clearWatchdog();
       state = NORMAL;
       callback();

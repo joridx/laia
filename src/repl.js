@@ -485,78 +485,109 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
 
     // Slash commands
     if (input.startsWith('/')) {
-      const result = await handleSlashCommand(input, session);
-      if (result) {
-        // Handle /reflect — run pipeline on-demand
-        if (result.reflectRequested) {
-          try {
-            const client = createClient({ ...config, model: 'claude-sonnet-4-20250514' });
-            const reflectLlm = async (prompt) => {
-              const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), 15_000);
-              try {
-                const resp = await client.chat({
-                  messages: [{ role: 'user', content: prompt }],
-                  max_tokens: 2000,
-                  signal: controller.signal,
-                });
-                if (typeof resp === 'string') return resp;
-                if (resp?.choices?.[0]?.message?.content) return resp.choices[0].message.content;
-                if (resp?.content?.[0]?.text) return resp.content[0].text;
-                if (resp?.output) return typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
-                return JSON.stringify(resp);
-              } finally { clearTimeout(timer); }
-            };
-            const sessionSummary = context.serialize();
-            const lastMessages = sessionSummary?.turns?.slice(-10)
-              ?.map(t => `${t.role}: ${typeof t.content === 'string' ? t.content.slice(0, 500) : '(tool use)'}`)
-              ?.join('\n') || '';
-            if (lastMessages.length > 100) {
-              const res = await runReflectionPipeline({
-                sessionNotes: lastMessages,
-                sessionId: sessionMeta.sessionId,
-                llmCall: reflectLlm,
-                brainSearch,
-                brainRemember: (l) => brainRemember(l),
-                brainLogSession: (s, t) => brainLogSession(s, t),
-                tokenCount: sessionTokens.totalIn + sessionTokens.totalOut,
-                turnCount: sessionTokens.turns,
-                durationMs: Date.now() - sessionStartTime,
-                stderr,
-              });
-              stderr.write(`\x1b[32m\u2705 Reflection: ${res.saved.length} saved, ${res.duplicates.length} dupes, ${res.skipped.length} skipped\x1b[0m\n`);
-            } else {
-              stderr.write('\x1b[33mNot enough content to reflect on.\x1b[0m\n');
+      // /paste is intercepted here (not in handleSlashCommand) to access
+      // disablePaste/enablePaste and fall through to normal turn processing.
+      if (/^\/paste(\s|$)/.test(input)) {
+        const initialText = input.slice(6).trim();
+        const lines = initialText ? [initialText] : [];
+        disablePaste();
+        stderr.write('\x1b[2m[paste] Enter text line by line. Type \'.\' alone to send:\x1b[0m\n');
+        try {
+          for (;;) {
+            let pline;
+            try {
+              pline = await rl.question('  \x1b[2m│\x1b[0m ');
+            } catch {
+              // Ctrl+C or rl closed during collection — treat as cancel
+              break;
             }
-          } catch (err) {
-            stderr.write(`\x1b[31mReflection failed: ${err.message}\x1b[0m\n`);
+            if (pline.trim() === '.') break;
+            lines.push(pline);
           }
-          rl.prompt();
-          continue;
+        } finally {
+          enablePaste();
         }
+        if (!lines.length) {
+          stderr.write('\x1b[33m(empty — cancelled)\x1b[0m\n');
+          updatePrompt(); rl.prompt(); continue;
+        }
+        input = lines.join('\n');
+        stderr.write(`\x1b[2m[paste] ${lines.length} line${lines.length !== 1 ? 's' : ''} captured\x1b[0m\n`);
+        // fall through to normal turn processing
+      } else {
+        const result = await handleSlashCommand(input, session);
+        if (result) {
+          // Handle /reflect — run pipeline on-demand
+          if (result.reflectRequested) {
+            try {
+              const client = createClient({ ...config, model: 'claude-sonnet-4-20250514' });
+              const reflectLlm = async (prompt) => {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 15_000);
+                try {
+                  const resp = await client.chat({
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 2000,
+                    signal: controller.signal,
+                  });
+                  if (typeof resp === 'string') return resp;
+                  if (resp?.choices?.[0]?.message?.content) return resp.choices[0].message.content;
+                  if (resp?.content?.[0]?.text) return resp.content[0].text;
+                  if (resp?.output) return typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
+                  return JSON.stringify(resp);
+                } finally { clearTimeout(timer); }
+              };
+              const sessionSummary = context.serialize();
+              const lastMessages = sessionSummary?.turns?.slice(-10)
+                ?.map(t => `${t.role}: ${typeof t.content === 'string' ? t.content.slice(0, 500) : '(tool use)'}`)
+                ?.join('\n') || '';
+              if (lastMessages.length > 100) {
+                const res = await runReflectionPipeline({
+                  sessionNotes: lastMessages,
+                  sessionId: sessionMeta.sessionId,
+                  llmCall: reflectLlm,
+                  brainSearch,
+                  brainRemember: (l) => brainRemember(l),
+                  brainLogSession: (s, t) => brainLogSession(s, t),
+                  tokenCount: sessionTokens.totalIn + sessionTokens.totalOut,
+                  turnCount: sessionTokens.turns,
+                  durationMs: Date.now() - sessionStartTime,
+                  stderr,
+                });
+                stderr.write(`\x1b[32m\u2705 Reflection: ${res.saved.length} saved, ${res.duplicates.length} dupes, ${res.skipped.length} skipped\x1b[0m\n`);
+              } else {
+                stderr.write('\x1b[33mNot enough content to reflect on.\x1b[0m\n');
+              }
+            } catch (err) {
+              stderr.write(`\x1b[31mReflection failed: ${err.message}\x1b[0m\n`);
+            }
+            rl.prompt();
+            continue;
+          }
 
-        // If a skill turn was executed, do post-turn accounting
-        if (result.turnResult) {
-          const tr = result.turnResult;
-          sendFeedback(tr.turnMessages, tr.text).catch(e => {
-            if (config.verbose) console.error('[feedback]', e.message);
-          });
-          suggestions = suggestFollowUps(tr.text);
-          selectedSuggestion = 0;
-          showSuggestions();
-          if (tr.usage) {
-            const inTok = tr.usage.input_tokens ?? tr.usage.prompt_tokens ?? 0;
-            const outTok = tr.usage.output_tokens ?? tr.usage.completion_tokens ?? 0;
-            sessionTokens.turns++;
-            sessionTokens.totalIn += (typeof inTok === 'number' ? inTok : 0);
-            sessionTokens.totalOut += (typeof outTok === 'number' ? outTok : 0);
-            const pct = context.usagePercent();
-            const ctxColor = pct > 80 ? '31;1' : pct > 60 ? '33;1' : '32';
-            const totalStr = formatTokenCount(sessionTokens.totalIn + sessionTokens.totalOut);
-            stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m · Σ${totalStr}]\x1b[0m\n`);
+          // If a skill turn was executed, do post-turn accounting
+          if (result.turnResult) {
+            const tr = result.turnResult;
+            sendFeedback(tr.turnMessages, tr.text).catch(e => {
+              if (config.verbose) console.error('[feedback]', e.message);
+            });
+            suggestions = suggestFollowUps(tr.text);
+            selectedSuggestion = 0;
+            showSuggestions();
+            if (tr.usage) {
+              const inTok = tr.usage.input_tokens ?? tr.usage.prompt_tokens ?? 0;
+              const outTok = tr.usage.output_tokens ?? tr.usage.completion_tokens ?? 0;
+              sessionTokens.turns++;
+              sessionTokens.totalIn += (typeof inTok === 'number' ? inTok : 0);
+              sessionTokens.totalOut += (typeof outTok === 'number' ? outTok : 0);
+              const pct = context.usagePercent();
+              const ctxColor = pct > 80 ? '31;1' : pct > 60 ? '33;1' : '32';
+              const totalStr = formatTokenCount(sessionTokens.totalIn + sessionTokens.totalOut);
+              stderr.write(`\x1b[2m[${inTok} in / ${outTok} out ·\x1b[0m \x1b[${ctxColor}m${pct}% ctx\x1b[0m\x1b[2m · Σ${totalStr}]\x1b[0m\n`);
+            }
           }
+          updatePrompt(); rl.prompt(); continue;
         }
-        updatePrompt(); rl.prompt(); continue;
       }
     }
 
