@@ -578,12 +578,8 @@ function classifyHttpError(status, json) {
     // Distinguish daily quota exhaustion (no point retrying) from per-minute rate limits
     const isDailyQuota = /PerDay|daily/i.test(msg);
     if (isDailyQuota) return makeError(`Daily quota exhausted for this model. Try another model with /model`, { status, retriable: false });
-    // "Request too large" means the request itself exceeds TPM — no retry will help, fallback needed
-    const tooLarge = /request too large|Requested \d+/i.test(msg) && !/retry/i.test(msg);
-    if (tooLarge) return makeError(`Rate limited: ${msg}`, { status, retriable: true, retryAfterMs: undefined });
     return makeError(`Rate limited: ${msg}`, { status, retriable: true, retryAfterMs: parseRetryAfter(json) });
   }
-  if (status === 413) return makeError(`Request too large: ${msg}`, { status, retriable: false });
   if (code === 'context_length_exceeded') return makeError(`Context too long: ${msg}`, { status, retriable: false, contextExceeded: true });
   return makeError(msg, { status, retriable: status >= 500 });
 }
@@ -597,20 +593,13 @@ async function withRetries(fn, { maxRetries, onStep }) {
   for (let attempt = 0; ; attempt++) {
     try { return await fn(attempt); }
     catch (err) {
-      // For 429 rate limits: only retry if the retry-after delay is short (< 30s).
-      // If the API says "wait 10s" it's a per-minute reset — worth retrying.
-      // If there's no retry-after or it's a TPM issue with big requests, bubble up
-      // immediately so the fallback chain in agent.js can try another model.
-      const is429 = err?.status === 429;
-      const retryDelay = err?.retryAfterMs;
-      const worthRetrying = is429 && retryDelay && retryDelay < 30_000;
-      const effectiveMax = worthRetrying ? Math.max(maxRetries, 3) : maxRetries;
-
+      // Rate limits (429) get extra retries — free tier APIs need patience
+      const effectiveMax = err?.status === 429 ? Math.max(maxRetries, 6) : maxRetries;
       if (!err?.retriable || attempt >= effectiveMax) {
         onStep?.({ type: 'error', error: err.message, status: err.status, retriable: false });
         throw err;
       }
-      const delay = retryDelay ?? Math.min(500 * 2 ** attempt + Math.random() * 250, 10000);
+      const delay = err.retryAfterMs ?? Math.min(500 * 2 ** attempt + Math.random() * 250, 10000);
       const secs = (delay / 1000).toFixed(1);
       onStep?.({ type: 'error', error: `Rate limited — retry ${attempt + 1}/${effectiveMax} in ${secs}s...`, retriable: true, retryInMs: delay });
       await new Promise(r => setTimeout(r, delay));

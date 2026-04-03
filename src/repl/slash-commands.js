@@ -1396,6 +1396,11 @@ export async function handleModelCommand(args, config) {
         for (const m of models) {
           if (m.policy && m.policy.state !== 'enabled') continue;
           const id = m.id?.replace?.(/^models\//, '') ?? m.id;
+          // Google free tier: skip models with no free quota (pro, 2.0, embedding, etc.)
+          if (pid === 'google') {
+            const freeModels = /^gemini-(2\.5-flash|3-flash|3\.1-flash)/;
+            if (!freeModels.test(id)) continue;
+          }
           const current = config.model === id ? ' \x1b[32m← current\x1b[0m' : '';
           const ctx = m.capabilities?.limits?.max_context_window_tokens || m.context_window;
           const out = m.capabilities?.limits?.max_output_tokens;
