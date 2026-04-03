@@ -578,8 +578,12 @@ function classifyHttpError(status, json) {
     // Distinguish daily quota exhaustion (no point retrying) from per-minute rate limits
     const isDailyQuota = /PerDay|daily/i.test(msg);
     if (isDailyQuota) return makeError(`Daily quota exhausted for this model. Try another model with /model`, { status, retriable: false });
+    // "Request too large" means the request itself exceeds TPM — no retry will help, fallback needed
+    const tooLarge = /request too large|Requested \d+/i.test(msg) && !/retry/i.test(msg);
+    if (tooLarge) return makeError(`Rate limited: ${msg}`, { status, retriable: true, retryAfterMs: undefined });
     return makeError(`Rate limited: ${msg}`, { status, retriable: true, retryAfterMs: parseRetryAfter(json) });
   }
+  if (status === 413) return makeError(`Request too large: ${msg}`, { status, retriable: false });
   if (code === 'context_length_exceeded') return makeError(`Context too long: ${msg}`, { status, retriable: false, contextExceeded: true });
   return makeError(msg, { status, retriable: status >= 500 });
 }

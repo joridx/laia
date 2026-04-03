@@ -94,12 +94,23 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
     },
   });
 
-  // Try primary model, then fallback chain on 429 rate limits
+  // Try primary model, then fallback chain on transient API errors
+  // Errors that trigger fallback: 429 (rate limit), 413 (too large), 404 (model not found),
+  // 400 (tool calling not supported), and "Request too large" messages.
+  const shouldFallback = (err) => {
+    if (!err) return false;
+    const s = err.status;
+    if (s === 429 || s === 413 || s === 404) return true;
+    // Groq returns 400 for "tool calling not supported" and "Request too large"
+    if (s === 400 && /tool calling.*not supported|request too large/i.test(err.message)) return true;
+    return false;
+  };
+
   const primaryClient = createClient(config);
   try {
     return await runAgentTurn(makeTurnArgs(primaryClient));
   } catch (err) {
-    if (err?.status !== 429) throw err;
+    if (!shouldFallback(err)) throw err;
 
     // Build fallback candidates: skip the current model, skip unavailable providers
     const currentKey = `${primaryClient.providerId}:${primaryClient.model}`;
@@ -109,14 +120,14 @@ export async function runTurn({ input, config, logger, onStep, history = [], cor
 
     for (const fb of candidates) {
       const tag = `${fb.provider}:${fb.model}`;
-      onStep?.({ type: 'error', error: `Rate limited — falling back to ${tag}`, retriable: true });
-      logger.info('fallback_model', { from: currentKey, to: tag, reason: '429' });
+      onStep?.({ type: 'error', error: `\u2717 ${err.message?.slice(0, 80)} — falling back to ${tag}`, retriable: true });
+      logger.info('fallback_model', { from: currentKey, to: tag, reason: String(err.status) });
       try {
         const fbClient = createClientForFallback(fb.provider, fb.model);
         return await runAgentTurn(makeTurnArgs(fbClient));
       } catch (fbErr) {
-        if (fbErr?.status === 429) continue; // this one is also rate limited, try next
-        throw fbErr; // non-rate-limit error, propagate
+        if (shouldFallback(fbErr)) continue; // transient error, try next
+        throw fbErr; // fatal error, propagate
       }
     }
 
