@@ -6,7 +6,7 @@ import { stderr } from 'process';
 import { detectProvider, getProvider, isProviderAvailable, PROVIDERS, resolveUrl, buildAuthHeaders } from '@laia/providers';
 import { getProviderToken } from '../auth.js';
 import { expandCommand, listSkills, loadSkill } from '../skills.js';
-import { stopBrain, brainReflectSession } from '../brain/client.js';
+import { brainReflectSession } from '../brain/client.js';
 import { getRandomTip, buildCommitPrompt, gatherGitData, buildReviewPrompt, buildDebugPrompt, listOutputStyles } from '../services/dx-index.js';
 import { buildCompactionRequest, formatCompactSummary, applyCompaction } from '../services/compaction.js';
 import { MEMORY_TYPES, saveMemory, loadMemories, loadAllMemories } from '../memory/typed-memory.js';
@@ -193,15 +193,9 @@ export async function handleSlashCommand(input, session) {
 
     case 'exit':
     case 'quit':
-      if (context.turnCount() > 0) {
-        try {
-          autoSave(context.serialize(), { sessionId: '', model: config.model, workspaceRoot: config.workspaceRoot });
-          stderr.write('\x1b[2m[session] Auto-saved\x1b[0m\n');
-        } catch {}
-      }
-      await stopBrain();
-      console.log('Bye!');
-      process.exit(0);
+      // Signal repl to close readline → triggers rl.on('close') with full cleanup
+      // (auto-save, reflection pipeline, brain_log_session, stopBrain)
+      return { exitRequested: true };
 
     case 'save': {
       if (context.turnCount() === 0) {

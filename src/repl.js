@@ -439,6 +439,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
 
     await stopSkillWatcher();
     await stopBrain();
+    console.log('Bye!');
     process.exit(0);
   });
 
@@ -517,6 +518,11 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
       } else {
         const result = await handleSlashCommand(input, session);
         if (result) {
+          // Handle /exit, /quit — close readline to trigger full cleanup pipeline
+          if (result.exitRequested) {
+            rl.close();
+            continue;
+          }
           // Handle /reflect — run pipeline on-demand
           if (result.reflectRequested) {
             try {
