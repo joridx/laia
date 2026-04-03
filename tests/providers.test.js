@@ -22,8 +22,8 @@ function withEnv(overrides, fn) {
 // ─── PROVIDERS registry ──────────────────────────────────────────────────────
 
 describe('@laia/providers — registry', () => {
-  it('has all 8 providers', () => {
-    assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'cerebras', 'copilot', 'google', 'groq', 'ollama', 'openai']);
+  it('has all 9 providers', () => {
+    assert.deepStrictEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'azure_openai', 'cerebras', 'copilot', 'google', 'groq', 'ollama', 'openai', 'openrouter']);
   });
 
   it('each provider has required fields', () => {
@@ -176,6 +176,26 @@ describe('@laia/providers — detectProvider', () => {
   it('unknown model falls back to default provider', () => {
     const r = detectProvider('some-random-model');
     assert.equal(r.providerId, 'copilot');
+  });
+
+  it('routes nvidia/ models to openrouter (when available)', () => {
+    withEnv({ OPENROUTER_API_KEY: 'test' }, () => {
+      assert.equal(detectProvider('nvidia/nemotron-3-super-120b-a12b:free').providerId, 'openrouter');
+      assert.equal(detectProvider('nvidia/nemotron-3-super-120b-a12b:free').model, 'nvidia/nemotron-3-super-120b-a12b:free');
+    });
+  });
+
+  it('routes explicit openrouter: prefix to openrouter provider', () => {
+    withEnv({ OPENROUTER_API_KEY: 'test' }, () => {
+      assert.equal(detectProvider('openrouter:qwen/qwen3.6-plus:free').providerId, 'openrouter');
+      assert.equal(detectProvider('openrouter:qwen/qwen3.6-plus:free').model, 'qwen/qwen3.6-plus:free');
+    });
+  });
+
+  it('falls back to ollama when openrouter key not set for nvidia/ models', () => {
+    withEnv({ OPENROUTER_API_KEY: undefined }, () => {
+      assert.equal(detectProvider('nvidia/nemotron-3-super-120b-a12b:free').providerId, 'ollama');
+    });
   });
 
   it('respects defaultProvider option', () => {

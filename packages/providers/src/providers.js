@@ -100,6 +100,16 @@ export const PROVIDERS = {
     extraHeaders: {},
     quirks: {},
   },
+  openrouter: {
+    id: 'openrouter',
+    baseUrlEnv: 'OPENROUTER_BASE_URL',
+    baseUrlDefault: 'https://openrouter.ai/api/v1',
+    auth: 'bearer',            // Authorization: Bearer <key>
+    tokenEnv: 'OPENROUTER_API_KEY',
+    supports: { chat: true, responses: false, listModels: true },
+    extraHeaders: {},
+    quirks: {},
+  },
   ollama: {
     id: 'ollama',
     baseUrlEnv: 'OLLAMA_BASE_URL',
@@ -194,6 +204,8 @@ function detectByPattern(m, original) {
   if (m.startsWith('gemma'))                              return { providerId: isProviderAvailable('groq') ? 'groq' : 'ollama', model: original };
   // Org-prefixed open models (Groq-hosted: meta-llama/, moonshotai/, openai/gpt-oss, etc.)
   if (/^(meta-llama|moonshotai|openai)\//.test(m))        return { providerId: isProviderAvailable('groq') ? 'groq' : 'ollama', model: original };
+  // OpenRouter-hosted models: nvidia/, minimax/, stepfun/, z-ai/, arcee-ai/, nousresearch/
+  if (/^(nvidia|minimax|stepfun|z-ai|arcee-ai|nousresearch)\//.test(m)) return { providerId: isProviderAvailable('openrouter') ? 'openrouter' : 'ollama', model: original };
   return null;
 }
 

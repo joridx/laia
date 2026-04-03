@@ -1401,6 +1401,12 @@ export async function handleModelCommand(args, config) {
             const freeModels = /^gemini-(2\.5-flash|3-flash|3\.1-flash)/;
             if (!freeModels.test(id)) continue;
           }
+          // OpenRouter: only show :free models with tool support
+          if (pid === 'openrouter') {
+            if (!id.endsWith(':free')) continue;
+            const sp = m.supported_parameters || [];
+            if (!sp.includes('tools') && !sp.includes('tool_choice')) continue;
+          }
           const current = config.model === id ? ' \x1b[32m← current\x1b[0m' : '';
           const ctx = m.capabilities?.limits?.max_context_window_tokens || m.context_window;
           const out = m.capabilities?.limits?.max_output_tokens;
