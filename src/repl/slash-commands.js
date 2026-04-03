@@ -31,7 +31,7 @@ export const COMMAND_META = {
   '/fork':       { desc: 'Fork current session',           cat: 'session',  subs: [] },
   '/clear':      { desc: 'Clear history',                  cat: 'session',  subs: [] },
   '/compact':    { desc: 'Compact history',                cat: 'session',  subs: [] },
-  '/model':      { desc: 'Change model',                   cat: 'config',   subs: ['auto'] },
+  '/model':      { desc: 'Change model',                   cat: 'config',   subs: ['auto', 'gemini-2.5-flash', 'gemini-2.5-pro', 'claude-opus-4.6', 'gpt-5.3-codex'] },
   '/effort':     { desc: 'Set reasoning effort',           cat: 'config',   subs: ['low', 'medium', 'high', 'max'] },
   '/plan':       { desc: 'Plan mode (generate structured plan)', cat: 'config', subs: ['show', 'edit', 'discard'] },
   '/approve':    { desc: 'Approve and execute plan',       cat: 'config',   subs: [] },
@@ -1389,11 +1389,16 @@ export async function handleModelCommand(args, config) {
 
       console.log(`\nAvailable models (${providerId}):\n`);
       for (const m of models) {
-        if (m.policy?.state !== 'enabled') continue;
-        const current = config.model === m.id ? ' \x1b[32m← current\x1b[0m' : '';
+        // Copilot uses policy.state, others list all
+        if (m.policy && m.policy.state !== 'enabled') continue;
+        const id = m.id?.replace?.(/^models\//, '') ?? m.id; // Google prefixes with "models/"
+        const current = config.model === id ? ' \x1b[32m← current\x1b[0m' : '';
         const ctx = m.capabilities?.limits?.max_context_window_tokens;
         const out = m.capabilities?.limits?.max_output_tokens;
-        console.log(`  ${m.id}  (${ctx ? (ctx/1000)+'K ctx' : '?'}, ${out ? (out/1000)+'K out' : '?'})${current}`);
+        const info = ctx || out
+          ? `  (${ctx ? (ctx/1000)+'K ctx' : '?'}, ${out ? (out/1000)+'K out' : '?'})`
+          : (m.display_name ? `  ${m.display_name}` : '');
+        console.log(`  ${id}${info}${current}`);
       }
       console.log('\nUse: /model <id>\n');
     } catch (err) {
