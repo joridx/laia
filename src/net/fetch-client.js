@@ -163,8 +163,9 @@ export async function resilientFetch(service, path = '', options = {}) {
   // Merge service headers
   const headers = { ...(svc?.headers || {}), ...(fetchOpts.headers || {}) };
 
-  // Cache check (GET only)
-  if (useCache && method === 'GET') {
+  // Cache check (GET only, skip when auth headers present)
+  const hasAuth = headers.Authorization || headers.Cookie || headers['X-Auth-Token'];
+  if (useCache && method === 'GET' && !hasAuth) {
     const cached = getCached(service, path);
     if (cached) return { ...cached, cached: true };
   }
@@ -187,9 +188,22 @@ export async function resilientFetch(service, path = '', options = {}) {
         method,
         headers,
         signal: controller.signal,
+        redirect: 'manual', // prevent SSRF via redirect
       });
 
       clearTimeout(timer);
+
+      // Guard against huge responses (check Content-Length before reading body)
+      const contentLength = parseInt(res.headers.get('content-length') || '0', 10);
+      if (contentLength > 10_000_000) { // 10MB hard limit
+        throw new Error(`Response too large (${contentLength} bytes) from ${service}${path}`);
+      }
+
+      // Handle redirects (returned as-is due to redirect: 'manual')
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get('location') || '';
+        return { data: { redirect: location }, status: res.status, headers: res.headers, cached: false };
+      }
 
       // Parse response
       const contentType = res.headers.get('content-type') || '';

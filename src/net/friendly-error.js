@@ -31,7 +31,7 @@ export function friendlyError(label, stderr = '', exitCode) {
     return `${label}: DNS resolution failed. Check the URL and network`;
   }
   if (s.includes('ssl') || s.includes('certificate')) {
-    return `${label}: SSL/certificate error. Check proxy settings or use NODE_TLS_REJECT_UNAUTHORIZED=0`;
+    return `${label}: SSL/certificate error. Install proper CA certs or check proxy configuration`;
   }
 
   // Auth errors

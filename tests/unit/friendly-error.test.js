@@ -32,7 +32,7 @@ describe('friendlyError', () => {
 
   it('detects SSL error', () => {
     const msg = friendlyError('API', 'Error: unable to verify the first certificate');
-    assert.match(msg, /SSL.*certificate/);
+    assert.match(msg, /SSL.*certificate|CA certs/);
   });
 
   it('detects 401 unauthorized', () => {

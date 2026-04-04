@@ -109,9 +109,9 @@ export function registerApiCallTool(registry) {
         return { error: true, message: `Method ${method} not allowed. Use: ${[...ALLOWED_METHODS].join(', ')}` };
       }
 
-      // Safety: body size
-      if (body && body.length > MAX_BODY_SIZE) {
-        return { error: true, message: `Body too large (${body.length} bytes, max ${MAX_BODY_SIZE})` };
+      // Safety: body size (use byte length, not string length)
+      if (body && Buffer.byteLength(body, 'utf8') > MAX_BODY_SIZE) {
+        return { error: true, message: `Body too large (${Buffer.byteLength(body, 'utf8')} bytes, max ${MAX_BODY_SIZE})` };
       }
 
       try {
