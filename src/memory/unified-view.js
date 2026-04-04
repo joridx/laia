@@ -6,13 +6,15 @@
 
 import { loadAllMemories, stalenessWarning } from './typed-memory.js';
 import { OWNERSHIP_MATRIX } from './ownership.js';
+import { loadDailyMemories } from './daily-loader.js';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
 // ─── Budget Constants ────────────────────────────────────────────────────────
 
-const TYPED_BUDGET_BYTES = 4_000;    // Max bytes for typed memory section
+const TYPED_BUDGET_BYTES = 2_560;    // Sub-budget: typed memories (2.5KB of 4KB P5)
+const DAILY_BUDGET_BYTES = 1_024;    // Sub-budget: daily memories (1KB of 4KB P5)
 const TOTAL_BUDGET_BYTES = 8_000;    // Max bytes for entire unified section
 const MAX_ENTRIES_PER_TYPE = 15;     // Max entries per type to prevent bloat
 
@@ -140,6 +142,19 @@ export function buildUnifiedMemoryContext() {
       currentBytes += entryBytes;
     }
     lines.push('');
+  }
+
+  // Sprint 1 Feature A: Inject daily memories (sleep cycle output)
+  const daily = loadDailyMemories(3);
+  if (daily) {
+    const dailyHeader = '## Recent Days';
+    const dailyBytes = Buffer.byteLength(dailyHeader) + Buffer.byteLength(daily) + 4;
+    // Strict sub-budget: daily must fit in its own 1KB budget
+    // AND combined typed+daily must not exceed total P5 budget
+    if (dailyBytes <= DAILY_BUDGET_BYTES && currentBytes + dailyBytes <= TOTAL_BUDGET_BYTES) {
+      lines.push(dailyHeader, '', daily, '');
+      currentBytes += dailyBytes;
+    }
   }
 
   lines.push('</user_memories_data>');

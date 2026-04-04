@@ -121,7 +121,7 @@ export function enforceBudget(chunks, budget = DEFAULT_BUDGET_CHARS) {
 export function buildGovernedPrompt({ sections, budget = DEFAULT_BUDGET_CHARS }) {
   const {
     safety, rules, identity, tools, skillsPolicy, multiModel,
-    evolvedStable, taskContext, corporateHint, planMode,
+    evolvedStable, taskContext, corporateHint, planMode, autoRecall,
     typedMemory, evolvedAdaptive, outputStyle, coordinator,
   } = sections;
 
@@ -157,6 +157,7 @@ export function buildGovernedPrompt({ sections, budget = DEFAULT_BUDGET_CHARS })
   const taskChunks = [
     chunk({ id: 'corporate-hint', text: corporateHint, priority: PRIORITY.TASK_CONTEXT }),
     chunk({ id: 'plan-mode', text: planMode, priority: PRIORITY.TASK_CONTEXT, pinned: true }), // Plan mode is safety-critical
+    chunk({ id: 'auto-recall', text: autoRecall, priority: PRIORITY.TASK_CONTEXT, maxChars: 2000 }),
   ];
   // Extra task context sections can be added here
 

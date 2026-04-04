@@ -57,6 +57,7 @@ export const COMMAND_META = {
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert changes (--list, N)',     cat: 'system',   subs: ['--list', '-l'] },
   '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
+  '/sleep':      { desc: 'Run sleep cycle (memory consolidation)', cat: 'system', subs: [] },
   '/status':     { desc: 'System health dashboard',        cat: 'system',   subs: [] },
   '/flags':      { desc: 'View/set feature flags',         cat: 'config',   subs: ['set'] },
   '/skillify':   { desc: 'Capture session as reusable skill', cat: 'skills',   subs: ['--force'] },
@@ -1317,6 +1318,23 @@ export async function handleSlashCommand(input, session) {
         flags: loadFlags(),
         skillCount: skills.length,
       });
+      return true;
+    }
+
+    case 'sleep': {
+      const { runSleepCycle, pruneDailyMemories } = await import('../services/sleep-cycle.js');
+      const date = args || undefined;
+      const force = args.includes('--force');
+      const dateArg = args.replace('--force', '').trim() || undefined;
+      stderr.write('\x1b[36m🌙 Running sleep cycle...\x1b[0m\n');
+      const result = runSleepCycle({ date: dateArg, force });
+      if (result) {
+        stderr.write(`\x1b[32m✓ Daily memory: ${result.bullets} bullets from ${result.sessions} sessions (${result.bytes}B)\x1b[0m\n`);
+      } else {
+        stderr.write('\x1b[33m⚠ No new daily memory generated (no sessions or already exists)\x1b[0m\n');
+      }
+      const pruned = pruneDailyMemories();
+      if (pruned > 0) stderr.write(`\x1b[2m✂ Pruned ${pruned} old daily memories\x1b[0m\n`);
       return true;
     }
 

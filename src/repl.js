@@ -50,6 +50,7 @@ import { sendFeedback } from './repl/feedback.js';
 import { syncOnSessionEnd } from './memory/bridge.js';
 import { runReflectionPipeline } from './memory/reflection.js';
 import { brainSearch, brainRemember, brainLogSession } from './brain/client.js';
+import { registerAutoRecallHook, triggerAutoRecall } from './hooks/auto-recall.js';
 import { createClient } from './agent.js';
 import { emit, loadUserHooks, getHookStats } from './hooks/bus.js';
 import { loadFlags, getFlag, getFlagsWithSource, initFlagsFile } from './config/flags.js';
@@ -360,6 +361,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
 
   // V5: Emit SessionStart hook
   if (getFlag('hooks_enabled')) {
+    registerAutoRecallHook();
     emit('SessionStart', { config, sessionId: logger.sessionId }).catch(() => {});
   }
 
@@ -668,6 +670,12 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
           text: (ctx.text ? ctx.text + 'User request: ' : '') + input,
           images: ctx.images,
         };
+      }
+
+      // Sprint 1 Feature B: Auto-recall on first user message only
+      // triggerAutoRecall is internally cached — no-ops after first call
+      if (context.turnCount() === 0) {
+        await triggerAutoRecall(input, brainSearch).catch(() => {});
       }
 
       turnAbort = new AbortController();
