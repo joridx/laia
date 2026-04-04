@@ -7,23 +7,26 @@
 
 1. [Visió General](#visió-general)
 2. [Estat Actual de LAIA](#estat-actual-de-laia)
-3. [Funcionalitats a Adoptar](#funcionalitats-a-adoptar)
-4. [Millores de Disseny Transferibles](#millores-de-disseny-transferibles)
-5. [Què NO Copiar](#què-no-copiar)
-6. [Arquitectura Objectiu](#arquitectura-objectiu)
-7. [Sprint 1 — Sleep Cycle + Memòria Ambient](#sprint-1--sleep-cycle--memòria-ambient)
-8. [Sprint 2 — Talk + Confirmation Flow + CRON.md](#sprint-2--talk--confirmation-flow--cronmd)
-9. [Sprint 3 — Daemon + Reports + Notificacions](#sprint-3--daemon--reports--notificacions)
-10. [Sprint 4 — Heartbeat + Briefings](#sprint-4--heartbeat--briefings)
-11. [Model d'Execució Híbrid](#model-dexecució-híbrid)
-12. [Decisió Final: Què és millor a cada projecte](#decisió-final)
+3. [Infraestructura — Raspberry Pi 4](#infraestructura--raspberry-pi-4)
+4. [Funcionalitats a Adoptar](#funcionalitats-a-adoptar)
+5. [Millores de Disseny Transferibles](#millores-de-disseny-transferibles)
+6. [Què NO Copiar](#què-no-copiar)
+7. [Arquitectura Objectiu](#arquitectura-objectiu)
+8. [Sprint 1 — Sleep Cycle + Memòria Ambient](#sprint-1--sleep-cycle--memòria-ambient) ✅ COMPLETAT
+9. [Sprint 1.5 — Knowledge Store (nc:// attachments)](#sprint-15--knowledge-store)
+10. [Sprint 2 — Talk + Confirmation Flow + CRON.md](#sprint-2--talk--confirmation-flow--cronmd)
+11. [Sprint 3 — Daemon + Reports + Notificacions](#sprint-3--daemon--reports--notificacions)
+12. [Sprint 4 — Heartbeat + Briefings](#sprint-4--heartbeat--briefings)
+13. [Sprint 5 — Sleep Cycle Avançat](#sprint-5--sleep-cycle-avançat)
+14. [Model d'Execució Híbrid](#model-dexecució-híbrid)
+15. [Decisió Final: Què és millor a cada projecte](#decisió-final)
 
 ---
 
 ## Visió General
 
-LAIA és un agent CLI de Node.js amb brain/memòria persistent. L'usuari té un servidor Nextcloud propi.
-L'objectiu és evolucionar LAIA d'**agent reactiu** (CLI que espera input) a **agent proactiu** (daemon que monitora, consolida, i notifica) aprofitant Nextcloud com a plataforma d'interacció, emmagatzematge i autenticació.
+LAIA és un agent CLI de Node.js amb brain/memòria persistent. L'usuari té un servidor Nextcloud propi a una **Raspberry Pi 4 (8GB, SSD)**.
+L'objectiu és evolucionar LAIA d'**agent reactiu** (CLI que espera input) a **agent proactiu** (daemon que monitora, consolida, i notifica) aprofitant Nextcloud com a plataforma d'interacció, emmagatzematge, autenticació i **knowledge store**.
 
 **Inspiració:** Istota (Python, 28K LOC, 26 skills) és un bot AI que viu dins Nextcloud com a usuari regular, amb Claude Code CLI com a motor d'execució. Adoptem els seus millors patrons sense perdre la identitat de LAIA (motor propi, multi-provider, brain avançat).
 
@@ -95,22 +98,103 @@ Aquest `brain_get_context` retorna: sessions recents del projecte, warnings, lea
 
 ---
 
+## Infraestructura — Raspberry Pi 4
+
+LAIA correrà com a **daemon 24/7** a la mateixa Raspberry Pi 4 on corre Nextcloud:
+
+### Hardware
+
+| Component | Detall |
+|---|---|
+| **Model** | Raspberry Pi 4 Model B (8GB RAM) |
+| **Storage** | SSD (USB 3.0, no SD card) |
+| **OS** | Raspberry Pi OS / Debian ARM64 |
+| **Connectivity** | Ethernet gigabit, xarxa local |
+
+### Stack actual (ja corrent)
+
+| Servei | Com |
+|---|---|
+| **Nextcloud** | Docker Compose (Apache + PHP + MariaDB) |
+| **Talk** | App de Nextcloud (ja instal·lada) |
+| **WebDAV** | Part de Nextcloud (port 443) |
+
+### Stack objectiu (afegir)
+
+| Servei | Com | Recursos |
+|---|---|---|
+| **LAIA daemon** | Systemd service (`laia-hub.service`) | ~100MB RAM, Node.js 24+ |
+| **LAIA brain** | SQLite (FTS + embeddings) a SSD | ~50MB RAM (sense embeddings GPU) |
+| **Cron** | Systemd timer o crontab | Negligible |
+| **nginx** | Reverse proxy (reports + OIDC) | ~10MB RAM |
+
+### Avantatge localhost
+
+```
+LAIA daemon ──(http://localhost)──► Nextcloud
+                                    │
+                   Talk API: <1ms RTT (vs 50-200ms remot)
+                   WebDAV:   disc local (zero xarxa)
+                   Files:    ja al SSD (zero download)
+```
+
+- **API Talk per localhost** → <1ms RTT, sense TLS overhead
+- **WebDAV per localhost** → fitxers al mateix disc SSD
+- **Knowledge Store** → fitxers de Nextcloud accessibles directament via filesystem
+- **Polling agressiu** → sense limits de bandwidth
+
+### Restriccions ARM64 / Pi 4
+
+| Limitació | Impacte | Mitigació |
+|---|---|---|
+| No GPU | Embeddings lents | BM25-only per defecte, embeddings opcionals |
+| 8GB RAM total | Compartit amb Nextcloud+MariaDB | Brain SQLite lleuger, workers limitats a 2 |
+| ARM64 | Algunes deps npm amb native addons | `better-sqlite3` té builds ARM64. Evitar deps amb binding C++ exòtics |
+| SSD USB 3.0 | IOPS més baixos que NVMe | WAL mode a SQLite, batch writes, no fsync innecessari |
+
+### Usuaris Nextcloud
+
+| Usuari | Tipus | Descripció |
+|---|---|---|
+| `jorid` | Humà | Yuri (existent) |
+| `laia` | Agent | LAIA daemon (crear amb app password) |
+
+### Estructura de fitxers Nextcloud (usuari `laia`)
+
+```
+/knowledge/                        ← Knowledge Store (fitxers persistents)
+├── docs/                          ← PDFs, DOCX, MD
+├── diagrams/                      ← PNG, SVG, diagrames
+├── spreadsheets/                  ← XLSX, CSV
+├── presentations/                 ← PPTX
+├── screenshots/                   ← captures de pantalla
+├── meetings/                      ← actes, transcripcions
+└── code/                          ← scripts, configs
+/work/                             ← fitxers de treball temporàris
+```
+
+No cal directori `_index/` — el brain ÉS l'índex.
+
+---
+
 ## Funcionalitats a Adoptar
 
 ### Ranking final (consens OPUS+CODEX)
 
 | # | Funcionalitat | Valor | Cost | Dependències |
 |---|---|---|---|---|
-| **1** | Sleep Cycle (consolidació nocturna) | 🔴 Molt alt | Baix | Hooks existents |
-| **2** | Tancar 3 forats de memòria (daily + auto-recall + tasks) | 🔴 Molt alt | Molt baix (~100 LOC) | Sleep cycle (A), hooks (B), WebDAV (C) |
-| **3** | Talk integration (entrada/sortida) | 🔴 Molt alt | Mitjà | Nextcloud WebDAV existent |
+| **1** | Sleep Cycle (consolidació nocturna) | 🔴 Molt alt | Baix | Hooks existents | **✅ COMPLETAT** |
+| **1b** | 3 forats de memòria (daily + auto-recall + tasks) | 🔴 Molt alt | Molt baix (~100 LOC) | Sleep cycle | **✅ COMPLETAT** |
+| **2** | **Knowledge Store (nc:// attachments)** | 🔴 Molt alt | Baix-Mitjà | WebDAV existent, brain schema |
+| **3** | Talk integration (entrada/sortida) | 🔴 Molt alt | Mitjà | Nextcloud Talk app, Pi daemon |
 | **4** | TASKS.md + CRON.md patterns | 🟠 Alt | Baix | Talk (per escriptura d'estat) |
 | **5** | Confirmation flow | 🟠 Alt | Baix | Talk (per yes/no) |
-| **6** | Daemon/scheduler | 🟠 Alt | Alt | Sleep cycle, Talk, CRON.md |
-| **7** | Static reports + OIDC auth | 🟠 Alt | Baix | Daemon/nginx |
-| **8** | Notificacions multi-canal | 🟡 Mitjà | Baix | Talk, email, ntfy |
-| **9** | Heartbeat monitoring | 🟡 Mitjà | Mitjà | Daemon, notificacions |
-| **10** | Briefings programats | 🟡 Mitjà | Alt | Daemon, calendar, feeds, email |
+| **6** | Daemon/scheduler (Pi hub) | 🟠 Alt | Alt | Sleep cycle, Talk, CRON.md |
+| **7** | Sleep Cycle avançat (merge, verify, extract) | 🟠 Alt | Mitjà | Knowledge Store, Talk |
+| **8** | Static reports + OIDC auth | 🟠 Alt | Baix | Daemon/nginx |
+| **9** | Notificacions multi-canal | 🟡 Mitjà | Baix | Talk, email, ntfy |
+| **10** | Heartbeat monitoring | 🟡 Mitjà | Mitjà | Daemon, notificacions |
+| **11** | Briefings programats | 🟡 Mitjà | Alt | Daemon, calendar, feeds, email |
 
 > **Nota (revisió post-anàlisi):** La funcionalitat #2 original era "Memòria ambient (auto-injectada)" amb cost Baix. Després d'analitzar l'arquitectura existent (prompt-governance 7 capes, evolved-prompt, unified-view), resulta que el que falta són 3 micro-integracions (~100 LOC total), no un sistema complet. El cost real és "Molt baix" i és el millor ROI de tot el roadmap.
 
@@ -150,37 +234,54 @@ Aquest `brain_get_context` retorna: sessions recents del projecte, warnings, lea
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        LAIA CORE (Node.js)                      │
-│                                                                 │
-│  ┌──────────┐  ┌───────────┐  ┌──────────────┐  ┌───────────┐ │
-│  │  Brain    │  │  Hooks    │  │ Plan Engine  │  │ Evolved   │ │
-│  │ ambient + │  │ bus (10+  │  │  risk/cost   │  │ Prompt    │ │
-│  │ consult.  │  │ events)   │  │  routing     │  │ compiler  │ │
-│  └──────────┘  └───────────┘  └──────────────┘  └───────────┘ │
-│                                                                 │
-│  ┌─ Skill Runtime Layer ──────────────────────────────────────┐ │
-│  │  native (default)  │  subprocess (sandbox)  │  prompt-only │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                 │
-│  ┌─ I/O Channels ────────────────────────────────────────────┐  │
-│  │  CLI (repl)  │  Talk (poller)  │  TASKS.md  │  CRON.md   │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌─ Output Surfaces ─────────────────────────────────────────┐  │
-│  │  Terminal  │  Talk  │  Email  │  ntfy  │  Static HTML     │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌─ Scheduler (daemon mode) ─────────────────────────────────┐  │
-│  │  Sleep Cycle │ CRON jobs │ Heartbeat │ Briefings │ Poller │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌─ Human Gate ──────────────────────────────────────────────┐  │
-│  │  Confirmation policies (always / risk-based / never)      │  │
-│  │  Approval via Talk (yes/no) or CLI (interactive prompt)   │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
+│              RASPBERRY PI 4 (8GB, SSD)                        │
+│                                                               │
+│  ┌─ Nextcloud (Docker) ───────────────────────────────────┐  │
+│  │  Apache + PHP + MariaDB + Talk                          │  │
+│  │  /knowledge/ ← Knowledge Store (fitxers persistents)    │  │
+│  │  Talk API + WebDAV (localhost, <1ms RTT)                │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                               │
+│  ┌─ LAIA DAEMON (Node.js, systemd) ──────────────────────┐  │
+│  │                                                        │  │
+│  │  ┌─ Brain ────────────────────────────────────────┐  │  │
+│  │  │  SQLite FTS + embeddings (BM25-only default)     │  │  │
+│  │  │  Learnings + attachments[] (nc:// URIs)          │  │  │
+│  │  │  Evolved prompt (stable + adaptive)              │  │  │
+│  │  │  Typed memory (unified-view, daily, auto-recall) │  │  │
+│  │  └──────────────────────────────────────────────────┘  │  │
+│  │                                                        │  │
+│  │  ┌─ Knowledge Store ──────────────────────────────┐  │  │
+│  │  │  nc:// URI protocol → WebDAV resolver            │  │  │
+│  │  │  brain_remember + attachments[]                  │  │  │
+│  │  │  Upload /knowledge/ → brain link                 │  │  │
+│  │  │  On-demand download (description first)          │  │  │
+│  │  └──────────────────────────────────────────────────┘  │  │
+│  │                                                        │  │
+│  │  ┌─ I/O Channels ────────────────────────────────┐  │  │
+│  │  │  CLI │ Talk │ TASKS.md │ CRON.md │ WebDAV      │  │  │
+│  │  └──────────────────────────────────────────────────┘  │  │
+│  │                                                        │  │
+│  │  ┌─ Scheduler ────────────────────────────────────┐  │  │
+│  │  │  Sleep Cycle │ CRON │ Heartbeat │ Briefings    │  │  │
+│  │  │  Talk Poller │ Task Queue (SQLite)              │  │  │
+│  │  │  Worker Pool (max 2 — Pi constraint)            │  │  │
+│  │  └──────────────────────────────────────────────────┘  │  │
+│  │                                                        │  │
+│  │  ┌─ Output ───────────────────────────────────────┐  │  │
+│  │  │  Terminal │ Talk │ Email │ ntfy │ Static HTML   │  │  │
+│  │  └──────────────────────────────────────────────────┘  │  │
+│  │                                                        │  │
+│  │  ┌─ Human Gate ───────────────────────────────────┐  │  │
+│  │  │  Confirmation policies (risk-based)              │  │  │
+│  │  │  Approval via Talk (yes/no) or CLI               │  │  │
+│  │  └──────────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
 
+Accessible des de: mòbil (Talk app), web (Nextcloud), CLI (SSH al Pi)
+```
 ---
 
 ## Sprint 1 — Sleep Cycle + Memòria Ambient
@@ -413,7 +514,246 @@ src/channels/tasks-file.js
 
 ---
 
-## Sprint 2 — Talk + Confirmation Flow + CRON.md
+## Sprint 1.5 — Knowledge Store (nc:// attachments)
+
+**Durada estimada:** 1 setmana
+**Objectiu:** El brain pot referenciar fitxers de Nextcloud. L'agent puja documents i els vincula a learnings.
+**Font:** `docs/2026-04-03-extended-brain-knowledge-store.md` (document Claudia, 490 línies)
+
+### Visió
+
+El brain actual està limitat a **text curt** (~2KB per learning). El coneixement real viu en fitxers rics:
+PDFs, diagrames, spreadsheets, codi. Quan l'agent treballa amb un fitxer, el coneixement que n'extreu **mor amb la sessió**.
+
+**Key insight:** En el 90% dels casos, l'agent ja té context complet del fitxer quan crea el learning
+(acaba de llegir el PDF, analitzar l'Excel, o generar el diagrama). Només cal dir:
+"aquest learning té un fitxer associat a Nextcloud".
+
+```
+DURANT LA SESSIÓ (flux natural):
+
+Yuri: "Analitza aquest PDF de l'API de Phoenix"
+
+LAIA:
+  1. Llegeix el PDF                                ← ja ho fa
+  2. Entén el contingut                            ← ja ho fa
+  3. Crea brain learning amb resum                 ← ja ho fa
+  4. Puja PDF a Nextcloud /knowledge/              ← NOU
+  5. Afegeix nc:// URI al learning                 ← NOU
+
+MÉS TARD (qualsevol sessió, qualsevol dispositiu):
+
+Yuri: "Quins endpoints té l'API de Phoenix?"
+
+LAIA:
+  1. brain_search("Phoenix API")                   ← troba el learning
+  2. Llegeix description → respon del resum        ← 80%+ dels cops suficient
+  3. Si cal més detall:
+     → Descarrega nc:///knowledge/docs/phoenix.pdf ← recupera fitxer complet
+     → Llegeix secció específica → resposta precisa
+```
+
+### 1.5.1 Sistema Two-Tier
+
+```
+┌─────────────────────────────────────────────────┐
+│                    BRAIN (SSD local)              │
+│                                                   │
+│  learning: "Phoenix API Spec"                     │
+│  description: "23 REST endpoints, OAuth2..."      │
+│  tags: [phoenix, api, spec]                       │
+│  attachments:                                     │
+│    └── nc:///knowledge/docs/phoenix-api.pdf       │  ← referència
+│                                                   │
+│  L'agent JA sabia tot això quan va crear el       │
+│  learning. No cal extraction pipeline.             │
+└────────────────────┬────────────────────────────┘
+                     │ on-demand download (quan el resum no és suficient)
+                     ▼
+┌─────────────────────────────────────────────────┐
+│          NEXTCLOUD (Docker @ Pi, SSD local)         │
+│     /knowledge/docs/phoenix-api.pdf                │  ← fitxer complet
+└─────────────────────────────────────────────────┘
+
+Avantatge Pi: Nextcloud al MATEIX disc SSD → download = lectura local
+```
+
+### 1.5.2 Attachment Schema
+
+**Canvis a brain_remember:**
+
+```json
+{
+  "type": "learning",
+  "title": "Phoenix API Specification v3",
+  "description": "REST API amb 23 endpoints. Auth via OAuth2. Rate limit 100 req/min.",
+  "tags": ["phoenix", "api", "spec"],
+  "attachments": [
+    {
+      "uri": "nc:///knowledge/docs/phoenix-api-spec-v3.pdf",
+      "mime": "application/pdf",
+      "label": "Phoenix API Spec v3 (complet)"
+    }
+  ]
+}
+```
+
+| Camp | Obligatori | Descripció |
+|------|------------|-------------|
+| `uri` | ✅ | Path Nextcloud: `nc:///path/to/file` |
+| `mime` | ✅ | MIME type (ajuda l'agent a decidir com tractar-lo) |
+| `label` | ✅ | Descripció human-readable |
+
+**Només 3 camps.** L'agent ja sap què conté el fitxer — acaba de processar-lo. No cal `sha256`, `indexed_at`, `chunks`, `summary` a l'attachment. El `description` del learning ÉS el resum.
+
+### 1.5.3 Protocol URI `nc:///`
+
+```
+nc:///knowledge/docs/phoenix-api.pdf
+│     │
+│     └── path relatiu dins fitxers de l'usuari Nextcloud
+│         resol a: ${NC_URL}/remote.php/dav/files/${NC_USER}/knowledge/docs/phoenix-api.pdf
+│
+└── protocol identifier (referència Nextcloud)
+```
+
+**Resolució (a Pi, localhost):**
+```javascript
+// src/nc/uri-resolver.js
+function resolveNcUri(uri) {
+  const path = uri.replace('nc:///', '');
+  const NC_URL = process.env.NC_URL || 'http://localhost';
+  const NC_USER = process.env.NC_USER || 'laia';
+  return `${NC_URL}/remote.php/dav/files/${NC_USER}/${path}`;
+}
+```
+
+### 1.5.4 Flux de l'Agent
+
+**Crear learning amb attachment:**
+```
+1. Agent llegeix el fitxer (local o download)
+2. Agent entén contingut, extreu info clau
+3. Agent puja a Nextcloud via WebDAV (skill existent):
+   /nextcloud upload ~/docs/spec.pdf knowledge/docs/spec-v3.pdf
+4. Agent crea learning:
+   brain_remember({
+     title: "Phoenix API Spec v3",
+     description: "23 REST endpoints, OAuth2...",
+     tags: ["phoenix", "api"],
+     attachments: [{ uri: "nc:///knowledge/docs/spec-v3.pdf", mime: "application/pdf", label: "Spec v3" }]
+   })
+```
+
+**Recuperar coneixement després:**
+```
+1. brain_search("Phoenix API rate limit")
+   → Trobat: "Phoenix API Spec v3"
+   → Description diu: "Rate limit 100 req/min"
+   → ✅ Resposta del resum sol (80%+ dels cops)
+
+2. Si cal més detall:
+   → Veu attachment: nc:///knowledge/docs/spec-v3.pdf
+   → Descarrega: /nextcloud download knowledge/docs/spec-v3.pdf /tmp/
+   → Llegeix secció específica → resposta precisa
+```
+
+### 1.5.5 brain_search amb attachments
+
+Quan brain_search retorna un resultat amb attachments:
+```
+Result: "Phoenix API Specification v3"
+  Description: "23 REST endpoints, OAuth2, rate limit 100 req/min..."
+  Tags: [phoenix, api, spec]
+  Attachments:
+    📄 nc:///knowledge/docs/phoenix-api-spec-v3.pdf (application/pdf)
+       "Phoenix API Spec v3 (complet)"
+```
+
+L'agent decideix si descarregar basant-se en si el `description` respon la pregunta.
+
+### 1.5.6 Talk → Knowledge Store Flow (futur, requereix Sprint 2)
+
+```
+[Nextcloud Talk — DM amb LAIA]
+
+Yuri:  [comparteix phoenix-api-spec-v3.pdf]
+Yuri:  "Guarda aquest spec al brain amb tags api, phoenix"
+
+LAIA:  1. Rep fitxer via Talk API
+       2. Llegeix el PDF, entén contingut
+       3. Mou fitxer a /knowledge/docs/
+       4. brain_remember({ title, description, tags, attachments })
+       5. Respon al Talk:
+          "✅ Guardat al brain! Summary: 23 REST endpoints, OAuth2...
+           Tags: #api #phoenix. Fitxer a nc:///knowledge/docs/"
+```
+
+Això converteix Talk en un **canal d'ingesta natural** — Yuri comparteix fitxers des del mòbil i l'agent els indexa al moment.
+
+### 1.5.7 Implementació
+
+| Tasca | Detall | Estimació |
+|---|---|---|
+| 1. Extend brain schema | `attachments[]` opcional a brain_remember | 1h |
+| 2. Crear `/knowledge/` | Directoris via WebDAV (`/nextcloud mkdir`) | 15min |
+| 3. `nc:///` URI resolver | Helper resolveNcUri() | 30min |
+| 4. Upload + link flow | Agent workflow: upload NC → brain_remember amb attachment | 1h |
+| 5. Search integration | brain_search retorna attachment info | 1h |
+| 6. System prompt update | Instruir l'agent sobre el flux knowledge store | 30min |
+
+**Fitxers nous:**
+```
+src/nc/uri-resolver.js             — Resolucí nc:// URIs a WebDAV URLs (~30 LOC)
+packages/brain/...                  — Schema update per attachments (~50 LOC)
+```
+
+**Fitxers modificats:**
+```
+packages/brain/tools/remember.js    — Acceptar attachments[]
+packages/brain/tools/search.js      — Retornar attachments en resultats
+src/system-prompt.js                — Afegir instruccions knowledge store
+```
+
+**Secrets necessaris:**
+```
+NC_URL=http://localhost              # Pi localhost
+NC_USER=laia
+NC_PASS=xxxxx-xxxxx-xxxxx-xxxxx     # App password de Nextcloud
+```
+
+### 1.5.8 Tipus de fitxers a persistir
+
+| Tipus | Exemple | Per què |
+|---|---|---|
+| **API specs** | PDF/DOCX amb endpoints | Massa detall per un resum |
+| **Diagrames d'arquitectura** | PNG/SVG | Visual, no es pot descriure totalment en text |
+| **Spreadsheets** | Excel amb inventaris, configs | Dades estructurades, moltes files |
+| **Presentacions** | PPTX de tech talks | Slides amb context |
+| **Reports generats** | PDF/MD que l'agent ha creat | Preservar output complet |
+| **Codi/configs** | Scripts, Dockerfiles | Implementació de referència |
+| **Captures de pantalla** | UI, errors | Evidència visual |
+| **Actes de reunió** | MD/DOCX detallats | Context complet més enllà del resum |
+
+### 1.5.9 Riscos i Mitigacions
+
+| Risc | Prob. | Impacte | Mitigació |
+|---|---|---|---|
+| Agent oblida pujar fitxer | Mitjà | Baix | System prompt recorda persistir fitxers importants |
+| Link trencat (fitxer esborrat de NC) | Baix | Mitjà | Sleep cycle verifica URIs (Sprint 5) |
+| Fitxers grans lents de descarregar | Baix | Baix | Description respon 80%+ sense download. Pi localhost = instant |
+| Nextcloud offline | Baix | Mitjà | Resum al brain segueix funcionant; fitxer temporalment no disponible |
+
+### 1.5.10 Criteris d'èxit
+
+| Criteri | Mètrica |
+|---|---|
+| Agent pot upload + link | < 30s total |
+| Cross-device retrieval | Qualsevol sessió troba i descarrega attachments |
+| Suficiència del resum | 80%+ consultes resoltes del description sol |
+| Tipus suportats | PDF, imatges, DOCX, XLSX, PPTX, codi, MD |
+
+---
 
 **Durada estimada:** 1-2 setmanes
 **Objectiu:** LAIA accessible des de Nextcloud Talk (mòbil/desktop) + tasques programades.
@@ -770,6 +1110,78 @@ sections = ["day-summary", "tomorrow-preview"]
 
 ---
 
+## Sprint 5 — Sleep Cycle Avançat
+
+**Durada estimada:** 1-2 setmanes
+**Objectiu:** Evolució del sleep cycle bàsic (Sprint 1) a consolidació completa: merge duplicats, verificar attachments, extracciude converses.
+**Dependències:** Knowledge Store (Sprint 1.5), Talk (Sprint 2), Daemon (Sprint 3)
+
+### 5.1 Què fa el Sleep Cycle Avançat
+
+Programat a les 3:00 AM via el daemon/scheduler del Sprint 3:
+
+```
+🌙 Sleep Cycle Avançat (3:00 AM)
+│
+├── 1. CONSOLIDAR LEARNINGS
+│   ├── Trobar duplicats/overlapping → merge en un sol learning
+│   ├── Trobar learnings obsolets (info canviada) → flag per revisió
+│   └── Enriquir learnings escassos amb millors descriptions
+│
+├── 2. VERIFICAR KNOWLEDGE STORE
+│   ├── Comprovar tots els URIs nc:/// → fitxers existeixen a Nextcloud?
+│   ├── Links trencats → flag learning com "attachment-missing"
+│   └── Report: "3 learnings verificats, 1 link trencat"
+│
+├── 3. EXTRACCIÓ DE MEMÒRIA DE CONVERSES (requereix Talk)
+│   ├── Revisar converses Talk del dia
+│   ├── Extreure learnings de converses que no van crear learnings explícits
+│   └── "Yuri va mencionar que el deadline és el 15 d'abril" → learning
+│
+├── 4. INDEXACIÓ DE FITXERS ORFES (futur)
+│   ├── Escanejar /knowledge/ per fitxers no referenciats per cap learning
+│   └── Auto-crear learnings per fitxers orfes
+│
+└── 5. REPORT
+    └── Publicar resum a Talk #logs:
+        "🌙 Sleep cycle complete:
+         • 2 learnings merged
+         • 1 obsolet eliminat
+         • 1 nou learning extret de converses
+         • 0 links d'attachments trencats"
+```
+
+### 5.2 Diferència amb Sleep Cycle bàsic (Sprint 1)
+
+| Aspecte | Sprint 1 (implementat) | Sprint 5 (avançat) |
+|---|---|---|
+| Extracció de sessions | ✅ Bullets de session-notes | ✅ + merge duplicats |
+| Prune fitxers vells | ✅ >30 dies | ✅ + dedup learnings |
+| Verificar attachments | ❌ | ✅ URIs nc:/// |
+| Extracció de converses | ❌ | ✅ Talk history |
+| Fitxers orfes | ❌ | ✅ Scan /knowledge/ |
+| Report a Talk | ❌ | ✅ Publicar a #logs |
+| Motor | Heurístiques | LLM-powered (consolidació + extracció) |
+
+### 5.3 Fitxers
+
+```
+src/services/sleep-cycle.js         — Ampliar amb fases 1-5 (~200 LOC extra)
+src/services/knowledge-verifier.js  — Verificar URIs nc:/// (~80 LOC)
+src/services/conversation-extractor.js — Extreure learnings de Talk (~120 LOC)
+```
+
+### 5.4 Per què importa
+
+| Sense sleep cycle avançat | Amb sleep cycle avançat |
+|---|---|
+| Learnings s'acumulen, duplicats creixen | Duplicats merged, coneixement net |
+| Links trencats d'attachments passen desapercebuts | Detectats i flagejats cada nit |
+| Coneixement implícit es perd després de la sessió | Extret de converses automàticament |
+| Qualitat del brain degrada amb el temps | **Qualitat del brain MILLORA amb el temps** |
+
+---
+
 ## Model d'Execució Híbrid
 
 **Consens OPUS+CODEX:** LAIA manté motor propi com a default, amb backends pluggables.
@@ -858,13 +1270,23 @@ Si algun criteri falla → rollback via feature flag individual (A/B/C).
 
 ## Resum de Fitxers per Sprint
 
-### Sprint 1 (4-5 fitxers nous, ~300 LOC)
+### Sprint 1 (4 fitxers nous, ~450 LOC) ✅ COMPLETAT
 ```
-src/services/sleep-cycle.js      — Consolidació nocturna (~150 LOC)
-src/memory/daily-loader.js        — Carrega daily memories a P5 (~40 LOC)
-src/hooks/auto-recall.js          — Cerca implícita SessionStart (~60 LOC)
-src/channels/tasks-file.js        — TASKS.md polling via WebDAV (~100 LOC)
-+ modificar: src/memory/unified-view.js (~20 LOC)
+src/services/sleep-cycle.js      — Consolidació nocturna (230 LOC)
+src/memory/daily-loader.js        — Carrega daily memories a P5 (100 LOC)
+src/hooks/auto-recall.js          — Cerca implícita SessionStart (116 LOC)
+tests/unit/sleep-cycle.test.js    — 10 tests (235 LOC)
++ modificat: unified-view.js, prompt-governance.js, system-prompt.js,
+             repl.js, slash-commands.js (+56 LOC)
+```
+
+### Sprint 1.5 (2-3 fitxers nous, ~80-130 LOC + brain schema)
+```
+src/nc/uri-resolver.js             — Resolució nc:// URIs a WebDAV URLs (~30 LOC)
+packages/brain/...                  — Schema update per attachments (~50 LOC)
++ modificar: brain/tools/remember.js (acceptar attachments[])
++ modificar: brain/tools/search.js (retornar attachments)
++ modificar: system-prompt.js (instruccions knowledge store)
 ```
 
 ### Sprint 2 (4-6 fitxers nous)
@@ -873,14 +1295,15 @@ src/channels/talk.js              — Nextcloud Talk API client
 src/channels/talk-poller.js       — Talk polling loop
 src/channels/cron-file.js         — CRON.md parser
 src/services/confirmation.js      — Confirmation flow
+src/channels/tasks-file.js        — TASKS.md polling via WebDAV
 ```
 
 ### Sprint 3 (5-7 fitxers nous)
 ```
-src/daemon/index.js               — Daemon entry point
+src/daemon/index.js               — Daemon entry point (Pi systemd service)
 src/daemon/scheduler.js           — Main loop
 src/daemon/task-queue.js          — SQLite task queue
-src/daemon/worker-pool.js         — Worker pool
+src/daemon/worker-pool.js         — Worker pool (max 2 al Pi)
 src/daemon/web-server.js          — HTTP server per reports
 src/services/notifications.js     — Multi-channel dispatcher
 ```
@@ -891,7 +1314,14 @@ src/services/heartbeat.js         — Health monitoring
 src/services/briefing.js          — Scheduled briefings
 ```
 
-**Total: ~16-20 fitxers nous, estimació 3-5K LOC**
+### Sprint 5 (2-3 fitxers nous)
+```
+src/services/knowledge-verifier.js  — Verificar URIs nc:/// (~80 LOC)
+src/services/conversation-extractor.js — Extreure learnings de Talk (~120 LOC)
++ ampliar: src/services/sleep-cycle.js (fases 1-5, ~200 LOC extra)
+```
+
+**Total: ~20-25 fitxers nous, estimació 4-6K LOC, 6-8 setmanes**
 
 ---
 
