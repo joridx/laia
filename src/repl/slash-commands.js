@@ -57,6 +57,7 @@ export const COMMAND_META = {
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert changes (--list, N)',     cat: 'system',   subs: ['--list', '-l'] },
   '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
+  '/status':     { desc: 'System health dashboard',        cat: 'system',   subs: [] },
   '/flags':      { desc: 'View/set feature flags',         cat: 'config',   subs: ['set'] },
   '/skillify':   { desc: 'Capture session as reusable skill', cat: 'skills',   subs: ['--force'] },
   '/init':       { desc: 'Generate LAIA.md for project',   cat: 'system',   subs: ['--force', '--dry-run'] },
@@ -1260,6 +1261,47 @@ export async function handleSlashCommand(input, session) {
       } catch (err) {
         stderr.write(`\x1b[31mError in /skillify: ${err.message}\x1b[0m\n`);
       }
+      return true;
+    }
+
+    case 'status': {
+      const { detectProvider: dp, isProviderAvailable: isAvail, PROVIDERS: provs } = await import('@laia/providers');
+      const { getDefaultConnection } = await import('../brain/client.js');
+      const { listSkills: ls } = await import('../skills.js');
+
+      stderr.write('\n\x1b[1m📊 LAIA System Status\x1b[0m\n\n');
+
+      // Providers
+      stderr.write('\x1b[1m  Providers:\x1b[0m\n');
+      const { providerId: current } = dp(config.model, { forceProvider: config.provider });
+      for (const pid of Object.keys(provs)) {
+        if (pid === 'genai') continue; // internal
+        const avail = isAvail(pid);
+        const icon = avail ? '\x1b[32m✅\x1b[0m' : '\x1b[2m⬚\x1b[0m';
+        const active = pid === current ? ' \x1b[33m← active\x1b[0m' : '';
+        stderr.write(`    ${icon} ${pid}${active}\n`);
+      }
+
+      // Brain
+      stderr.write('\n\x1b[1m  Brain:\x1b[0m\n');
+      const brain = getDefaultConnection();
+      if (brain) {
+        stderr.write(`    \x1b[32m✅\x1b[0m Connected (path: ${config.brainPath})\n`);
+      } else {
+        stderr.write(`    \x1b[31m❌\x1b[0m Not connected\n`);
+      }
+
+      // Skills
+      const skills = ls({ force: true });
+      stderr.write(`\n\x1b[1m  Skills:\x1b[0m ${skills.length} loaded\n`);
+
+      // Model & Session
+      stderr.write(`\n\x1b[1m  Session:\x1b[0m\n`);
+      stderr.write(`    Model:    ${config.model}\n`);
+      stderr.write(`    Provider: ${current}\n`);
+      stderr.write(`    Turns:    ${context.turnCount()}\n`);
+      stderr.write(`    CWD:      ${config.workspaceRoot}\n`);
+      stderr.write('\n');
       return true;
     }
 
