@@ -238,7 +238,7 @@ export function formatBriefing(briefing) {
     lines.push('');
     lines.push(`⏰ **Cron jobs:** ${cr.count}`);
     for (const job of cr.jobs.slice(0, 5)) {
-      lines.push(`  • \`${job.schedule}\` — ${job.name || job.prompt?.slice(0, 60) || job.command?.slice(0, 60) || '(unnamed)'}`);
+      lines.push(`  • \`${job.cron || job.schedule}\` — ${job.name || job.prompt?.slice(0, 60) || job.command?.slice(0, 60) || '(unnamed)'}`);
     }
   }
 
