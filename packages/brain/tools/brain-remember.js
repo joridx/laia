@@ -55,9 +55,9 @@ export const schema = {
     steps: z.number().optional().describe("Procedure only: number of steps"),
     protected: z.boolean().optional().describe("Protected: immune to decay"),
     attachments: zCoercedArray(z.object({
-      uri: z.string().describe("Nextcloud URI: nc:///path/to/file"),
-      mime: z.string().describe("MIME type"),
-      label: z.string().describe("Human-readable label")
+      uri: z.string().min(7).regex(/^nc:\/\/\//).describe("Nextcloud URI: nc:///path/to/file"),
+      mime: z.string().min(1).describe("MIME type"),
+      label: z.string().min(1).describe("Human-readable label")
     })).optional().describe("File attachments (nc:// URIs)")
   })).optional().describe("Batch mode: array of learnings to save"),
   session_ref: z.string().optional().describe("Session reference for batch mode"),
@@ -68,9 +68,9 @@ export const schema = {
   source_ref: z.string().optional().describe("P15.0: External reference (Jira key, commit SHA, URL)"),
   // Knowledge Store: file attachments (nc:// URIs)
   attachments: zCoercedArray(z.object({
-    uri: z.string().describe("Nextcloud URI: nc:///path/to/file"),
-    mime: z.string().describe("MIME type: application/pdf, image/png, etc."),
-    label: z.string().describe("Human-readable label for the attachment")
+    uri: z.string().min(7).regex(/^nc:\/\/\//).describe("Nextcloud URI: nc:///path/to/file"),
+    mime: z.string().min(1).describe("MIME type: application/pdf, image/png, etc."),
+    label: z.string().min(1).describe("Human-readable label for the attachment")
   })).optional().describe("File attachments stored in Nextcloud Knowledge Store. Each has uri (nc:///...), mime, label.")
 };
 

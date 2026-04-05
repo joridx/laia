@@ -57,6 +57,19 @@ describe('nc:// URI resolver', () => {
     assert.ok(!mod.isNcUri(null));
   });
 
+  it('should reject encoded path traversal attempts', async () => {
+    const mod = await import('../../src/nc/uri-resolver.js');
+    assert.throws(() => mod.resolveNcUri('nc:///%2e%2e/%2e%2e/etc/passwd'), /Unsafe path/);
+    assert.throws(() => mod.resolveNcUri('nc:///knowledge/%2e%2e/%2e%2e/etc/shadow'), /Unsafe path/);
+  });
+
+  it('should URL-encode spaces and special chars', async () => {
+    const mod = await import('../../src/nc/uri-resolver.js');
+    const url = mod.resolveNcUri('nc:///knowledge/docs/My File.pdf');
+    assert.ok(url.includes('My%20File.pdf'), `Expected encoded space, got: ${url}`);
+    assert.ok(!url.includes(' '), 'Should not contain raw spaces');
+  });
+
   it('should reject paths outside /knowledge/ allowlist', async () => {
     const mod = await import('../../src/nc/uri-resolver.js');
     assert.throws(() => mod.resolveNcUri('nc:///Documents/private.pdf'), /not in allowed prefixes/);
@@ -139,6 +152,58 @@ describe('attachment schema validation', () => {
     const clean = mixed.filter(a => a?.uri?.startsWith('nc:///') && a?.mime && a?.label);
     assert.equal(clean.length, 1);
     assert.equal(clean[0].label, 'Valid');
+  });
+});
+
+// ─── Roundtrip: serializer ↔ parser ────────────────────────────────────────
+
+describe('attachments roundtrip (serializer ↔ parser)', () => {
+  it('should roundtrip YAML-native attachments', async () => {
+    const { buildLearningMarkdown, parseLearningFrontmatter } = await import('../../packages/brain/utils.js');
+
+    const attachments = [
+      { uri: 'nc:///knowledge/docs/spec.pdf', mime: 'application/pdf', label: 'API Spec v3' },
+      { uri: 'nc:///knowledge/diagrams/arch.png', mime: 'image/png', label: 'Architecture diagram' },
+    ];
+
+    const md = buildLearningMarkdown(
+      'Test Learning', 'learning', ['test'],
+      'Test description', null,
+      { attachments }
+    );
+
+    assert.ok(md.includes('attachments:'), 'Should contain attachments key');
+    assert.ok(md.includes('nc:///knowledge/docs/spec.pdf'), 'Should contain first URI');
+    assert.ok(md.includes('nc:///knowledge/diagrams/arch.png'), 'Should contain second URI');
+
+    const parsed = parseLearningFrontmatter(md);
+    assert.ok(parsed, 'Should parse successfully');
+    assert.ok(parsed.frontmatter.attachments, 'Should have attachments in frontmatter');
+    assert.equal(parsed.frontmatter.attachments.length, 2, 'Should have 2 attachments');
+    assert.equal(parsed.frontmatter.attachments[0].uri, 'nc:///knowledge/docs/spec.pdf');
+    assert.equal(parsed.frontmatter.attachments[0].mime, 'application/pdf');
+    assert.equal(parsed.frontmatter.attachments[0].label, 'API Spec v3');
+    assert.equal(parsed.frontmatter.attachments[1].uri, 'nc:///knowledge/diagrams/arch.png');
+  });
+
+  it('should roundtrip JSON-string attachments (backward compat)', async () => {
+    const { parseLearningFrontmatter } = await import('../../packages/brain/utils.js');
+
+    const oldMd = '---\ntitle: "Old Learning"\ntype: learning\ntags: [test]\nattachments: [{"uri":"nc:///knowledge/docs/old.pdf","mime":"application/pdf","label":"Old file"}]\n---\n\nOld content\n';
+
+    const parsed = parseLearningFrontmatter(oldMd);
+    assert.ok(parsed.frontmatter.attachments, 'Should parse JSON attachments');
+    assert.equal(parsed.frontmatter.attachments.length, 1);
+    assert.equal(parsed.frontmatter.attachments[0].uri, 'nc:///knowledge/docs/old.pdf');
+  });
+
+  it('should handle learning with no attachments', async () => {
+    const { buildLearningMarkdown, parseLearningFrontmatter } = await import('../../packages/brain/utils.js');
+
+    const md = buildLearningMarkdown('No Attachments', 'learning', ['test'], 'Content', null);
+    const parsed = parseLearningFrontmatter(md);
+    assert.ok(parsed, 'Should parse');
+    assert.ok(!parsed.frontmatter.attachments, 'Should have no attachments');
   });
 });
 

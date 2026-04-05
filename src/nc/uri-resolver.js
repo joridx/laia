@@ -25,20 +25,28 @@ export function resolveNcUri(uri) {
     throw new Error(`Invalid nc:// URI: ${uri}. Must start with ${NC_PREFIX}`);
   }
 
-  const path = uri.slice(NC_PREFIX.length);
+  const rawPath = uri.slice(NC_PREFIX.length);
 
-  // Path traversal guard
-  if (path.includes('..') || path.includes('\0')) {
+  // Decode first to catch encoded traversal (%2e%2e, %00, etc.)
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(rawPath);
+  } catch {
+    decodedPath = rawPath;
+  }
+
+  // Path traversal guard (on decoded path)
+  if (decodedPath.includes('..') || decodedPath.includes('\0') || rawPath.includes('\0')) {
     throw new Error(`Unsafe path in nc:// URI: ${uri}`);
   }
 
   // Allowlist prefix guard (default: /knowledge/ only)
   const allowedPrefixes = (process.env.NC_ALLOWED_PREFIXES || '')
     .split(',')
-    .map(p => p.trim())
-    .filter(Boolean);
+    .map(p => p.trim().replace(/^\/+/, '').replace(/\/+$/, '') + '/')  // normalize: strip leading/trailing slashes, ensure trailing
+    .filter(p => p !== '/');
   const prefixes = allowedPrefixes.length > 0 ? allowedPrefixes : DEFAULT_ALLOWED_PREFIXES;
-  const allowed = prefixes.some(prefix => path.startsWith(prefix));
+  const allowed = prefixes.some(prefix => decodedPath.startsWith(prefix));
   if (!allowed) {
     throw new Error(`nc:// URI path not in allowed prefixes (${prefixes.join(', ')}): ${uri}`);
   }
@@ -46,7 +54,10 @@ export function resolveNcUri(uri) {
   const ncUrl = (process.env.NC_URL || DEFAULT_NC_URL).replace(/\/$/, '');
   const ncUser = process.env.NC_USER || DEFAULT_NC_USER;
 
-  return `${ncUrl}/remote.php/dav/files/${ncUser}/${path}`;
+  // URL-encode each path segment for safe WebDAV URLs
+  const encodedPath = decodedPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+
+  return `${ncUrl}/remote.php/dav/files/${ncUser}/${encodedPath}`;
 }
 
 /**
