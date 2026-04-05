@@ -28,6 +28,11 @@ const DEFAULTS = {
   // V5 Sprint 4
   magic_docs: false,              // Auto-update MAGIC DOC headers
   reactive_compaction: false,     // Pre/post compact hooks
+
+  // Nextcloud Sprint 2
+  confirmation_enabled: false,    // Risk-based confirmation flow (PreToolUse)
+  tasks_inject: false,            // Inject TASKS.md into P5 (unified-view)
+  talk_poll_enabled: false,       // Talk polling available
 };
 
 // ─── Flags file path ─────────────────────────────────────────────────────────

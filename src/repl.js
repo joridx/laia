@@ -51,6 +51,7 @@ import { syncOnSessionEnd } from './memory/bridge.js';
 import { runReflectionPipeline } from './memory/reflection.js';
 import { brainSearch, brainRemember, brainLogSession } from './brain/client.js';
 import { registerAutoRecallHook, triggerAutoRecall } from './hooks/auto-recall.js';
+import { registerConfirmationHook } from './hooks/confirmation-hook.js';
 import { createClient } from './agent.js';
 import { emit, loadUserHooks, getHookStats } from './hooks/bus.js';
 import { loadFlags, getFlag, getFlagsWithSource, initFlagsFile } from './config/flags.js';
@@ -362,6 +363,7 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
   // V5: Emit SessionStart hook
   if (getFlag('hooks_enabled')) {
     registerAutoRecallHook();
+    registerConfirmationHook();
     emit('SessionStart', { config, sessionId: logger.sessionId }).catch(() => {});
   }
 

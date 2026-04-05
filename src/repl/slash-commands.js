@@ -58,6 +58,10 @@ export const COMMAND_META = {
   '/undo':       { desc: 'Revert changes (--list, N)',     cat: 'system',   subs: ['--list', '-l'] },
   '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
   '/sleep':      { desc: 'Run sleep cycle (memory consolidation)', cat: 'system', subs: [] },
+  '/talk':       { desc: 'Talk integration (poll, send, rooms)', cat: 'nextcloud', subs: ['poll', 'send', 'rooms'] },
+  '/cron':       { desc: 'CRON.md scheduled jobs',           cat: 'nextcloud', subs: ['list'] },
+  '/confirm':    { desc: 'Pending confirmations',            cat: 'nextcloud', subs: ['list', 'approve', 'deny'] },
+  '/nc-tasks':   { desc: 'TASKS.md task list',               cat: 'nextcloud', subs: ['list', 'pending'] },
   '/status':     { desc: 'System health dashboard',        cat: 'system',   subs: [] },
   '/flags':      { desc: 'View/set feature flags',         cat: 'config',   subs: ['set'] },
   '/skillify':   { desc: 'Capture session as reusable skill', cat: 'skills',   subs: ['--force'] },
@@ -77,6 +81,7 @@ const CATEGORY_LABELS = {
   files:   '📎 Files',
   agents:  '🤖 Agents',
   skills:  '🎯 Skills',
+  nextcloud: '☁️ Nextcloud',
   system:  '⚙️  System',
 };
 
@@ -1388,6 +1393,200 @@ export async function handleSlashCommand(input, session) {
         }
         stderr.write(`\n${DIM}Use: /flags set <key> <value>  |  Env: LAIA_FLAG_<KEY>=value${R}\n\n`);
       }
+      return true;
+    }
+
+    // ─── Nextcloud Sprint 2 Commands ────────────────────────────────────────
+
+    case 'talk': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const GREEN = '\x1b[32m';
+      const sub = args.split(/\s+/)[0] || 'poll';
+      const rest = args.slice(sub.length).trim();
+
+      if (sub === 'rooms') {
+        const { listConversations } = await import('../channels/talk-client.js');
+        try {
+          const rooms = await listConversations();
+          stderr.write(`\n${B}☁️ Talk Conversations${R}\n\n`);
+          const typeNames = { 1: 'DM', 2: 'Group', 3: 'Public', 4: 'Changelog', 5: 'Former', 6: 'NoteToSelf' };
+          for (const r of rooms) {
+            const type = typeNames[r.type] || `type:${r.type}`;
+            stderr.write(`  ${r.token}  ${B}${r.displayName}${R}  ${DIM}(${type})${R}\n`);
+          }
+          stderr.write(`\n${DIM}Total: ${rooms.length} conversations${R}\n\n`);
+        } catch (err) {
+          stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
+          stderr.write(`${DIM}Ensure NC_URL, NC_USER, NC_PASS are configured in ~/.laia/.env${R}\n`);
+        }
+        return true;
+      }
+
+      if (sub === 'poll') {
+        const { pollOnce } = await import('../channels/talk-poller.js');
+        stderr.write(`\n${DIM}☁️ Polling Talk for new messages...${R}\n`);
+        try {
+          const tasks = await pollOnce();
+          if (tasks.length === 0) {
+            stderr.write(`${GREEN}✓ No new messages${R}\n\n`);
+          } else {
+            stderr.write(`\n${B}📨 ${tasks.length} new message(s):${R}\n\n`);
+            for (const t of tasks) {
+              stderr.write(`  ${B}${t.author}${R} ${DIM}(${t.roomName})${R}: ${t.text.slice(0, 120)}\n`);
+            }
+            stderr.write('\n');
+          }
+        } catch (err) {
+          stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
+        }
+        return true;
+      }
+
+      if (sub === 'send') {
+        if (!rest) {
+          stderr.write('Usage: /talk send <token> <message>\n');
+          return true;
+        }
+        const [token, ...msgParts] = rest.split(/\s+/);
+        const msg = msgParts.join(' ');
+        if (!token || !msg) {
+          stderr.write('Usage: /talk send <token> <message>\n');
+          return true;
+        }
+        const { sendMessage } = await import('../channels/talk-client.js');
+        try {
+          await sendMessage(token, msg);
+          stderr.write(`${GREEN}✓ Message sent to ${token}${R}\n`);
+        } catch (err) {
+          stderr.write(`\x1b[31mError: ${err.message}\x1b[0m\n`);
+        }
+        return true;
+      }
+
+      stderr.write('Usage: /talk [poll|send|rooms]\n');
+      return true;
+    }
+
+    case 'cron': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const { loadCronFile } = await import('../channels/cron-file.js');
+      const { join: joinP } = await import('path');
+      const { homedir: home } = await import('os');
+      const cronPath = joinP(home(), '.laia', 'CRON.md');
+      const { jobs, errors } = loadCronFile(cronPath);
+
+      stderr.write(`\n${B}⏰ Scheduled Jobs${R} ${DIM}(${cronPath})${R}\n\n`);
+
+      if (jobs.length === 0 && errors.length === 0) {
+        stderr.write(`  ${DIM}No jobs found. Create ~/.laia/CRON.md with \`\`\`toml blocks.${R}\n\n`);
+        return true;
+      }
+
+      for (const job of jobs) {
+        const status = job.enabled ? '\x1b[32m●\x1b[0m' : '\x1b[2m○\x1b[0m';
+        const type = job.prompt ? 'prompt' : 'command';
+        stderr.write(`  ${status} ${B}${job.name}${R}  ${DIM}${job.cron}${R}  [${type}]\n`);
+        const detail = (job.prompt || job.command || '').slice(0, 80);
+        stderr.write(`    ${DIM}${detail}${R}\n`);
+      }
+
+      if (errors.length > 0) {
+        stderr.write(`\n\x1b[33m⚠ ${errors.length} error(s):\x1b[0m\n`);
+        for (const e of errors) stderr.write(`  - ${e}\n`);
+      }
+      stderr.write('\n');
+      return true;
+    }
+
+    case 'confirm': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const { getPendingConfirmations, resolveConfirmation } = await import('../services/confirmation.js');
+      const sub = args.split(/\s+/)[0] || 'list';
+      const rest = args.slice(sub.length).trim();
+
+      if (sub === 'list' || sub === '') {
+        const pending = getPendingConfirmations();
+        if (pending.length === 0) {
+          stderr.write(`\n${DIM}No pending confirmations${R}\n\n`);
+        } else {
+          stderr.write(`\n${B}⏳ Pending Confirmations (${pending.length})${R}\n\n`);
+          for (const c of pending) {
+            const age = Math.round((Date.now() - new Date(c.createdAt).getTime()) / 1000);
+            stderr.write(`  ${B}${c.id}${R}  ${c.toolName}  risk:${c.risk}  ${DIM}${age}s ago${R}\n`);
+          }
+          stderr.write(`\n${DIM}Use: /confirm approve <id> | /confirm deny <id>${R}\n\n`);
+        }
+        return true;
+      }
+
+      if (sub === 'approve' || sub === 'deny') {
+        const id = rest;
+        if (!id) {
+          stderr.write(`Usage: /confirm ${sub} <id>\n`);
+          return true;
+        }
+        const approved = sub === 'approve';
+        const found = resolveConfirmation(id, approved);
+        if (found) {
+          stderr.write(`${approved ? '\x1b[32m✓ Approved' : '\x1b[31m✗ Denied'}: ${id}${R}\n`);
+        } else {
+          stderr.write(`\x1b[33m⚠ Confirmation '${id}' not found or already resolved${R}\n`);
+        }
+        return true;
+      }
+
+      stderr.write('Usage: /confirm [list|approve|deny] [id]\n');
+      return true;
+    }
+
+    case 'nc-tasks': {
+      const DIM = '\x1b[2m';
+      const R = '\x1b[0m';
+      const B = '\x1b[1m';
+      const { loadTasksFile, getPendingTasks } = await import('../channels/cron-file.js');
+      const { join: joinP } = await import('path');
+      const { homedir: home } = await import('os');
+      const sub = args.split(/\s+/)[0] || 'list';
+      const tasksPath = joinP(home(), '.laia', 'TASKS.md');
+      const { tasks, errors } = loadTasksFile(tasksPath);
+
+      if (tasks.length === 0) {
+        stderr.write(`\n${DIM}No tasks found. Create ~/.laia/TASKS.md with checkbox items.${R}\n\n`);
+        return true;
+      }
+
+      const pending = getPendingTasks(tasks);
+      const done = tasks.filter(t => t.done);
+
+      stderr.write(`\n${B}📋 Tasks${R} ${DIM}(${tasksPath})${R}\n\n`);
+
+      if (sub === 'pending') {
+        for (const t of pending) {
+          const p = t.priority === 'urgent' ? '\x1b[31m!!' : t.priority === 'high' ? '\x1b[33m!' : DIM + '·';
+          stderr.write(`  ${p}${R} ${t.text}\n`);
+        }
+      } else {
+        for (const t of tasks) {
+          const check = t.done ? '\x1b[32m✓\x1b[0m' : '\x1b[2m○\x1b[0m';
+          const p = t.priority === 'urgent' ? ' \x1b[31m!!\x1b[0m' : t.priority === 'high' ? ' \x1b[33m!\x1b[0m' : '';
+          const dim = t.done ? DIM : '';
+          stderr.write(`  ${check} ${dim}${t.text}${R}${p}\n`);
+        }
+      }
+
+      stderr.write(`\n${DIM}${pending.length} pending, ${done.length} done${R}\n`);
+
+      if (errors.length > 0) {
+        stderr.write(`\n\x1b[33m⚠ ${errors.length} parse error(s):\x1b[0m\n`);
+        for (const e of errors) stderr.write(`  - ${e}\n`);
+      }
+      stderr.write('\n');
       return true;
     }
 
