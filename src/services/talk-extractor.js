@@ -27,6 +27,11 @@ const SKIP_PATTERNS = [
 
 const SYSTEM_ACTOR_TYPES = ['bots', 'bridged', 'guests'];
 
+/** Check if model is a codex model (uses /responses endpoint, not /chat/completions) */
+function isCodexModel(model) {
+  return model && /codex/i.test(model);
+}
+
 // ─── State Management ────────────────────────────────────────────────────────
 
 /**
@@ -226,8 +231,8 @@ async function createExtractorLlmCall(config) {
   const { detectProvider, getProvider, resolveUrl, buildAuthHeaders } = await import('@laia/providers');
   const { getProviderToken } = await import('../auth.js');
 
-  // Use a capable but cheap model — extraction needs understanding
-  const extractModel = config.extractModel || config.model || 'claude-haiku-4-20250414';
+  // Use a capable /chat/completions model — codex models use /responses and don't work here
+  const extractModel = config.extractModel || (isCodexModel(config.model) ? 'gpt-4o' : config.model) || 'gpt-4o';
   const { providerId } = detectProvider(extractModel);
   const provider = getProvider(providerId);
   const token = await getProviderToken(providerId);
