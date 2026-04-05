@@ -168,6 +168,13 @@ export async function handler({ query, scope = "all", project, show_all = false,
       const sigStr = Object.entries(l.signals || {}).map(([k,v]) => `${k}:${v}`).join(" ");
       const llmTag = l.llmRank ? ` llm:#${l.llmRank}` : "";
       output += `- **${l.title}** [${l.slug}] (score:${l.score.toFixed(1)} | ${sigStr}${llmTag})\n  ${l.headline}\n`;
+      // Knowledge Store: show attachments if present
+      if (l.attachments && Array.isArray(l.attachments) && l.attachments.length > 0) {
+        for (const att of l.attachments) {
+          const icon = att.mime?.startsWith('image/') ? '🖼️' : att.mime?.includes('pdf') ? '📄' : att.mime?.includes('spreadsheet') || att.mime?.includes('excel') ? '📊' : '📎';
+          output += `  ${icon} ${att.uri} (${att.mime})\n     ${att.label}\n`;
+        }
+      }
       if (explain && l.rawScores) {
         const weights = (intent && INTENT_WEIGHTS[intent.intent]) || DEFAULT_SIGNAL_WEIGHTS;
         const parts = Object.entries(l.rawScores)

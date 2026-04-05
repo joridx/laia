@@ -53,17 +53,28 @@ export const schema = {
     trigger_intents: zCoercedArray(z.string()).optional().describe("Procedure only: trigger intents"),
     preconditions: zCoercedArray(z.string()).optional().describe("Procedure only: preconditions"),
     steps: z.number().optional().describe("Procedure only: number of steps"),
-    protected: z.boolean().optional().describe("Protected: immune to decay")
+    protected: z.boolean().optional().describe("Protected: immune to decay"),
+    attachments: zCoercedArray(z.object({
+      uri: z.string().describe("Nextcloud URI: nc:///path/to/file"),
+      mime: z.string().describe("MIME type"),
+      label: z.string().describe("Human-readable label")
+    })).optional().describe("File attachments (nc:// URIs)")
   })).optional().describe("Batch mode: array of learnings to save"),
   session_ref: z.string().optional().describe("Session reference for batch mode"),
   agentProfile: z.string().optional().describe("Agent profile name (V2b). Auto-stored in learning metadata for agent-scoped retrieval."),
   source_type: z.enum(["conversation", "consolidation", "manual", "import"]).optional().describe("P15.0: How the learning was created"),
   source_context: z.string().optional().describe("P15.0: What was being worked on when this was captured"),
   created_by: z.enum(["user", "agent", "system"]).optional().describe("P15.0: Who created this learning"),
-  source_ref: z.string().optional().describe("P15.0: External reference (Jira key, commit SHA, URL)")
+  source_ref: z.string().optional().describe("P15.0: External reference (Jira key, commit SHA, URL)"),
+  // Knowledge Store: file attachments (nc:// URIs)
+  attachments: zCoercedArray(z.object({
+    uri: z.string().describe("Nextcloud URI: nc:///path/to/file"),
+    mime: z.string().describe("MIME type: application/pdf, image/png, etc."),
+    label: z.string().describe("Human-readable label for the attachment")
+  })).optional().describe("File attachments stored in Nextcloud Knowledge Store. Each has uri (nc:///...), mime, label.")
 };
 
-export async function handler({ content, tags, type, connects, domain, force = false, supersedes, learnings, session_ref, agentProfile, source_type, source_context, created_by, source_ref, trigger_intents, preconditions, steps, protected: isProtected }) {
+export async function handler({ content, tags, type, connects, domain, force = false, supersedes, learnings, session_ref, agentProfile, source_type, source_context, created_by, source_ref, trigger_intents, preconditions, steps, protected: isProtected, attachments }) {
   // P15.0: Build provenance object (only include non-null/non-empty fields)
   const provenance = {};
   if (source_type) provenance.source_type = source_type;
@@ -145,11 +156,14 @@ export async function handler({ content, tags, type, connects, domain, force = f
         steps: learning.steps || 0,
         used_count: 0, success_count: 0, last_outcome: null, last_used: null
       } : undefined;
+      // Validate batch item attachments
+      const batchAttachments = (learning.attachments || []).filter(a => a?.uri?.startsWith('nc:///') && a?.mime && a?.label);
       const fileContent = buildLearningMarkdown(learning.title, learning.type, cleanTags, learning.description, extra, {
         connects: learning.connects,
         provenance: hasProvenance ? provenance : undefined,
         procedureFields: batchProcedureFields,
-        protected: learning.protected || (learning.type === "principle")
+        protected: learning.protected || (learning.type === "principle"),
+        attachments: batchAttachments.length > 0 ? batchAttachments : undefined
       }) + related;
 
       writeFile(filePath, fileContent);
@@ -263,7 +277,10 @@ export async function handler({ content, tags, type, connects, domain, force = f
     steps: steps || 0,
     used_count: 0, success_count: 0, last_outcome: null, last_used: null
   } : undefined;
-  const mdOpts = { connects, provenance: hasProvenance ? provenance : undefined, procedureFields: singleProcedureFields, protected: isProtected || (type === "principle") };
+  // Validate attachments URIs
+  const cleanAttachments = (attachments || []).filter(a => a?.uri?.startsWith('nc:///') && a?.mime && a?.label);
+  
+  const mdOpts = { connects, provenance: hasProvenance ? provenance : undefined, procedureFields: singleProcedureFields, protected: isProtected || (type === "principle"), attachments: cleanAttachments.length > 0 ? cleanAttachments : undefined };
 
   // P7.1: Similarity gate — only for learnings (not knowledge/ domain files)
   if (!safeDomain && !force) {
@@ -329,6 +346,9 @@ export async function handler({ content, tags, type, connects, domain, force = f
   addTagCooccurrenceRelations(cleanTags);
 
   let resultText = `✓ Remembered: ${filePath}\nTags: ${cleanTags.map(t => `#${t}`).join(", ")}`;
+  if (cleanAttachments.length > 0) {
+    resultText += `\n📎 Attachments: ${cleanAttachments.map(a => `${a.label} (${a.uri})`).join(", ")}`;
+  }
 
   // P14.3: Low-value warning (0.3-0.5 score)
   if (_valueAssessment && _valueAssessment.score < 0.5) {

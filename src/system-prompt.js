@@ -69,6 +69,15 @@ Memory (local brain):
 - brain_reflect_session(transcript, auto_save?) — analyze session for corrections, preferences, errors (LLM-powered)
 - When brain tools return file references (e.g. "knowledge/people/name.md"), the full path is: ${brainPath}/<relative_path>
 
+Knowledge Store (Nextcloud):
+- brain_remember supports attachments[]: array of {uri, mime, label} to link files stored in Nextcloud
+- URI format: nc:///knowledge/docs/filename.pdf (resolves to Nextcloud WebDAV)
+- When you analyze an important file (PDF, diagram, spreadsheet, etc.), persist it:
+  1. Upload to Nextcloud /knowledge/ via bash (curl WebDAV PUT or nextcloud skill)
+  2. brain_remember with attachments: [{uri: "nc:///knowledge/docs/file.pdf", mime: "application/pdf", label: "Description"}]
+- brain_search results show attachments — download via nc:// URI only if the description doesn't answer the question
+- The description IS the summary — 80%+ of queries are answered without downloading the file
+
 Brain usage rules:
 - SESSION START: call brain_get_context to recover what was decided/implemented in previous sessions. This replaces raw transcript history.
 - DURING SESSION: call brain_search before interacting with any external service (Jira, Confluence, Teams, etc.) to recover known patterns and warnings.

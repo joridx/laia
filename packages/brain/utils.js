@@ -77,6 +77,36 @@ export function parseLearningFrontmatter(content) {
     if (key === "tags" || key === "connects" || key === "trigger_intents" || key === "preconditions") {
       const arrMatch = value.match(/\[([^\]]*)\]/);
       fm[key] = arrMatch ? arrMatch[1].split(",").map(t => t.trim()).filter(Boolean) : [];
+    } else if (key === "attachments") {
+      // attachments can be YAML sequence (multi-line) or JSON string (backward compat)
+      // JSON string on same line: attachments: [{...}]
+      if (value.startsWith('[')) {
+        try { fm[key] = JSON.parse(value); } catch { fm[key] = []; }
+      } else {
+        // YAML sequence: parse following indented lines
+        fm[key] = [];
+        // Look ahead in raw lines for indented items
+        const allLines = yamlBlock.split("\n");
+        const currentIdx = allLines.findIndex(l => l.replace(/\r$/, "").startsWith("attachments:"));
+        if (currentIdx >= 0) {
+          let item = null;
+          for (let j = currentIdx + 1; j < allLines.length; j++) {
+            const yl = allLines[j].replace(/\r$/, "");
+            if (!yl.startsWith("  ") && !yl.startsWith("\t")) break; // end of sequence
+            const itemStart = yl.match(/^\s+-\s+uri:\s*"?([^"]+)"?/);
+            if (itemStart) {
+              if (item) fm[key].push(item);
+              item = { uri: itemStart[1] };
+            } else if (item) {
+              const mimeMatch = yl.match(/^\s+mime:\s*"?([^"]+)"?/);
+              const labelMatch = yl.match(/^\s+label:\s*"?([^"]+)"?/);
+              if (mimeMatch) item.mime = mimeMatch[1];
+              if (labelMatch) item.label = labelMatch[1];
+            }
+          }
+          if (item) fm[key].push(item);
+        }
+      }
     } else if (key === "protected") {
       fm[key] = value === "true";
     } else if (["steps", "used_count", "success_count"].includes(key)) {
@@ -142,7 +172,7 @@ function _yamlSafe(val) {
   return '"' + val.replace(/"/g, '\\"') + '"';
 }
 
-export function buildLearningMarkdown(title, type, tags, content, extra, { connects, provenance, procedureFields, protected: isProtected } = {}) {
+export function buildLearningMarkdown(title, type, tags, content, extra, { connects, provenance, procedureFields, protected: isProtected, attachments } = {}) {
   const safeType = VALID_TYPES.includes(type) ? type : "learning";
   const headline = (content.split("\n").find(l => l.trim()) || "").slice(0, 150);
   const typeTag = TYPE_TAG_MAP[safeType] || "#learning";
@@ -191,6 +221,16 @@ export function buildLearningMarkdown(title, type, tags, content, extra, { conne
     if (provenance.source_context) md += `source_context: ${_yamlSafe(provenance.source_context)}\n`;
     if (provenance.created_by) md += `created_by: ${provenance.created_by}\n`;
     if (provenance.source_ref) md += `source_ref: ${_yamlSafe(provenance.source_ref)}\n`;
+  }
+  // Attachments (Knowledge Store — nc:// URIs)
+  // Stored as YAML sequence for robustness; JSON string for backward compat
+  if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+    md += `attachments:\n`;
+    for (const att of attachments) {
+      md += `  - uri: ${_yamlSafe(att.uri)}\n`;
+      md += `    mime: ${_yamlSafe(att.mime)}\n`;
+      md += `    label: ${_yamlSafe(att.label)}\n`;
+    }
   }
   md += `---\n\n`;
   md += content + "\n";
