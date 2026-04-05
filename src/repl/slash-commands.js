@@ -58,7 +58,7 @@ export const COMMAND_META = {
   '/undo':       { desc: 'Revert changes (--list, N)',     cat: 'system',   subs: ['--list', '-l'] },
   '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
   '/sleep':      { desc: 'Run sleep cycle (memory consolidation)', cat: 'system', subs: ['--advanced', '--force', '--dry-run'] },
-  '/talk':       { desc: 'Talk integration (poll, send, rooms, listen)', cat: 'nextcloud', subs: ['poll', 'send', 'rooms', 'listen', 'stop', 'status'] },
+  '/talk':       { desc: 'Talk integration (poll, send, rooms, listen, extract)', cat: 'nextcloud', subs: ['poll', 'send', 'rooms', 'listen', 'stop', 'status', 'extract'] },
   '/cron':       { desc: 'CRON.md scheduled jobs',           cat: 'nextcloud', subs: ['list'] },
   '/confirm':    { desc: 'Pending confirmations',            cat: 'nextcloud', subs: ['list', 'approve', 'deny'] },
   '/nc-tasks':   { desc: 'TASKS.md task list',               cat: 'nextcloud', subs: ['list', 'pending'] },
@@ -1337,7 +1337,7 @@ export async function handleSlashCommand(input, session) {
         const applyChanges = force; // --force means actually apply merges
         stderr.write('\x1b[36m🌙 Running advanced sleep cycle...\x1b[0m\n');
         if (!applyChanges) stderr.write('\x1b[2m(dry-run mode — use --force to apply changes)\x1b[0m\n');
-        const report = await runAdvancedSleepCycle({ dryRun: !applyChanges, skipBasic: false, verifyUris: true });
+        const report = await runAdvancedSleepCycle({ dryRun: !applyChanges, skipBasic: false, verifyUris: true, config });
         stderr.write(formatReport(report));
         return true;
       }
@@ -1547,7 +1547,26 @@ export async function handleSlashCommand(input, session) {
         return true;
       }
 
-      stderr.write('Usage: /talk [poll|send|rooms|listen|stop|status]\n');
+      if (sub === 'extract') {
+        const { extractFromTalk, formatExtractionReport } = await import('../services/talk-extractor.js');
+        const force = args.includes('--force');
+        const dryRun = !force;
+
+        stderr.write(`\x1b[36m🔍 Extracting learnings from Talk${dryRun ? ' (dry-run)' : ''}...\x1b[0m\n`);
+        const report = await extractFromTalk({
+          config,
+          dryRun,
+          save: !dryRun,
+        });
+
+        stderr.write('\n' + formatExtractionReport(report) + '\n\n');
+        if (dryRun && report.learningsExtracted.length > 0) {
+          stderr.write('\x1b[2mTip: use /talk extract --force to save to brain\x1b[0m\n\n');
+        }
+        return true;
+      }
+
+      stderr.write('Usage: /talk [poll|send|rooms|listen|stop|status|extract]\n');
       return true;
     }
 

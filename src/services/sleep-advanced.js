@@ -301,8 +301,8 @@ async function fetchWithTimeout(url, opts, ms) {
  * @param {boolean} [opts.verifyUris=true] — Check nc:// URIs
  * @returns {Promise<Object>} Combined report
  */
-export async function runAdvancedSleepCycle({ dryRun = true, skipBasic = false, verifyUris = true } = {}) {
-  const report = { basic: null, dedup: null, uris: null, timestamp: new Date().toISOString() };
+export async function runAdvancedSleepCycle({ dryRun = true, skipBasic = false, verifyUris = true, extractTalk = true, config } = {}) {
+  const report = { basic: null, dedup: null, uris: null, talkExtract: null, timestamp: new Date().toISOString() };
 
   // Step 1: Run basic sleep cycle
   if (!skipBasic) {
@@ -329,6 +329,20 @@ export async function runAdvancedSleepCycle({ dryRun = true, skipBasic = false, 
       report.uris = await verifyNcUris();
     } catch (err) {
       report.uris = { checked: 0, valid: 0, broken: [], errors: [err.message] };
+    }
+  }
+
+  // Step 4: Extract learnings from Talk conversations
+  if (extractTalk && config) {
+    try {
+      const { extractFromTalk } = await import('./talk-extractor.js');
+      report.talkExtract = await extractFromTalk({
+        config,
+        dryRun,
+        save: !dryRun,
+      });
+    } catch (err) {
+      report.talkExtract = { rooms: 0, messagesProcessed: 0, batchesSent: 0, learningsExtracted: [], learningsSaved: 0, errors: [err.message], dryRun };
     }
   }
 
@@ -392,6 +406,28 @@ export function formatReport(report) {
       for (const b of u.broken || []) {
         lines.push(`  ❌ ${b.uri} (${b.error}) — used in: ${b.slugs.join(', ')}`);
       }
+    }
+  }
+
+  // Talk extraction
+  if (report.talkExtract) {
+    const t = report.talkExtract;
+    if (t.errors?.length > 0 && t.messagesProcessed === 0) {
+      lines.push(`${YELLOW}⚠ Talk: ${t.errors[0]}${R}`);
+    } else {
+      const extracted = t.learningsExtracted?.length || 0;
+      const saved = t.learningsSaved || 0;
+      const verb = t.dryRun ? 'would extract' : 'extracted';
+      const icon = extracted > 0 ? GREEN + '✓' : DIM + '⊘';
+      lines.push(`${icon}${R} Talk: ${t.messagesProcessed} messages → ${extracted} ${verb}${saved ? `, ${saved} saved` : ''}`);
+
+      for (const l of (t.learningsExtracted || []).slice(0, 5)) {
+        const lIcon = l.type === 'warning' ? '⚠️' : l.type === 'preference' ? '🎯' : '💡';
+        lines.push(`  ${lIcon} ${l.title}`);
+      }
+      if (extracted > 5) lines.push(`  ${DIM}(+${extracted - 5} more)${R}`);
+
+      for (const e of (t.errors || []).slice(0, 2)) lines.push(`  ${YELLOW}⚠ ${e}${R}`);
     }
   }
 
