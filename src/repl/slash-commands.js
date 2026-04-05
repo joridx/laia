@@ -1471,6 +1471,24 @@ export async function handleSlashCommand(input, session) {
           stderr.write(`\x1b[33m⚠ Listener already active. Use /talk stop first.\x1b[0m\n`);
           return true;
         }
+
+        // Pre-approve session tools so Talk turns won't block on stdin prompts
+        const { isAutoApproved, isToolApproved, checkPermission: chkPerm } = await import('../permissions.js');
+        if (!isAutoApproved()) {
+          const TALK_TOOLS = ['bash', 'write', 'edit', 'brain_remember', 'agent'];
+          const needApproval = TALK_TOOLS.filter(t => !isToolApproved(t));
+          if (needApproval.length > 0) {
+            stderr.write(`\n${DIM}Talk listener needs tool permissions to respond autonomously.${R}\n`);
+            stderr.write(`${DIM}Approving now prevents stdin prompts during background processing.${R}\n\n`);
+            for (const tool of needApproval) {
+              const allowed = await chkPerm(tool, {});
+              if (!allowed) {
+                stderr.write(`\x1b[33m⚠ Tool '${tool}' denied — listener may be limited.\x1b[0m\n`);
+              }
+            }
+          }
+        }
+
         const intervalArg = parseInt(rest, 10);
         const intervalMs = intervalArg > 0 ? intervalArg * 1000 : undefined;
         const result = startListener({ config, logger, intervalMs });

@@ -65,6 +65,9 @@ export function createPermissionContext({ autoApprove = false } = {}) {
   return {
     setAutoApprove(enabled) { autoApproveAll = enabled; },
     setReadlineInterface(rl) { rlInstance = rl; },
+    isAutoApproved() { return autoApproveAll; },
+    isToolApproved(name) { return autoApproveAll || AUTO_ALLOW.has(name) || sessionApproved.has(name); },
+    preApproveTools(names) { for (const n of names) sessionApproved.add(n); },
     async checkPermission(toolName, args) {
       // Fast-path: no prompting needed
       if (autoApproveAll) return true;
@@ -101,3 +104,6 @@ const defaultContext = createPermissionContext();
 export function setAutoApprove(enabled) { defaultContext.setAutoApprove(enabled); }
 export function setReadlineInterface(rl) { defaultContext.setReadlineInterface(rl); }
 export async function checkPermission(toolName, args) { return defaultContext.checkPermission(toolName, args); }
+export function isAutoApproved() { return defaultContext.isAutoApproved(); }
+export function isToolApproved(name) { return defaultContext.isToolApproved(name); }
+export function preApproveTools(names) { defaultContext.preApproveTools(names); }
