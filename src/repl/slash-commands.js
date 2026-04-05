@@ -57,7 +57,7 @@ export const COMMAND_META = {
   '/autocommit': { desc: 'Toggle git auto-commit',         cat: 'system',   subs: [] },
   '/undo':       { desc: 'Revert changes (--list, N)',     cat: 'system',   subs: ['--list', '-l'] },
   '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
-  '/sleep':      { desc: 'Run sleep cycle (memory consolidation)', cat: 'system', subs: [] },
+  '/sleep':      { desc: 'Run sleep cycle (memory consolidation)', cat: 'system', subs: ['--advanced', '--force', '--dry-run'] },
   '/talk':       { desc: 'Talk integration (poll, send, rooms, listen)', cat: 'nextcloud', subs: ['poll', 'send', 'rooms', 'listen', 'stop', 'status'] },
   '/cron':       { desc: 'CRON.md scheduled jobs',           cat: 'nextcloud', subs: ['list'] },
   '/confirm':    { desc: 'Pending confirmations',            cat: 'nextcloud', subs: ['list', 'approve', 'deny'] },
@@ -1327,9 +1327,21 @@ export async function handleSlashCommand(input, session) {
     }
 
     case 'sleep': {
-      const { runSleepCycle, pruneDailyMemories } = await import('../services/sleep-cycle.js');
-      const date = args || undefined;
+      const isAdvanced = args.includes('--advanced');
       const force = args.includes('--force');
+      const dryRun = args.includes('--dry-run');
+
+      if (isAdvanced) {
+        const { runAdvancedSleepCycle, formatReport } = await import('../services/sleep-advanced.js');
+        const applyChanges = force; // --force means actually apply merges
+        stderr.write('\x1b[36m🌙 Running advanced sleep cycle...\x1b[0m\n');
+        if (!applyChanges) stderr.write('\x1b[2m(dry-run mode — use --force to apply changes)\x1b[0m\n');
+        const report = await runAdvancedSleepCycle({ dryRun: !applyChanges, skipBasic: false, verifyUris: true });
+        stderr.write(formatReport(report));
+        return true;
+      }
+
+      const { runSleepCycle, pruneDailyMemories } = await import('../services/sleep-cycle.js');
       const dateArg = args.replace('--force', '').trim() || undefined;
       stderr.write('\x1b[36m🌙 Running sleep cycle...\x1b[0m\n');
       const result = runSleepCycle({ date: dateArg, force });
