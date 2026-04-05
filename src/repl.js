@@ -378,6 +378,15 @@ export async function runRepl({ config, logger, planMode: initialPlanMode = fals
       try { await emit('SessionEnd', { sessionId: logger.sessionId, turns: context.turnCount() }); } catch {}
     }
 
+    // Stop Talk listener if active
+    try {
+      const { isListening, stopListener } = await import('./channels/talk-listener.js');
+      if (isListening()) {
+        stopListener();
+        stderr.write('\x1b[2m[☁️ Talk] Listener stopped\x1b[0m\n');
+      }
+    } catch {}
+
     if (context.turnCount() > 0) {
       try {
         autoSave(context.serialize(), sessionMeta);

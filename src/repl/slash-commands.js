@@ -58,7 +58,7 @@ export const COMMAND_META = {
   '/undo':       { desc: 'Revert changes (--list, N)',     cat: 'system',   subs: ['--list', '-l'] },
   '/doctor':     { desc: 'Run diagnostics',                cat: 'system',   subs: [] },
   '/sleep':      { desc: 'Run sleep cycle (memory consolidation)', cat: 'system', subs: [] },
-  '/talk':       { desc: 'Talk integration (poll, send, rooms)', cat: 'nextcloud', subs: ['poll', 'send', 'rooms'] },
+  '/talk':       { desc: 'Talk integration (poll, send, rooms, listen)', cat: 'nextcloud', subs: ['poll', 'send', 'rooms', 'listen', 'stop', 'status'] },
   '/cron':       { desc: 'CRON.md scheduled jobs',           cat: 'nextcloud', subs: ['list'] },
   '/confirm':    { desc: 'Pending confirmations',            cat: 'nextcloud', subs: ['list', 'approve', 'deny'] },
   '/nc-tasks':   { desc: 'TASKS.md task list',               cat: 'nextcloud', subs: ['list', 'pending'] },
@@ -1465,7 +1465,58 @@ export async function handleSlashCommand(input, session) {
         return true;
       }
 
-      stderr.write('Usage: /talk [poll|send|rooms]\n');
+      if (sub === 'listen') {
+        const { startListener, isListening } = await import('../channels/talk-listener.js');
+        if (isListening()) {
+          stderr.write(`\x1b[33m⚠ Listener already active. Use /talk stop first.\x1b[0m\n`);
+          return true;
+        }
+        const intervalArg = parseInt(rest, 10);
+        const intervalMs = intervalArg > 0 ? intervalArg * 1000 : undefined;
+        const result = startListener({ config, logger, intervalMs });
+        if (result.success) {
+          stderr.write(`\n${GREEN}☁️ Talk listener started${R}${intervalMs ? ` (poll every ${intervalMs/1000}s)` : ''}\n`);
+          stderr.write(`${DIM}LAIA will respond to Talk messages in the background.${R}\n`);
+          stderr.write(`${DIM}Use /talk stop to stop, /talk status to check.${R}\n\n`);
+        } else {
+          stderr.write(`\x1b[31mError: ${result.error}\x1b[0m\n`);
+        }
+        return true;
+      }
+
+      if (sub === 'stop') {
+        const { stopListener } = await import('../channels/talk-listener.js');
+        const result = stopListener();
+        if (result.success) {
+          const s = result.stats;
+          stderr.write(`\n${GREEN}☁️ Talk listener stopped${R}\n`);
+          stderr.write(`${DIM}Messages received: ${s.messagesReceived}, Responses sent: ${s.responseSent}, Errors: ${s.errors}${R}\n\n`);
+        } else {
+          stderr.write(`${DIM}Listener not active.${R}\n`);
+        }
+        return true;
+      }
+
+      if (sub === 'status') {
+        const { getListenerStats } = await import('../channels/talk-listener.js');
+        const s = getListenerStats();
+        if (s.active) {
+          const uptime = Math.round(s.uptimeMs / 1000);
+          const mins = Math.floor(uptime / 60);
+          const secs = uptime % 60;
+          stderr.write(`\n${GREEN}☁️ Talk listener: ACTIVE${R}\n`);
+          stderr.write(`  Uptime:     ${mins}m ${secs}s\n`);
+          stderr.write(`  Messages:   ${s.messagesReceived} received\n`);
+          stderr.write(`  Responses:  ${s.responseSent} sent\n`);
+          stderr.write(`  Errors:     ${s.errors}\n\n`);
+        } else {
+          stderr.write(`\n${DIM}☁️ Talk listener: INACTIVE${R}\n`);
+          stderr.write(`${DIM}Use /talk listen to start.${R}\n\n`);
+        }
+        return true;
+      }
+
+      stderr.write('Usage: /talk [poll|send|rooms|listen|stop|status]\n');
       return true;
     }
 
