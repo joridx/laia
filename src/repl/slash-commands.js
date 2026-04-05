@@ -62,6 +62,7 @@ export const COMMAND_META = {
   '/cron':       { desc: 'CRON.md scheduled jobs',           cat: 'nextcloud', subs: ['list'] },
   '/confirm':    { desc: 'Pending confirmations',            cat: 'nextcloud', subs: ['list', 'approve', 'deny'] },
   '/nc-tasks':   { desc: 'TASKS.md task list',               cat: 'nextcloud', subs: ['list', 'pending'] },
+  '/briefing':   { desc: 'Daily briefing (--send, --date YYYY-MM-DD)', cat: 'nextcloud', subs: ['--send', '--date'] },
   '/status':     { desc: 'System health dashboard',        cat: 'system',   subs: [] },
   '/flags':      { desc: 'View/set feature flags',         cat: 'config',   subs: ['set'] },
   '/skillify':   { desc: 'Capture session as reusable skill', cat: 'skills',   subs: ['--force'] },
@@ -1668,6 +1669,33 @@ export async function handleSlashCommand(input, session) {
         for (const e of errors) stderr.write(`  - ${e}\n`);
       }
       stderr.write('\n');
+      return true;
+    }
+
+    case 'briefing': {
+      const { initBriefingModules, briefingCommand } = await import('../services/briefing.js');
+      await initBriefingModules();
+
+      const send = args.includes('--send');
+      const includeUris = args.includes('--uris');
+      const dateMatch = args.match(/(\d{4}-\d{2}-\d{2})/);
+      const date = dateMatch ? dateMatch[1] : undefined;
+
+      stderr.write('\x1b[36m☀️ Generating briefing...\x1b[0m\n');
+      const result = await briefingCommand({ date, send, includeUris });
+
+      // Display in CLI
+      stderr.write('\n' + result.message + '\n\n');
+
+      if (send) {
+        if (result.sent) {
+          stderr.write('\x1b[32m✓ Briefing sent to Talk\x1b[0m\n\n');
+        } else {
+          stderr.write(`\x1b[33m⚠ Failed to send: ${result.error}\x1b[0m\n\n`);
+        }
+      } else {
+        stderr.write('\x1b[2mTip: use /briefing --send to send via Talk\x1b[0m\n\n');
+      }
       return true;
     }
 
